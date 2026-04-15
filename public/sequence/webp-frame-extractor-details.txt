@@ -1,0 +1,96 @@
+WEBP FRAME EXTRACTION DETAILS
+===========================
+
+Original File: Whisk_uwnhjwy0kznzktyl1cn4qwytctylrtl4ytmm1yn.webp
+Frames Extracted: 80
+Animation Duration: 8.00s
+Frame Format: PNG
+Image Dimensions: 1280x720
+
+FRAME TIMING INFORMATION
+========================
+
+Frame 1: 100ms
+Frame 2: 100ms
+Frame 3: 100ms
+Frame 4: 100ms
+Frame 5: 100ms
+Frame 6: 100ms
+Frame 7: 100ms
+Frame 8: 100ms
+Frame 9: 100ms
+Frame 10: 100ms
+Frame 11: 100ms
+Frame 12: 100ms
+Frame 13: 100ms
+Frame 14: 100ms
+Frame 15: 100ms
+Frame 16: 100ms
+Frame 17: 100ms
+Frame 18: 100ms
+Frame 19: 100ms
+Frame 20: 100ms
+Frame 21: 100ms
+Frame 22: 100ms
+Frame 23: 100ms
+Frame 24: 100ms
+Frame 25: 100ms
+Frame 26: 100ms
+Frame 27: 100ms
+Frame 28: 100ms
+Frame 29: 100ms
+Frame 30: 100ms
+Frame 31: 100ms
+Frame 32: 100ms
+Frame 33: 100ms
+Frame 34: 100ms
+Frame 35: 100ms
+Frame 36: 100ms
+Frame 37: 100ms
+Frame 38: 100ms
+Frame 39: 100ms
+Frame 40: 100ms
+Frame 41: 100ms
+Frame 42: 100ms
+Frame 43: 100ms
+Frame 44: 100ms
+Frame 45: 100ms
+Frame 46: 100ms
+Frame 47: 100ms
+Frame 48: 100ms
+Frame 49: 100ms
+Frame 50: 100ms
+Frame 51: 100ms
+Frame 52: 100ms
+Frame 53: 100ms
+Frame 54: 100ms
+Frame 55: 100ms
+Frame 56: 100ms
+Frame 57: 100ms
+Frame 58: 100ms
+Frame 59: 100ms
+Frame 60: 100ms
+Frame 61: 100ms
+Frame 62: 100ms
+Frame 63: 100ms
+Frame 64: 100ms
+Frame 65: 100ms
+Frame 66: 100ms
+Frame 67: 100ms
+Frame 68: 100ms
+Frame 69: 100ms
+Frame 70: 100ms
+Frame 71: 100ms
+Frame 72: 100ms
+Frame 73: 100ms
+Frame 74: 100ms
+Frame 75: 100ms
+Frame 76: 100ms
+Frame 77: 100ms
+Frame 78: 100ms
+Frame 79: 100ms
+Frame 80: 100ms
+
+
+Extracted by ConvertICO.COM
+https://convertico.com/webp-frame-extractor/

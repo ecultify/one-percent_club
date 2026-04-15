@@ -1,0 +1,168 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0a0908;
+  --foreground: #ebe4d8;
+  --foreground-muted: #9c948a;
+  --gold: #c4a035;
+  --gold-bright: #e4cf6a;
+  --gold-dim: #7a6a3a;
+  --danger: #d94a5c;
+  --success: #3daa7a;
+  --surface: #11100e;
+  --surface-light: #1a1814;
+  --ring: rgba(196, 160, 53, 0.22);
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  text-rendering: optimizeLegibility;
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--background); }
+::-webkit-scrollbar-thumb { background: var(--gold-dim); border-radius: 3px; }
+
+/* ─── Diamond clip path for answer options (WWTBAM style) ─── */
+.diamond-clip {
+  clip-path: polygon(4% 50%, 10% 0%, 90% 0%, 96% 50%, 90% 100%, 10% 100%);
+}
+
+/* Outer border layer for diamond — slightly larger polygon to create visible border */
+.diamond-border {
+  clip-path: polygon(3.2% 50%, 9.2% -2%, 90.8% -2%, 96.8% 50%, 90.8% 102%, 9.2% 102%);
+}
+
+/* ─── Keyframes ─── */
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.05); }
+}
+
+/* Full-height horizontal sheen (use inside overflow:hidden; inset-y-0 on the moving layer) */
+@keyframes sheen-ltr {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(280%); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-2px); }
+  20%, 40%, 60%, 80% { transform: translateX(2px); }
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); opacity: 0.6; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+
+@keyframes tick-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+@keyframes diamond-reveal {
+  0% { clip-path: polygon(50% 50%, 50% 50%, 50% 50%, 50% 50%, 50% 50%, 50% 50%); opacity: 0; }
+  100% { clip-path: polygon(4% 50%, 10% 0%, 90% 0%, 96% 50%, 90% 100%, 10% 100%); opacity: 1; }
+}
+
+@layer components {
+  .game-show-btn {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    border-width: 2px;
+    border-style: solid;
+    border-color: rgba(228, 207, 106, 0.72);
+    box-shadow:
+      0 0 0 1px rgba(196, 160, 53, 0.4),
+      0 6px 28px rgba(196, 160, 53, 0.22),
+      inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  }
+  /* Wide band, full button height, sweeps from left → right */
+  .game-show-btn::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 70%;
+    z-index: 1;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.06) 35%,
+      rgba(255, 255, 255, 0.22) 50%,
+      rgba(255, 255, 255, 0.06) 65%,
+      transparent 100%
+    );
+    transform: translateX(-130%);
+    animation: sheen-ltr 2.5s ease-in-out infinite;
+    pointer-events: none;
+    opacity: 0.75;
+    mix-blend-mode: soft-light;
+  }
+
+  .panel-sheen-wrap {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    border-radius: inherit;
+    pointer-events: none;
+  }
+  .panel-sheen {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 65%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.07) 40%,
+      rgba(255, 230, 180, 0.14) 50%,
+      rgba(255, 255, 255, 0.07) 60%,
+      transparent
+    );
+    transform: translateX(-130%);
+    animation: sheen-ltr 3.2s ease-in-out infinite;
+    opacity: 0.85;
+  }
+}
+
+@keyframes float-up {
+  0% { transform: translateY(0) scale(1); opacity: 0.6; }
+  100% { transform: translateY(-60px) scale(0.5); opacity: 0; }
+}
+
+@keyframes score-flash {
+  0% { transform: scale(1); filter: brightness(1); }
+  50% { transform: scale(1.15); filter: brightness(1.8); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
+
+@keyframes bar-fill {
+  from { width: 0%; }
+}
+
+@keyframes correct-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+
+@keyframes wrong-shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
