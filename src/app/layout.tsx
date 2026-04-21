@@ -1,19 +1,25 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, Figtree, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { NarrationProvider } from "@/components/NarrationProvider";
+import { Fraunces, Outfit, JetBrains_Mono } from "next/font/google";
 
-const figtree = Figtree({
+const instructionsDisplay = Fraunces({
   subsets: ["latin"],
-  variable: "--font-body",
-  weight: ["400", "500", "600", "700"],
+  variable: "--font-inst-display",
+  display: "swap",
 });
-const bricolage = Bricolage_Grotesque({
+
+const instructionsUi = Outfit({
   subsets: ["latin"],
-  variable: "--font-display",
-  weight: ["500", "600", "700", "800"],
+  variable: "--font-inst-ui",
+  display: "swap",
 });
-const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
+
+const instructionsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-inst-mono",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "The 1% Club",
@@ -26,8 +32,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
-      <body className={`${figtree.variable} ${bricolage.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
+    <html
+      lang="en"
+      className={`dark font-sans ${instructionsDisplay.variable} ${instructionsUi.variable} ${instructionsMono.variable}`}
+      style={{ fontFamily: "Arial, Helvetica, sans-serif" }}
+    >
+      <body className="antialiased" style={{ fontFamily: "Arial, Helvetica, sans-serif" }}>
         <NarrationProvider>{children}</NarrationProvider>
       </body>
     </html>

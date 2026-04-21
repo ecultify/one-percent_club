@@ -1,6 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Question } from "./QuizGame";
 import { formatRupees } from "./QuizGame";
@@ -25,23 +32,203 @@ interface QuestionScreenProps {
   afterRoundOverlay?: ReactNode;
 }
 
-// Difficulty % badge gradient
-function getDifficultyColor(pct: number) {
-  if (pct >= 80) return { gradient: "from-emerald-400 to-teal-400", bg: "#3daa7a" };
-  if (pct >= 50) return { gradient: "from-amber-400 to-yellow-300", bg: "#c4a035" };
-  if (pct >= 20) return { gradient: "from-orange-400 to-amber-400", bg: "#d4913a" };
-  return { gradient: "from-red-400 to-rose-400", bg: "#d94a5c" };
-}
-
 const OPTION_LABELS = ["A", "B", "C", "D"];
 
-// Uniform styling — every option wears the same black fill + gold border + gold badge.
+// Uniform styling — every option wears the same black fill + metallic gold rim + metallic gold badge.
 const GOLD = "#e0a02b";
 const GOLD_BRIGHT = "#e4cf6a";
 const GOLD_GLOW = "rgba(224,160,43,0.45)";
 
+/** Polished-brass gradient reused as the gold rim on the outer frame, the question panel,
+ *  and the option cards. Top is warm-bright (specular highlight), bottom is deep bronze. */
+export const METALLIC_RIM_GRADIENT =
+  "linear-gradient(180deg, #fff0c2 0%, #f4dc7c 22%, #e6c45a 42%, #b28622 72%, #6d4e13 92%, #3a2708 100%)";
+
+/** Slightly stronger rim for the outer frame (more contrast across the spec highlight). */
+const METALLIC_RIM_STRONG =
+  "linear-gradient(160deg, #fff4c8 0%, #f9e89a 14%, #d9b446 38%, #a6801f 66%, #6d4e13 86%, #2a1d05 100%)";
+
+/** Dark bronze interior — same fill as `UserDetailsModal` (not a golden metallic wash). */
+export const PANEL_INNER_FILL: CSSProperties = {
+  background: `
+    radial-gradient(ellipse 100% 52% at 50% 44%, rgba(90, 72, 48, 0.38) 0%, transparent 56%),
+    linear-gradient(180deg, #070605 0%, #0f0d0a 18%, #181410 38%, #141210 55%, #0a0907 78%, #030302 100%)
+  `,
+  boxShadow:
+    "inset 0 1px 0 rgba(255,245,210,0.08), inset 0 -1px 0 rgba(0,0,0,0.52), inset 0 0 32px rgba(0,0,0,0.48)",
+};
+
 // Vertical "journey" ticker — the 8 actual game checkpoints, top (90) to bottom (1).
 const JOURNEY = [90, 80, 70, 60, 50, 30, 10, 1];
+
+/** PNG in public/questionscreenimages/ — filenames like `90%.png`, `1%.png` */
+function percentImageSrc(pct: number): string {
+  return `/questionscreenimages/${encodeURIComponent(`${pct}%.png`)}`;
+}
+
+const VB = 100;
+const CX = 50;
+const CY = 50;
+/** Bold bezeled timer — a brass donut with a black trough that fills with liquid gold.
+ *   R_CHANNEL   = centerline of the black channel (stroke radius)
+ *   CHANNEL_W   = width of the channel (bold ~10% of viewBox diameter)
+ *   R_OUTER_RIM = hairline metallic rim sitting just outside the channel (convex — bright top / dark bottom)
+ *   R_INNER_RIM = hairline metallic rim sitting just inside the channel  (concave — dark top / bright bottom)
+ * The gold arc is drawn on top of the black trough and grows clockwise from 12. */
+const R_CHANNEL = 37;
+const CHANNEL_W = 10;
+const R_OUTER_RIM = R_CHANNEL + CHANNEL_W / 2 + 0.5; // 42.5
+const R_INNER_RIM = R_CHANNEL - CHANNEL_W / 2 - 0.5; // 31.5
+const CIRC_CHANNEL = 2 * Math.PI * R_CHANNEL;
+
+interface PercentTimerDockProps {
+  percentage: number;
+  timeLeft: number;
+  timeLimit: number;
+}
+
+function PercentTimerDock({
+  percentage,
+  timeLeft,
+  timeLimit,
+}: PercentTimerDockProps) {
+  /** Elapsed fraction: ring fills from 0 → full circumference as time runs out */
+  const elapsed =
+    timeLimit > 0 ? Math.max(0, Math.min(1, 1 - timeLeft / timeLimit)) : 0;
+  const arcVisible = CIRC_CHANNEL * elapsed;
+  const almostFull = elapsed > 0.75;
+
+  return (
+    <div
+      className="pointer-events-none fixed bottom-4 left-3 z-30 md:bottom-6 md:left-6 select-none"
+      data-tour-id="timer"
+      aria-hidden
+    >
+      <div className="relative h-[210px] w-[210px] md:h-[248px] md:w-[248px]">
+        <svg
+          className="absolute inset-0 h-full w-full"
+          viewBox={`0 0 ${VB} ${VB}`}
+          fill="none"
+          overflow="visible"
+          style={{ overflow: "visible" }}
+          aria-hidden
+        >
+          <defs>
+            {/* Brass fill — vertical gradient with a bright specular band near centre. */}
+            <linearGradient id="qs-timer-brass" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#6d4e13" />
+              <stop offset="10%" stopColor="#a6801f" />
+              <stop offset="28%" stopColor="#d9b446" />
+              <stop offset="46%" stopColor="#f4dc7c" />
+              <stop offset="52%" stopColor="#f9e89a" />
+              <stop offset="62%" stopColor="#e4c55a" />
+              <stop offset="82%" stopColor="#b28622" />
+              <stop offset="100%" stopColor="#6d4e13" />
+            </linearGradient>
+            {/* Outer rim — bright top, dark bottom → reads as a CONVEX metal lip. */}
+            <linearGradient id="qs-timer-rim-outer" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#fff0c2" />
+              <stop offset="35%" stopColor="#e6c45a" />
+              <stop offset="75%" stopColor="#9b7520" />
+              <stop offset="100%" stopColor="#4e350a" />
+            </linearGradient>
+            {/* Inner rim — dark top, bright bottom → reads as a CONCAVE inner edge catching bounced light. */}
+            <linearGradient id="qs-timer-rim-inner" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#4e350a" />
+              <stop offset="25%" stopColor="#7a5816" />
+              <stop offset="65%" stopColor="#d9b446" />
+              <stop offset="100%" stopColor="#f7e092" />
+            </linearGradient>
+            {/* Deep black trough — vertical gradient hints at a recessed channel. */}
+            <linearGradient id="qs-timer-trough" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#000000" />
+              <stop offset="50%" stopColor="#0a0805" />
+              <stop offset="100%" stopColor="#030200" />
+            </linearGradient>
+          </defs>
+
+          {/* 1. Black trough — full ring, solid black. This is the "empty" state. */}
+          <circle
+            cx={CX}
+            cy={CY}
+            r={R_CHANNEL}
+            stroke="url(#qs-timer-trough)"
+            strokeWidth={CHANNEL_W}
+            vectorEffect="nonScalingStroke"
+          />
+
+          {/* 2. Brass fill — pours into the trough clockwise from 12 o'clock.
+               strokeLinecap="butt" avoids the fill overshooting the start cap at 0%
+               and creates a clean leading edge as it grows. */}
+          <circle
+            cx={CX}
+            cy={CY}
+            r={R_CHANNEL}
+            stroke="url(#qs-timer-brass)"
+            strokeWidth={CHANNEL_W}
+            strokeLinecap="butt"
+            strokeDasharray={`${arcVisible} ${CIRC_CHANNEL}`}
+            transform={`rotate(-90 ${CX} ${CY})`}
+            vectorEffect="nonScalingStroke"
+            style={{
+              transition: "stroke-dasharray 1s linear",
+              // Keep glow minimal so it reads as a polished metal rim and never
+              // clips into a visible square at the SVG / viewport boundary.
+              filter: almostFull
+                ? "drop-shadow(0 0 3px rgba(249, 232, 154, 0.45))"
+                : "drop-shadow(0 0 1.5px rgba(244, 220, 124, 0.32))",
+            }}
+          />
+
+          {/* 3. Outer metallic rim — hairline brass border on the outside of the channel. */}
+          <circle
+            cx={CX}
+            cy={CY}
+            r={R_OUTER_RIM}
+            stroke="url(#qs-timer-rim-outer)"
+            strokeWidth={1.3}
+            vectorEffect="nonScalingStroke"
+          />
+
+          {/* 4. Inner metallic rim — hairline brass border on the inside of the channel. */}
+          <circle
+            cx={CX}
+            cy={CY}
+            r={R_INNER_RIM}
+            stroke="url(#qs-timer-rim-inner)"
+            strokeWidth={1.3}
+            vectorEffect="nonScalingStroke"
+          />
+
+          {/* 5. Inner shadow — subtle darken just inside the inner rim, sells the
+                recessed-disc feel without needing an inset filter. */}
+          <circle
+            cx={CX}
+            cy={CY}
+            r={R_INNER_RIM - 0.8}
+            stroke="rgba(0,0,0,0.55)"
+            strokeWidth={0.6}
+            vectorEffect="nonScalingStroke"
+          />
+        </svg>
+
+        {/* Blur disc + percent artwork — sits inside the inner rim. Border removed
+            so the metallic inner rim is the dominant edge. */}
+        <div
+          className="absolute left-1/2 top-1/2 flex h-[60%] w-[60%] -translate-x-1/2 -translate-y-1/2 items-center justify-center overflow-hidden rounded-full bg-black/55 shadow-[inset_0_0_32px_rgba(0,0,0,0.7)] backdrop-blur-md"
+          style={{ WebkitBackdropFilter: "blur(16px)" }}
+        >
+          <img
+            src={percentImageSrc(percentage)}
+            alt=""
+            className="relative z-[1] max-h-[82%] w-auto object-contain drop-shadow-[0_2px_10px_rgba(0,0,0,0.7)]"
+            draggable={false}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function IconPot({ className }: { className?: string }) {
   return (
@@ -83,8 +270,6 @@ export default function QuestionScreen({
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasCalledTimeUp = useRef(false);
 
-  const difficulty = getDifficultyColor(question.percentage);
-
   useEffect(() => {
     if (answered || paused) {
       if (intervalRef.current) clearInterval(intervalRef.current);
@@ -114,11 +299,6 @@ export default function QuestionScreen({
     onAnswer(index);
   }, [answered, selected, onAnswer, paused]);
 
-  const timerProgress = timeLeft / question.timeLimit;
-  const timerColor = timerProgress > 0.5 ? "#c4a035" : timerProgress > 0.2 ? "#d4913a" : "#d94a5c";
-  const arcLength = 251.2;
-  const arcDash = arcLength * timerProgress;
-
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -127,12 +307,16 @@ export default function QuestionScreen({
       transition={{ duration: 0.5, ease: EASE_OUT }}
       className="w-full h-full relative overflow-hidden bg-black"
     >
-      {/* ━━ Full-bleed stage BG ━━ */}
-      <img
-        src="/questionscreenimages/stage-bg-new.png"
-        alt=""
+      {/* ━━ Full-bleed stage BG — looping video that plays throughout the journey ━━ */}
+      <video
+        src={encodeURI("/new videos/bgvideo (1).mp4")}
+        autoPlay
+        loop
+        muted
+        playsInline
+        preload="auto"
         className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none"
-        draggable={false}
+        aria-hidden
       />
       {/* Violet tonal wash */}
       <div
@@ -143,6 +327,75 @@ export default function QuestionScreen({
         }}
       />
 
+      <PercentTimerDock
+        percentage={question.percentage}
+        timeLeft={timeLeft}
+        timeLimit={question.timeLimit}
+      />
+
+      {/* ━━ Fullscreen blur backdrop — ONLY when after-round overlay is present.
+            Blurs the whole stage (HUD, journey, stage lights, question, options) so
+            the elimination modal reads as a focused surface instead of "pasted on".
+            z-[25] sits BELOW the after-round overlay (z-[60]) so the reveal paints
+            on top of the blur, not behind it. ━━ */}
+      <AnimatePresence>
+        {afterRoundOverlay && (
+          <motion.div
+            key="stage-blur-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.45, ease: EASE_OUT }}
+            className="absolute inset-0 z-[25] pointer-events-none"
+            style={{
+              background: "rgba(0,0,0,0.5)",
+              backdropFilter: "blur(16px) saturate(125%)",
+              WebkitBackdropFilter: "blur(16px) saturate(125%)",
+            }}
+            aria-hidden
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ━━ AFTER-ROUND OVERLAY — rendered at the VIEWPORT ROOT above the blur
+            backdrop (z-[60]). Previously it was nested inside the content frame
+            (z-10) which sat BELOW the blur, making it disappear behind the haze.
+            Wrapped in the metallic-rim language so it matches the rest of the UI. ━━ */}
+      <AnimatePresence>
+        {afterRoundOverlay && (
+          <motion.div
+            key="after-round-overlay"
+            initial={{ opacity: 0, scale: 0.96, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.97 }}
+            transition={{ duration: 0.45, ease: EASE_OUT }}
+            className="pointer-events-none absolute inset-0 z-[60] flex items-center justify-center px-4 md:px-8"
+          >
+            <div
+              className="pointer-events-auto relative w-full max-w-[920px] max-h-[82vh] rounded-[22px] p-[3px] overflow-hidden"
+              style={{
+                background: METALLIC_RIM_STRONG,
+                boxShadow:
+                  "0 0 0 1px rgba(0,0,0,0.75), 0 0 36px 4px rgba(196,160,53,0.35), 0 32px 90px -22px rgba(0,0,0,0.85)",
+              }}
+            >
+              <div
+                className="relative w-full max-h-[calc(82vh-6px)] overflow-y-auto rounded-[19px]"
+                style={{
+                  background: "rgba(4, 3, 2, 0.94)",
+                  backdropFilter: "blur(24px) saturate(140%)",
+                  WebkitBackdropFilter: "blur(24px) saturate(140%)",
+                  boxShadow:
+                    "inset 0 0 0 1px rgba(255,235,190,0.08), inset 0 12px 60px rgba(0,0,0,0.55)",
+                }}
+              >
+                {afterRoundOverlay}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ━━ TOP HUD STRIP — floats above the frame, near the top of the viewport ━━ */}
       <div className="absolute top-3 md:top-5 left-0 right-0 z-20 px-4 md:px-8">
         <div className="max-w-[1200px] mx-auto flex items-center justify-between">
@@ -150,15 +403,24 @@ export default function QuestionScreen({
             initial={{ opacity: 0, x: -12 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.1, duration: 0.4, ease: EASE_OUT }}
-            className="flex items-center gap-2.5 rounded-lg bg-black/55 border border-brass/35 backdrop-blur-md px-3 py-1.5 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.6)]"
+            className="metallic-chip flex items-center gap-2.5 rounded-lg px-3 py-1.5"
             data-tour-id="pot-prize"
           >
-            <div className="w-8 h-8 rounded-md bg-brass/15 border border-brass/50 flex items-center justify-center text-brass-bright">
+            <div
+              className="relative z-[3] w-8 h-8 rounded-md flex items-center justify-center"
+              style={{
+                background: "rgba(0,0,0,0.28)",
+                border: "1px solid rgba(40,24,0,0.55)",
+                color: "#1b1205",
+              }}
+            >
               <IconPot />
             </div>
-            <div>
-              <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-brass-dim leading-none">Pot</p>
-              <p className="font-mono text-sm font-semibold text-brass-bright tabular-nums leading-none mt-0.5">
+            <div className="relative z-[3]">
+              <p className="font-mono text-[9px] uppercase tracking-[0.28em] leading-none" style={{ color: "#2a1d05" }}>
+                Pot
+              </p>
+              <p className="font-mono text-sm font-bold tabular-nums leading-none mt-0.5" style={{ color: "#120a02" }}>
                 {formatRupees(potPrize)}
               </p>
             </div>
@@ -168,130 +430,158 @@ export default function QuestionScreen({
             initial={{ opacity: 0, x: 12 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.1, duration: 0.4, ease: EASE_OUT }}
-            className="flex items-center gap-2.5 rounded-lg bg-black/55 border border-brass/35 backdrop-blur-md px-3 py-1.5 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.6)]"
+            className="metallic-chip flex items-center gap-2.5 rounded-lg px-3 py-1.5"
           >
-            <div className="text-right">
-              <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-brass-dim leading-none">Players</p>
-              <p className="font-mono text-sm font-semibold text-foreground tabular-nums leading-none mt-0.5">
-                {remainingPlayers}<span className="text-muted text-[10px]">/{totalPlayers}</span>
+            <div className="relative z-[3] text-right">
+              <p className="font-mono text-[9px] uppercase tracking-[0.28em] leading-none" style={{ color: "#2a1d05" }}>
+                Players
+              </p>
+              <p className="font-mono text-sm font-bold tabular-nums leading-none mt-0.5" style={{ color: "#120a02" }}>
+                {remainingPlayers}
+                <span className="text-[10px]" style={{ color: "#3a280a" }}>
+                  /{totalPlayers}
+                </span>
               </p>
             </div>
-            <div className="w-8 h-8 rounded-md bg-brass/15 border border-brass/50 flex items-center justify-center text-brass-bright">
+            <div
+              className="relative z-[3] w-8 h-8 rounded-md flex items-center justify-center"
+              style={{
+                background: "rgba(0,0,0,0.28)",
+                border: "1px solid rgba(40,24,0,0.55)",
+                color: "#1b1205",
+              }}
+            >
               <IconPlayers />
             </div>
           </motion.div>
         </div>
       </div>
 
-      {/* ━━ RIGHT-EDGE JOURNEY TICKER — spans most of the viewport height on the right ━━ */}
-      <motion.div
-        initial={{ opacity: 0, x: 12 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ delay: 0.25, duration: 0.5, ease: EASE_OUT }}
-        className="absolute top-20 bottom-10 right-3 md:right-6 z-20 flex items-center"
-        aria-label="Your journey from 100% to 1%"
+      {/* ━━ JOURNEY TICKER — pinned to the RIGHT EDGE, vertically centered.
+            IMPORTANT: framer-motion sets `transform: translateX(...)` inline on the
+            animated element, which overrides Tailwind's `-translate-y-1/2` utility.
+            So the OUTER positioning wrapper (non-motion) does the vertical centering,
+            and motion animates opacity/x on an INNER element only. ━━ */}
+      <div
+        className="pointer-events-none absolute top-1/2 -translate-y-1/2 right-2 md:right-4 z-20"
+        aria-label="Your journey from 90% to 1%"
       >
-        <div className="relative flex flex-col items-center rounded-2xl bg-black/60 border border-brass/40 backdrop-blur-md px-3 md:px-4 py-4 md:py-5 shadow-[0_12px_36px_-10px_rgba(0,0,0,0.7)] h-full">
-          <p className="font-mono text-[10px] md:text-[11px] uppercase tracking-[0.28em] text-brass-dim mb-3">
-            Journey
-          </p>
-          <div className="relative w-full flex-1 flex flex-col items-center justify-between">
-            {JOURNEY.map((pct) => {
-              const isCurrent = pct === question.percentage;
-              const isReached = pct >= question.percentage;
-              if (isCurrent) {
-                return (
-                  <motion.div
-                    key={pct}
-                    initial={{ scale: 0.6 }}
-                    animate={{ scale: 1 }}
-                    transition={{ type: "spring", bounce: 0.5 }}
-                    className="relative"
-                  >
-                    <div
-                      className="absolute -inset-2 rounded-md blur-md opacity-70"
-                      style={{ background: GOLD }}
-                    />
-                    <div
-                      className="relative px-2.5 py-1 rounded-md text-sm md:text-base font-display font-bold tabular-nums"
-                      style={{
-                        backgroundColor: GOLD,
-                        color: "#0a0805",
-                        boxShadow: `0 0 12px ${GOLD_GLOW}`,
-                      }}
+        <motion.div
+          initial={{ opacity: 0, x: 12 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.25, duration: 0.5, ease: EASE_OUT }}
+          className="pointer-events-auto relative rounded-xl p-[1.5px] shadow-[0_12px_32px_-10px_rgba(0,0,0,0.75)]"
+          style={{ background: METALLIC_RIM_GRADIENT }}
+        >
+          <div className="relative flex flex-col items-center rounded-[10px] bg-black/70 backdrop-blur-md px-3 md:px-3.5 py-4 md:py-5">
+            <p
+              className="font-mono text-[9px] md:text-[10px] uppercase font-bold mb-3 md:mb-3.5"
+              style={{
+                color: "#e7cf6a",
+                letterSpacing: "0.32em",
+                textShadow:
+                  "0 1px 0 rgba(20,10,0,0.6), 0 0 8px rgba(228,174,68,0.25)",
+              }}
+            >
+              Journey
+            </p>
+            <div className="relative flex flex-col items-center gap-2.5 md:gap-3.5">
+              {JOURNEY.map((pct) => {
+                const isCurrent = pct === question.percentage;
+                const isReached = pct >= question.percentage;
+                if (isCurrent) {
+                  return (
+                    <motion.div
+                      key={pct}
+                      initial={{ scale: 0.6 }}
+                      animate={{ scale: 1 }}
+                      transition={{ type: "spring", bounce: 0.5 }}
+                      className="relative"
                     >
-                      {pct}%
-                    </div>
-                  </motion.div>
+                      <div
+                        className="absolute -inset-2 rounded-md blur-md opacity-75"
+                        style={{
+                          background:
+                            "radial-gradient(closest-side, rgba(255,220,130,0.6), rgba(200,150,60,0.25) 60%, transparent 85%)",
+                        }}
+                      />
+                      <div
+                        className="metallic-chip relative px-2 py-[3px] md:px-2.5 md:py-1 rounded-md text-[11px] md:text-xs font-display font-bold tabular-nums leading-none"
+                        style={{
+                          color: "#1a1105",
+                          textShadow:
+                            "0 1px 0 rgba(255,236,180,0.55), 0 -1px 0 rgba(36,22,0,0.4)",
+                        }}
+                      >
+                        <span className="relative z-[3]">{pct}%</span>
+                      </div>
+                    </motion.div>
+                  );
+                }
+                // Non-current rungs: reached = bright brass, not-reached = dim
+                // but still legible against the black panel. Added a subtle
+                // text-shadow so the numerals pop against dark backgrounds.
+                return (
+                  <span
+                    key={pct}
+                    className="font-display text-xs md:text-sm tabular-nums font-bold leading-none transition-colors"
+                    style={{
+                      color: isReached ? "#f4dc7c" : "rgba(228,207,106,0.62)",
+                      textShadow: isReached
+                        ? "0 1px 0 rgba(20,10,0,0.75), 0 0 8px rgba(228,174,68,0.35)"
+                        : "0 1px 0 rgba(20,10,0,0.75)",
+                    }}
+                  >
+                    {pct}
+                  </span>
                 );
-              }
-              return (
-                <span
-                  key={pct}
-                  className="font-mono text-sm md:text-base tabular-nums font-semibold transition-colors"
-                  style={{
-                    color: isReached ? "rgba(228,207,106,0.9)" : "rgba(228,207,106,0.32)",
-                  }}
-                >
-                  {pct}
-                </span>
-              );
-            })}
+              })}
+            </div>
           </div>
-        </div>
-      </motion.div>
+        </motion.div>
+      </div>
 
-      {/* ━━ Centered content frame ━━ */}
-      <div className="relative z-10 w-full h-full flex items-center justify-center px-4 md:px-8 py-20 md:py-24">
-        <div className="w-full max-w-[1100px]">
+      {/* ━━ Centered content frame — pushed down to clear the 3D logo in the navbar ━━ */}
+      <div className="relative z-10 w-full h-full flex items-center justify-center px-4 md:px-8 pt-28 md:pt-36 pb-16 md:pb-20">
+        <div className="relative w-full max-w-[920px]">
+
 
           {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-              SCREEN FRAME — rounded amber-bordered panel. Big and tall
-              so after-round overlays fit inside without resizing.
+              SCREEN FRAME — gold rim; interior matches registration modal
+              (dark bronze fill, not golden wash).
               ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
           <div
-            className="relative w-full mx-auto rounded-[32px] overflow-hidden"
+            className="relative w-full mx-auto rounded-[24px] p-[4px] md:p-[5px] overflow-hidden"
             style={{
-              background: "linear-gradient(180deg, #0b0906 0%, #050403 100%)",
-              border: "6px solid #e0a02b",
+              background: METALLIC_RIM_STRONG,
               boxShadow: [
-                "0 0 0 1px rgba(0,0,0,0.7)",
-                "0 0 34px 6px rgba(224,160,43,0.50)",
-                "0 0 110px 16px rgba(224,160,43,0.20)",
-                "inset 0 0 0 1px rgba(255,220,140,0.4)",
-                "inset 0 3px 32px rgba(255,220,140,0.08)",
+                "0 0 0 1px rgba(0,0,0,0.75)",
+                "0 0 28px 3px rgba(196,160,53,0.35)",
+                "0 28px 90px -22px rgba(0,0,0,0.78)",
+                "inset 0 1px 0 rgba(255,245,210,0.55)",
               ].join(", "),
-              minHeight: "min(68vh, 560px)",
+              minHeight: "min(46vh, 380px)",
             }}
           >
             <div
-              className="absolute inset-0 pointer-events-none"
+              className="relative flex min-h-[inherit] flex-col gap-5 overflow-hidden rounded-[22px] p-5 md:p-7 md:gap-6 backdrop-blur-sm"
+              style={PANEL_INNER_FILL}
+            >
+            <div
+              className="pointer-events-none absolute inset-0 opacity-[0.06] mix-blend-overlay"
               style={{
-                background: "radial-gradient(ellipse 80% 40% at 50% 0%, rgba(255,220,140,0.08) 0%, transparent 60%)",
+                backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E")`,
               }}
+              aria-hidden
             />
 
-            <div className="relative p-6 md:p-10 flex flex-col gap-7 md:gap-10 min-h-[inherit]">
-              {/* After-round overlay (elimination reveal) — rendered INSIDE the same frame */}
-              <AnimatePresence>
-                {afterRoundOverlay && (
-                  <motion.div
-                    key="after-round-overlay"
-                    initial={{ opacity: 0, scale: 0.97 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.97 }}
-                    transition={{ duration: 0.45, ease: EASE_OUT }}
-                    className="absolute inset-4 md:inset-6 z-30 rounded-2xl bg-black/85 backdrop-blur-md overflow-y-auto"
-                  >
-                    {afterRoundOverlay}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
+            <div className="relative flex min-h-[inherit] flex-col gap-5 md:gap-6">
               {/* ───────── MAIN BODY — question + options (ticker & HUD moved outside) ───────── */}
-              <div className="flex-1 flex flex-col gap-6 md:gap-8 justify-center">
+              <div className="flex-1 flex flex-col gap-5 md:gap-6 justify-center">
 
-                  {/* Host status chip — ABOVE the question panel, always visible */}
+                  {/* Host status chip — metallic brass plate. Dark engraved text + pulsing
+                      dark "indicator light" sells the enamel-on-brass feel. Uses the same
+                      .metallic-chip treatment as the HUD chips and option badges. */}
                   <motion.div
                     initial={{ opacity: 0, y: -6 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -300,121 +590,245 @@ export default function QuestionScreen({
                   >
                     {paused && !answered ? (
                       <div
-                        className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/80 border"
+                        className="metallic-chip flex items-center gap-2 px-3.5 py-1.5 rounded-full"
                         style={{
-                          borderColor: GOLD,
-                          boxShadow: `0 0 18px ${GOLD_GLOW}, 0 0 4px ${GOLD_GLOW}`,
+                          boxShadow: `0 0 22px ${GOLD_GLOW}, 0 6px 18px rgba(196,160,53,0.3)`,
                         }}
                       >
-                        <span className="relative flex w-2 h-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brass-bright opacity-75" />
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-brass-bright" />
+                        <span className="relative z-[3] flex w-2 h-2">
+                          <span
+                            className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60"
+                            style={{ background: "#2a1d05" }}
+                          />
+                          <span
+                            className="relative inline-flex rounded-full h-2 w-2"
+                            style={{
+                              background: "#120a02",
+                              boxShadow: "0 0 4px rgba(255,245,190,0.7)",
+                            }}
+                          />
                         </span>
-                        <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-brass-bright">
+                        <span
+                          className="relative z-[3] font-mono text-[10px] uppercase tracking-[0.28em] font-bold"
+                          style={{
+                            color: "#120a02",
+                            textShadow:
+                              "0 1px 0 rgba(255,236,180,0.55), 0 -1px 0 rgba(36,22,0,0.35)",
+                          }}
+                        >
                           Host is speaking
                         </span>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/60 border border-white/15">
-                        <span className="relative flex w-2 h-2">
-                          <span className="inline-flex rounded-full h-2 w-2 bg-white/25" />
+                      <div
+                        className="metallic-chip flex items-center gap-2 px-3.5 py-1.5 rounded-full"
+                        style={{
+                          filter: "saturate(0.55) brightness(0.78)",
+                          opacity: 0.88,
+                        }}
+                      >
+                        <span className="relative z-[3] flex w-2 h-2">
+                          <span
+                            className="inline-flex rounded-full h-2 w-2"
+                            style={{ background: "#2a1d05", opacity: 0.55 }}
+                          />
                         </span>
-                        <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-white/45">
+                        <span
+                          className="relative z-[3] font-mono text-[10px] uppercase tracking-[0.28em] font-bold"
+                          style={{
+                            color: "#1a1105",
+                            textShadow:
+                              "0 1px 0 rgba(255,236,180,0.4), 0 -1px 0 rgba(36,22,0,0.3)",
+                            opacity: 0.85,
+                          }}
+                        >
                           Host muted
                         </span>
                       </div>
                     )}
                   </motion.div>
 
-                  {/* Question strip — question panel (flex-1) + timer (right) */}
+                  {/* ───────── MEDIA BLOCK — renders above the question when the
+                        question carries an image, a row of images, or a row of
+                        glyph tiles (Q1 animal-emoji placeholders). Every block
+                        wears the same METALLIC_RIM_GRADIENT border used across
+                        the rest of the UI so the gold language stays consistent. */}
+                  {(question.image || question.images || question.labelGlyphs) && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.22, duration: 0.45, ease: EASE_OUT }}
+                      className="relative w-full flex justify-center"
+                    >
+                      {/* 1a. Single image — Q2 (cards vs glasses), Q7 (shirt) */}
+                      {question.image && !question.images && !question.labelGlyphs && (
+                        <div
+                          className="relative rounded-xl p-[2.5px] overflow-hidden"
+                          style={{
+                            background: METALLIC_RIM_GRADIENT,
+                            boxShadow:
+                              "0 0 24px -4px rgba(228,207,106,0.35), 0 10px 28px -14px rgba(0,0,0,0.7)",
+                          }}
+                        >
+                          <div className="relative rounded-[10px] bg-black/70 p-2 md:p-3 flex items-center justify-center">
+                            <img
+                              src={question.image}
+                              alt="question media"
+                              className="max-h-[180px] md:max-h-[220px] w-auto object-contain rounded-md"
+                              draggable={false}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 1b. Row of images with optional captions — Q3 (3 Gandhi
+                              photos), Q6 (4 transport images). Caption sits
+                              under each tile in a small mono label. */}
+                      {question.images && (
+                        <div className="w-full overflow-x-auto">
+                          <div
+                            className={`flex flex-nowrap md:flex-wrap items-stretch justify-center gap-2.5 md:gap-3 min-w-max md:min-w-0`}
+                          >
+                            {question.images.map((src, i) => (
+                              <div
+                                key={`${src}-${i}`}
+                                className="relative rounded-xl p-[2px] overflow-hidden flex-shrink-0"
+                                style={{
+                                  background: METALLIC_RIM_GRADIENT,
+                                  boxShadow:
+                                    "0 0 14px -4px rgba(228,207,106,0.35), 0 8px 22px -14px rgba(0,0,0,0.7)",
+                                }}
+                              >
+                                <div className="relative rounded-[10px] bg-black/75 p-1.5 md:p-2 flex flex-col items-center gap-1.5">
+                                  <img
+                                    src={src}
+                                    alt={question.imageCaptions?.[i] ?? `image ${i + 1}`}
+                                    className="h-[120px] md:h-[150px] w-auto object-contain rounded"
+                                    draggable={false}
+                                  />
+                                  {question.imageCaptions?.[i] && (
+                                    <span
+                                      className="font-mono text-[9px] md:text-[10px] uppercase tracking-[0.25em] font-bold px-1.5 py-0.5 rounded"
+                                      style={{
+                                        color: "#e7cf6a",
+                                        background: "rgba(0,0,0,0.55)",
+                                        textShadow: "0 1px 0 rgba(20,10,0,0.7)",
+                                      }}
+                                    >
+                                      {question.imageCaptions[i]}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 1c. Row of label tiles — Q1 (A-Bat, B-Cricket, C-Cock,
+                              D-Duck). Large letter chip + caption beneath. */}
+                      {question.labelGlyphs && (
+                        <div className="flex flex-wrap items-stretch justify-center gap-2.5 md:gap-3">
+                          {question.labelGlyphs.map((tile) => (
+                            <div
+                              key={tile.letter}
+                              className="relative rounded-xl p-[2px] overflow-hidden"
+                              style={{
+                                background: METALLIC_RIM_GRADIENT,
+                                boxShadow:
+                                  "0 0 14px -4px rgba(228,207,106,0.35), 0 8px 22px -14px rgba(0,0,0,0.7)",
+                              }}
+                            >
+                              <div className="relative rounded-[10px] bg-black/75 px-4 py-2.5 md:px-5 md:py-3 flex flex-col items-center gap-1.5 min-w-[84px] md:min-w-[100px]">
+                                <span
+                                  className="font-display text-2xl md:text-3xl font-bold leading-none"
+                                  style={{
+                                    color: "#f4dc7c",
+                                    textShadow:
+                                      "0 1px 0 rgba(20,10,0,0.75), 0 0 10px rgba(228,174,68,0.35)",
+                                  }}
+                                >
+                                  {tile.letter}
+                                </span>
+                                <span
+                                  className="font-mono text-[10px] md:text-[11px] uppercase tracking-[0.2em] font-semibold"
+                                  style={{ color: "#e7cf6a" }}
+                                >
+                                  {tile.caption}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
+
+                  {/* Question panel — gold rim; inner fill matches registration modal */}
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.25, duration: 0.5, ease: EASE_OUT }}
-                    className="relative flex items-stretch gap-3 md:gap-4"
+                    className="relative w-full"
                     data-tour-id="question-area"
                   >
-                    <div className="relative flex-1 min-w-0 rounded-2xl border border-brass/40 bg-black/75 backdrop-blur-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_24px_-6px_rgba(224,160,43,0.25)]">
-                      <div className="absolute top-0 left-[12%] right-[12%] h-px bg-gradient-to-r from-transparent via-brass/60 to-transparent" />
-                      <div className="absolute bottom-0 left-[12%] right-[12%] h-px bg-gradient-to-r from-transparent via-brass/40 to-transparent" />
-                      <div className="px-5 md:px-8 py-4 md:py-6 text-center flex items-center justify-center min-h-[88px] md:min-h-[112px]">
-                        <p className="text-base md:text-lg lg:text-xl text-foreground font-medium leading-[1.4] tracking-[-0.005em]">
-                          {question.question}
-                        </p>
-                      </div>
-                    </div>
-
-
-                    {/* Timer — docked to the right of the question panel */}
-                    <div className="flex-shrink-0 flex items-center">
-                      <div className="relative w-[60px] h-[60px] md:w-[76px] md:h-[76px]" data-tour-id="timer">
-                        {timeLeft <= 8 && !answered && (
-                          <motion.div
-                            className="absolute -inset-2 rounded-full"
-                            style={{ border: `2px solid ${timerColor}33` }}
-                            animate={{ scale: [1, 1.15, 1], opacity: [0.5, 0, 0.5] }}
-                            transition={{ duration: 0.6, repeat: Infinity }}
-                          />
-                        )}
-                        <svg width="100%" height="100%" viewBox="0 0 88 88" className="-rotate-90">
-                          <circle cx="44" cy="44" r="40" fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="3" />
-                          <circle
-                            cx="44" cy="44" r="40"
-                            fill="none"
-                            stroke={timerColor}
-                            strokeWidth="3"
-                            strokeLinecap="round"
-                            strokeDasharray={arcLength}
-                            strokeDashoffset={arcLength - arcDash}
-                            style={{
-                              transition: "stroke-dashoffset 1s linear, stroke 0.3s",
-                              filter: timeLeft <= 5 ? `drop-shadow(0 0 6px ${timerColor})` : "none",
-                            }}
-                          />
-                        </svg>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <span
-                            className="font-mono text-lg md:text-2xl font-bold tabular-nums"
-                            style={{
-                              color: timerColor,
-                              animation: timeLeft <= 5 && !answered ? "tick-pulse 0.5s ease-in-out infinite" : "none",
-                            }}
-                          >
-                            {timeLeft}
-                          </span>
+                    <div
+                      className="relative w-full rounded-2xl p-[2.5px] overflow-hidden"
+                      style={{
+                        background: METALLIC_RIM_GRADIENT,
+                        boxShadow:
+                          "0 0 24px -4px rgba(228,207,106,0.35), 0 12px 32px -14px rgba(0,0,0,0.7)",
+                      }}
+                    >
+                      <div
+                        className="relative w-full min-w-0 overflow-hidden rounded-[14px] backdrop-blur-sm"
+                        style={PANEL_INNER_FILL}
+                      >
+                        <div className="absolute top-1.5 left-[14%] right-[14%] h-px bg-gradient-to-r from-transparent via-brass-bright/40 to-transparent" />
+                        <div className="absolute bottom-1.5 left-[14%] right-[14%] h-px bg-gradient-to-r from-transparent via-brass/35 to-transparent" />
+                        <div className="px-5 md:px-8 py-4 md:py-6 text-center flex items-center justify-center min-h-[84px] md:min-h-[104px]">
+                          <p className="text-base md:text-lg lg:text-xl text-foreground font-medium leading-[1.4] tracking-[-0.005em]">
+                            {question.question}
+                          </p>
                         </div>
                       </div>
                     </div>
                   </motion.div>
 
-                  {/* Options row — 4 uniform black+gold cards */}
+                  {/* Options row — 4 uniform metallic-rim cards with metallic brass badge */}
                   <div className="grid grid-cols-4 gap-3 md:gap-4" data-tour-id="options-area">
                     {question.options.map((option, i) => {
                       const isSelected = selected === i || selectedAnswer === i;
                       const isCorrectOption = i === question.correctIndex;
                       const showResult = answered;
 
-                      // Uniform: black fill, gold border, gold badge, gold text
-                      let borderColor = GOLD;
-                      let fillBg = "rgba(10,8,5,0.92)";
-                      let glow = `0 0 14px ${GOLD_GLOW}`;
+                      // State-driven rim + text + glow. Base rim is the metallic gradient;
+                      // correct/wrong states swap the rim color for semantic feedback.
+                      let rimBg: string = METALLIC_RIM_GRADIENT;
+                      let glow = `0 0 18px ${GOLD_GLOW}, 0 10px 28px -12px rgba(0,0,0,0.7)`;
                       let textColor = GOLD_BRIGHT;
+                      let innerBg = "rgba(6,4,2,0.92)";
 
                       if (showResult && isCorrectOption) {
-                        borderColor = "#34d399";
-                        glow = "0 0 26px rgba(61,170,122,0.55)";
-                        textColor = "#6ee7b7";
+                        rimBg =
+                          "linear-gradient(180deg, #b7f7cb 0%, #5ad491 30%, #2a9a63 65%, #0d4d31 100%)";
+                        glow = "0 0 28px rgba(61,170,122,0.65), 0 10px 28px -12px rgba(0,0,0,0.7)";
+                        textColor = "#9bf0c0";
                       } else if (showResult && isSelected && !isCorrectOption) {
-                        borderColor = "#ef4444";
-                        glow = "0 0 22px rgba(217,74,92,0.5)";
-                        textColor = "#fca5a5";
+                        rimBg =
+                          "linear-gradient(180deg, #ffb3b3 0%, #f05050 30%, #a82626 65%, #4a0d0d 100%)";
+                        glow = "0 0 26px rgba(217,74,92,0.55), 0 10px 28px -12px rgba(0,0,0,0.7)";
+                        textColor = "#ffc0c0";
                       } else if (showResult && !isSelected) {
-                        borderColor = "rgba(228,207,106,0.22)";
+                        rimBg =
+                          "linear-gradient(180deg, rgba(228,207,106,0.28) 0%, rgba(122,90,20,0.25) 100%)";
                         glow = "none";
-                        textColor = "rgba(228,207,106,0.3)";
+                        textColor = "rgba(228,207,106,0.35)";
+                        innerBg = "rgba(6,4,2,0.72)";
                       } else if (isSelected) {
-                        borderColor = GOLD_BRIGHT;
-                        glow = `0 0 22px ${GOLD_GLOW}, 0 0 0 2px ${GOLD_BRIGHT}`;
+                        rimBg =
+                          "linear-gradient(180deg, #fff4c8 0%, #f9e89a 22%, #d9b446 50%, #a6801f 78%, #6d4e13 100%)";
+                        glow = `0 0 28px ${GOLD_GLOW}, 0 0 0 2px rgba(255,240,190,0.6), 0 10px 28px -12px rgba(0,0,0,0.7)`;
                       }
 
                       return (
@@ -435,83 +849,80 @@ export default function QuestionScreen({
                             animation: showResult && isSelected && !isCorrectOption ? "wrong-shake 0.4s ease-in-out" : undefined,
                           }}
                         >
+                          {/* Metallic gradient rim wrapper (thicker, polished) */}
                           <div
-                            className="relative rounded-lg overflow-hidden transition-all duration-300"
+                            className="relative rounded-lg overflow-hidden p-[2px] transition-all duration-300"
                             style={{
-                              backgroundColor: fillBg,
-                              border: `2px solid ${borderColor}`,
+                              background: rimBg,
                               boxShadow: glow,
                             }}
                           >
-                            {/* Smaller option box: tighter padding + smaller min-height */}
-                            <div className="px-2.5 md:px-3 py-2.5 md:py-3 min-h-[52px] md:min-h-[60px] flex items-center justify-center">
-                              <span
-                                className="text-center text-xs md:text-sm font-bold uppercase tracking-[0.04em] leading-tight transition-colors duration-200"
-                                style={{ color: textColor }}
-                              >
-                                {option}
-                              </span>
+                            <div
+                              className="relative rounded-[7px] overflow-hidden"
+                              style={{
+                                backgroundColor: innerBg,
+                                boxShadow:
+                                  "inset 0 1px 0 rgba(255,245,210,0.06), inset 0 -1px 0 rgba(0,0,0,0.55), inset 0 0 24px rgba(0,0,0,0.45)",
+                              }}
+                            >
+                              <div className="px-2.5 md:px-3 py-2 md:py-2.5 min-h-[48px] md:min-h-[54px] flex items-center justify-center">
+                                <span
+                                  className="text-center text-xs md:text-sm font-bold uppercase tracking-[0.04em] leading-tight transition-colors duration-200"
+                                  style={{ color: textColor }}
+                                >
+                                  {option}
+                                </span>
+                              </div>
+
+                              {showResult && isCorrectOption && (
+                                <div className="pointer-events-none absolute inset-0 overflow-hidden">
+                                  <div className="panel-sheen-wrap">
+                                    <div
+                                      className="panel-sheen opacity-90"
+                                      style={{ animation: "sheen-ltr 0.85s ease-out 1 forwards" }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+
+                              {!showResult && !answered && selected === null && (
+                                <div className="pointer-events-none absolute inset-0 overflow-hidden opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                                  <div className="panel-sheen-wrap">
+                                    <div className="panel-sheen" />
+                                  </div>
+                                </div>
+                              )}
                             </div>
-
-                            {showResult && isCorrectOption && (
-                              <div className="pointer-events-none absolute inset-0 overflow-hidden">
-                                <div className="panel-sheen-wrap">
-                                  <div
-                                    className="panel-sheen opacity-90"
-                                    style={{ animation: "sheen-ltr 0.85s ease-out 1 forwards" }}
-                                  />
-                                </div>
-                              </div>
-                            )}
-
-                            {!showResult && !answered && selected === null && (
-                              <div className="pointer-events-none absolute inset-0 overflow-hidden opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-                                <div className="panel-sheen-wrap">
-                                  <div className="panel-sheen" />
-                                </div>
-                              </div>
-                            )}
                           </div>
 
-                          {/* Rounded-square badge — black fill, gold border, gold letter. Uniform on all 4. */}
+                          {/* A/B/C/D — polished brass plate, metallic FROM THE FIRST FRAME.
+                              No sheen animation. The multi-stop gradient (dark → bright spec
+                              highlight → darker) is what sells the metal — the bright band
+                              in the middle is the permanent specular highlight, so the badge
+                              looks equally polished at rest and in motion. */}
                           <div
-                            className="absolute -top-2 -left-2 md:-top-2.5 md:-left-2.5 w-7 h-7 md:w-8 md:h-8 rounded-md flex items-center justify-center font-display font-bold text-xs md:text-sm"
+                            className="absolute -top-2 -left-2 md:-top-2.5 md:-left-2.5 w-8 h-8 md:w-9 md:h-9 rounded-md p-[1.5px] overflow-hidden"
                             style={{
-                              backgroundColor: "#0a0805",
-                              color: GOLD_BRIGHT,
-                              border: `1.5px solid ${GOLD}`,
-                              boxShadow: [
-                                "0 0 0 2px rgba(0,0,0,0.9)",
-                                `0 0 12px ${GOLD_GLOW}`,
-                                "0 4px 12px -3px rgba(0,0,0,0.75)",
-                              ].join(", "),
+                              background: METALLIC_RIM_STRONG,
+                              boxShadow:
+                                "0 2px 6px rgba(0,0,0,0.55), 0 0 12px rgba(228,207,106,0.4), 0 0 0 1px rgba(0,0,0,0.6)",
                             }}
                           >
-                            {OPTION_LABELS[i]}
+                            <div
+                              className="relative w-full h-full rounded-[5px] flex items-center justify-center font-display font-bold text-xs md:text-sm"
+                              style={{
+                                background:
+                                  "linear-gradient(180deg, #7a5816 0%, #a6801f 10%, #d9b446 28%, #f4dc7c 46%, #f9e89a 52%, #e4c55a 62%, #b28622 82%, #6d4e13 100%)",
+                                color: "#1a1105",
+                                textShadow:
+                                  "0 1px 0 rgba(255,246,200,0.75), 0 -1px 0 rgba(36,22,0,0.45)",
+                                boxShadow:
+                                  "inset 0 1px 0 rgba(255,252,220,0.95), inset 0 -1px 0 rgba(40,24,0,0.6), inset 0 -2px 4px rgba(60,38,6,0.3)",
+                              }}
+                            >
+                              <span className="relative z-[3]">{OPTION_LABELS[i]}</span>
+                            </div>
                           </div>
-
-                          {showResult && isCorrectOption && (
-                            <motion.span
-                              initial={{ scale: 0, opacity: 0 }}
-                              animate={{ scale: 1, opacity: 1 }}
-                              transition={{ type: "spring", bounce: 0.5, delay: 0.1 }}
-                              className="absolute -top-2 -right-2 md:-top-2.5 md:-right-2.5 w-6 h-6 md:w-7 md:h-7 rounded-md bg-emerald-400 text-black flex items-center justify-center text-xs md:text-sm font-bold drop-shadow-[0_0_10px_rgba(61,170,122,0.9)] ring-2 ring-black/40"
-                              aria-hidden
-                            >
-                              ✓
-                            </motion.span>
-                          )}
-                          {showResult && isSelected && !isCorrectOption && (
-                            <motion.span
-                              initial={{ scale: 0, opacity: 0 }}
-                              animate={{ scale: 1, opacity: 1 }}
-                              transition={{ type: "spring", bounce: 0.5, delay: 0.1 }}
-                              className="absolute -top-2 -right-2 md:-top-2.5 md:-right-2.5 w-6 h-6 md:w-7 md:h-7 rounded-md bg-red-500 text-white flex items-center justify-center text-xs md:text-sm font-bold ring-2 ring-black/40"
-                              aria-hidden
-                            >
-                              ✗
-                            </motion.span>
-                          )}
                         </motion.button>
                       );
                     })}
@@ -531,8 +942,13 @@ export default function QuestionScreen({
                     {selectedAnswer === null ? (
                       <div className="rounded-lg border border-red-500/60 bg-red-950/70 backdrop-blur-sm px-4 py-2 text-center shadow-[0_0_20px_rgba(217,74,92,0.25)]">
                         <p className="text-red-200/95 text-xs md:text-sm font-medium">
-                          Time&apos;s up. The answer was{" "}
-                          <span className="text-brass-bright font-semibold">{question.options[question.correctIndex]}</span>
+                          Time&apos;s up.
+                          {!question.acceptAny && (
+                            <>
+                              {" "}The answer was{" "}
+                              <span className="text-brass-bright font-semibold">{question.options[question.correctIndex]}</span>
+                            </>
+                          )}
                         </p>
                       </div>
                     ) : isCorrect ? (
@@ -542,7 +958,9 @@ export default function QuestionScreen({
                         transition={{ type: "spring", bounce: 0.35 }}
                         className="rounded-lg border border-emerald-400/70 bg-emerald-950/70 backdrop-blur-sm px-5 py-2 text-center shadow-[0_0_28px_rgba(61,170,122,0.35)]"
                       >
-                        <p className="font-display text-sm md:text-base font-semibold text-emerald-200 tracking-wide">Correct!</p>
+                        <p className="font-display text-sm md:text-base font-semibold text-emerald-200 tracking-wide">
+                          {question.acceptAny ? "Well observed." : "Correct!"}
+                        </p>
                       </motion.div>
                     ) : (
                       <div className="rounded-lg border border-red-500/60 bg-red-950/70 backdrop-blur-sm px-4 py-2 text-center shadow-[0_0_20px_rgba(217,74,92,0.25)]">
@@ -556,6 +974,7 @@ export default function QuestionScreen({
                 )}
               </AnimatePresence>
 
+            </div>
             </div>
           </div>
         </div>

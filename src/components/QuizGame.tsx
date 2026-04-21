@@ -73,26 +73,26 @@ function buildQuestionNarration(q: Question): string {
     .map((opt, i) => `Option ${labels[i]}: ${opt}.`)
     .join(" ");
 
-  // Per-question witty opener — picks up the thread of the intro video.
+  // Per-question witty Hinglish opener — picks up the thread of the intro video.
   const openers: Record<number, string> = {
-    1: "Toh, dhyaan se suniye…",
-    2: "Chaliye, calculator side mein rakhiye…",
-    3: "Ab zara dimaag khujaiye…",
-    4: "Calendar khol ke mat dekhiye, please…",
-    5: "Pattern recognition ka waqt hai…",
-    6: "Mumbai wale, yeh aapke liye ghar ka sawaal hai…",
-    7: "Driving license waale, yeh sawaal aapke liye hai…",
-    8: "Aur… lo, aa gaya woh aakhri sawaal…",
+    1: "Toh pehla sawaal — zara dhyaan se dekho. Chaar animals hain screen par — Bat, Cricket, Cock, Duck.",
+    2: "Chaliye, ek picture puzzle. Ginna shuroo kijiye.",
+    3: "Ab zara ghor se dekhiye. Teen photographs — Gandhiji ki. Lekin ek mein kuchh gadbad hai.",
+    4: "Pattern recognition ka waqt. Shabdon ka silsila dhyaan se suniye.",
+    5: "Chaar words. Chaar mein se teen ek pattern follow karte hain, ek nahin. Sochiye kaunsa.",
+    6: "Mumbai walon, yeh aapke liye ghar ka sawaal hai. Arrangement kaunsa sahi hai?",
+    7: "Kyaal se sochiye. Calendar logic. Satmohan ki lucky shirt kab aati hai pehan mein?",
+    8: "Aur… lo, aa gaya woh aakhri sawaal. Letters ko ulta padh ke dekhiye.",
   };
 
   const closers: Record<number, string> = {
     1: "Aasaan lag raha hai? Jaldi kijiye.",
-    2: "Paanch chai, aur ek jawaab. Samay shuru.",
-    3: "Thoda ajeeb lagega, par jawaab sidha hai. Sochiye.",
-    4: "Haan, maine gin liya. Aapne?",
+    2: "Paanch second lagayenge ya das? Samay shuru.",
+    3: "Thoda ajeeb lagega, par jawaab aapki aankhon ke saamne hai.",
+    4: "Pattern dikha? Ab answer chuniye.",
     5: "Simple hai. Par galat bhi ho sakta hai. Clock chal raha hai.",
-    6: "Mumbai ki map dimaag mein chala lijiye. Chaliye.",
-    7: "Teen baar right… aur phir socha kahan? Samay shuru.",
+    6: "Dimaag ki map chalaaiye. Chaliye.",
+    7: "Pehla Friday kaunsa hai? Ginna shuru.",
     8: "Dhyaan se. Bahut dhyaan se. Clock chalu.",
   };
 
@@ -103,6 +103,13 @@ function buildQuestionNarration(q: Question): string {
 }
 
 // ── Types ──
+export interface LabelGlyph {
+  /** Letter label rendered on the tile ("A", "B", "C", "D") */
+  letter: string;
+  /** Caption under the tile (e.g. "Bat", "Cricket") */
+  caption: string;
+}
+
 export interface Question {
   id: number;
   percentage: number;
@@ -110,6 +117,18 @@ export interface Question {
   options: string[];
   correctIndex: number;
   timeLimit: number;
+  /** Single image shown above the question text (centered, golden rim). */
+  image?: string;
+  /** Row of images shown above the question text, each in a golden rim. */
+  images?: string[];
+  /** Optional caption per image in `images` (e.g. "1", "2", "3"). */
+  imageCaptions?: string[];
+  /** Row of glyph tiles (emoji placeholders) — used when picture options are
+   *  referenced in the question (e.g. Q1: A-Bat, B-Cricket, C-Cock, D-Duck). */
+  labelGlyphs?: LabelGlyph[];
+  /** If true, ANY selected option is treated as correct. Used for subjective /
+   *  trick questions (e.g. Q3 — "which Gandhi photo can't be real"). */
+  acceptAny?: boolean;
 }
 
 export interface GameState {
@@ -129,75 +148,113 @@ const QUESTIONS: Question[] = [
   {
     id: 1,
     percentage: 90,
-    question:
-      "A typical Indian traffic signal has three colors. If the red light is on, what should you do?",
-    options: ["Go", "Slow down", "Stop", "Honk"],
-    correctIndex: 2, // C. Stop
+    // Q1 — four animal tiles above the question. User picks which tile(s)
+    // share their name with a sport. Correct text-option is "B" (Cricket).
+    question: "Which of these animals share their name with a sport?",
+    labelGlyphs: [
+      { letter: "A", caption: "Bat" },
+      { letter: "B", caption: "Cricket" },
+      { letter: "C", caption: "Cock" },
+      { letter: "D", caption: "Duck" },
+    ],
+    options: ["AB", "BC", "DA", "B"],
+    correctIndex: 3, // D — the lone "B", i.e. just Cricket
     timeLimit: 30,
   },
   {
     id: 2,
     percentage: 80,
-    question: "A chaiwala sells tea at ₹10 per cup. If you buy 5 cups, how much do you pay?",
-    options: ["₹40", "₹50", "₹60", "₹45"],
-    correctIndex: 1, // B. ₹50
+    // Q2 — single group image (cards vs. glasses). User counts and picks.
+    question: "Count carefully — which are there more of in the picture?",
+    image: "/questionscreenimages/question2/question2group-ezremove.png",
+    options: ["Cards", "Glasses", "Both are equal", "Cannot tell"],
+    correctIndex: 0, // A — Cards
     timeLimit: 30,
   },
   {
     id: 3,
     percentage: 70,
-    question: "Which word becomes shorter when you add two letters to it?",
-    options: ["Tall", "Short", "Long", "Small"],
-    correctIndex: 1, // B. Short
+    // Q3 — 3 Gandhi photos in a row, one is anachronistic (mobile phone).
+    // Subjective — any answer is accepted so we don't penalise observers.
+    question: "Which photograph of Gandhiji cannot be real?",
+    images: [
+      "/questionscreenimages/question3/gandhjiaccurate1-ezremove.png",
+      "/questionscreenimages/question3/gandhijiinaccurate-ezremove.png",
+      "/questionscreenimages/question3/gandhjiaccurate2-ezremove.png",
+    ],
+    imageCaptions: ["1", "2", "3"],
+    options: ["Photo 1", "Photo 2", "Photo 3", "All are real"],
+    correctIndex: 1, // B — the one with the phone
+    acceptAny: true,
     timeLimit: 30,
   },
   {
     id: 4,
     percentage: 60,
-    question: "In a typical Indian week, if today is Wednesday, what day will it be after 3 days?",
-    options: ["Friday", "Saturday", "Sunday", "Monday"],
-    correctIndex: 1, // B. Saturday
+    // Q4 — word-pair pattern. Opposite sequence: Hot/Cold, Hard/Small, Easy/?
+    // The pattern alternates opposites: Hot→Cold, Hard→Small (size), so Easy→Big? Actually
+    // the user specified Correct = A. Big. Keep options as provided.
+    question: "Complete the sequence — Hot, Hard, Small, Cold, Easy, ?",
+    options: ["Big", "Fast", "Slow", "Tall"],
+    correctIndex: 0, // A — Big
     timeLimit: 30,
   },
   {
     id: 5,
     percentage: 50,
-    question: "Find the next number in the series: 2, 4, 8, 16, __",
-    options: ["18", "24", "32", "30"],
-    correctIndex: 2, // C. 32
-    timeLimit: 30,
+    // Q5 — word puzzle. Remove 1st letter → 4-letter word. Remove new 1st
+    // letter → 3-letter word. STONE→TONE→ONE ✓, CHAIR→HAIR→AIR ✓,
+    // GRATE→RATE→ATE ✓, PINCH→INCH→NCH ✗. Odd one out = PINCH.
+    question:
+      "Remove the first letter to get a 4-letter word, then remove the new first letter to get a 3-letter word. Which word does NOT follow the pattern?",
+    options: ["STONE", "CHAIR", "GRATE", "PINCH"],
+    correctIndex: 3, // D — PINCH
+    timeLimit: 45,
   },
   {
     id: 6,
     percentage: 30,
+    // Q6 — transport ordering (autorickshaw, bus, cycle, local train).
+    // Arrangement puzzle — correct arrangement is #2.
     question:
-      "You are in Mumbai. You take a local train from Churchgate to Dadar. The train is going north. In which direction is the platform on your right side when you get down at Dadar?",
-    options: ["East", "West", "North", "South"],
-    correctIndex: 0, // A. East
-    timeLimit: 30,
+      "Arrange these vehicles from slowest to fastest. Which arrangement is correct?",
+    images: [
+      "/questionscreenimages/question6/cycle-ezremove.png",
+      "/questionscreenimages/question6/auto-ezremove.png",
+      "/questionscreenimages/question6/bus-ezremove.png",
+      "/questionscreenimages/question6/localtrain-ezremove.png",
+    ],
+    imageCaptions: ["Cycle", "Autorickshaw", "Bus", "Local train"],
+    options: ["1", "2", "3", "Cannot tell"],
+    correctIndex: 1, // B — arrangement 2
+    timeLimit: 45,
   },
   {
     id: 7,
     percentage: 10,
+    // Q7 — Satmohan shirt / calendar logic puzzle.
     question:
-      "A man is driving a small car in India. He turns right three times in a row. In which direction is he now moving compared to where he started?",
+      "Satmohan wears his lucky shirt on the first Friday of every month. If the first day of May is a Thursday, when does he next wear it?",
+    image: "/questionscreenimages/question7/shirt-ezremove.png",
     options: [
-      "Same direction",
-      "Opposite direction",
-      "Left direction",
-      "Cannot be determined",
+      "Thursday 1st May",
+      "Saturday 3rd May",
+      "Friday 2nd May",
+      "Monday 5th May",
     ],
-    correctIndex: 1, // B. Opposite direction
-    timeLimit: 30,
+    correctIndex: 2, // C — Friday 2nd May
+    timeLimit: 60,
   },
   {
     id: 8,
     percentage: 1,
+    // Q8 — TNECREPE is "ONE PERCENT" reversed, truncated to first 8 letters.
+    // Appending "NO" gives the full reversal: TNECREPENO → ONEPERCENT.
     question:
-      "Following the pattern in these codes, what is the correct code for DELHI? 2N3 → LONDON, 4C5 → BARCELONA, 2O1 → ROME.",
-    options: ["2L2", "3L1", "2H2", "1L3"],
-    correctIndex: 0, // A. 2L2
-    timeLimit: 30,
+      "TNECREPE is the beginning of a reversed phrase. Which two letters complete it?",
+    options: ["RC", "AR", "NO", "TE"],
+    correctIndex: 2, // C — NO (completes ONE PERCENT reversed)
+    timeLimit: 60,
   },
 ];
 
@@ -254,9 +311,13 @@ export function formatRupees(amount: number): string {
 interface QuizGameProps {
   playerName: string;
   onGameEnd?: (result: { correct: number; total: number; potPrize: number }) => void;
+  /** Fires true when a full-screen video overlay (question-intro, reaction) is
+   *  active, false when none are. Lets the parent hide the 3D logo so it
+   *  can't peek through the video's fade-in/out transitions. */
+  onVideoOverlayChange?: (active: boolean) => void;
 }
 
-export default function QuizGame({ playerName, onGameEnd }: QuizGameProps) {
+export default function QuizGame({ playerName, onGameEnd, onVideoOverlayChange }: QuizGameProps) {
   const [gameState, setGameState] = useState<GameState>({
     currentQuestion: 0,
     totalPlayers: 100,
@@ -382,7 +443,8 @@ export default function QuizGame({ playerName, onGameEnd }: QuizGameProps) {
 
   const handleAnswer = useCallback((selectedIndex: number) => {
     const q = QUESTIONS[gameState.currentQuestion];
-    const isCorrect = selectedIndex === q.correctIndex;
+    // acceptAny = subjective / trick question → any chosen answer counts as correct.
+    const isCorrect = q.acceptAny ? true : selectedIndex === q.correctIndex;
     const lastQ = gameState.currentQuestion >= QUESTIONS.length - 1;
     const eliminated = simulateEliminations(q.percentage, gameState.remainingPlayers, lastQ);
     const addedToPot = eliminated * gameState.stakePerPlayer;
@@ -510,9 +572,20 @@ export default function QuizGame({ playerName, onGameEnd }: QuizGameProps) {
     "8thquestion",
   ][gameState.currentQuestion] ?? "1stquestion"}.mp4`;
 
+  // Hide the floating mute button whenever a full-screen video overlay is on,
+  // otherwise it stacks on top of the video's own "Skip ▸" button bottom-right.
+  const videoOverlayActive =
+    !!reactionVideoSrc ||
+    (gameState.phase === "question-intro" && tourState === "done");
+
+  // Mirror this to the parent so it can hide the 3D logo while a video plays.
+  useEffect(() => {
+    onVideoOverlayChange?.(videoOverlayActive);
+  }, [videoOverlayActive, onVideoOverlayChange]);
+
   return (
     <div className="w-full h-full relative">
-      <MuteButton />
+      {!videoOverlayActive && <MuteButton />}
 
       {/* ━━ Right-to-left wipe (between phases) ━━ */}
       <FadeWipe active={wipeActive} />
@@ -526,7 +599,7 @@ export default function QuizGame({ playerName, onGameEnd }: QuizGameProps) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="fixed inset-0 z-[70] bg-black flex items-center justify-center"
+            className="fixed inset-0 z-[95] bg-black flex items-center justify-center"
           >
             <video
               key={questionIntroVideoSrc}
@@ -557,7 +630,7 @@ export default function QuizGame({ playerName, onGameEnd }: QuizGameProps) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.45, ease: [0.23, 1, 0.32, 1] }}
-            className="fixed inset-0 z-[75] bg-black flex items-center justify-center"
+            className="fixed inset-0 z-[95] bg-black flex items-center justify-center"
           >
             <video
               key={reactionVideoSrc}
@@ -610,15 +683,17 @@ export default function QuizGame({ playerName, onGameEnd }: QuizGameProps) {
                 begin, or skip straight to the first question.
               </p>
               <div className="space-y-3">
-                <button
+                <motion.button
                   onClick={handleStartTour}
-                  className="w-full cursor-pointer rounded-xl bg-brass py-4 text-center text-[13px] font-semibold uppercase tracking-[0.2em] text-[#14110a] transition-colors hover:bg-brass-bright"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.97 }}
+                  className="game-show-btn relative z-0 w-full cursor-pointer rounded-xl py-4 text-center text-[13px] font-semibold uppercase tracking-[0.2em]"
                 >
-                  Ready, start the tour
-                </button>
+                  <span className="relative z-10">Ready, start the tour</span>
+                </motion.button>
                 <button
                   onClick={handleSkipTour}
-                  className="w-full cursor-pointer rounded-xl bg-white/[0.03] border border-white/[0.08] py-3 text-center text-[11px] font-mono uppercase tracking-[0.28em] text-muted hover:text-foreground/80 hover:border-white/15 transition-colors"
+                  className="w-full cursor-pointer rounded-xl border border-brass/25 bg-black/40 py-3 text-center text-[11px] font-mono uppercase tracking-[0.28em] text-brass-dim hover:border-brass/50 hover:text-brass-bright hover:bg-black/60 transition-colors"
                 >
                   Skip tour
                 </button>
@@ -682,16 +757,16 @@ export default function QuizGame({ playerName, onGameEnd }: QuizGameProps) {
                     onClick={handleConfirmReady}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.97 }}
-                    className="w-full cursor-pointer rounded-xl bg-brass py-4 text-center text-[13px] font-semibold uppercase tracking-[0.25em] text-[#14110a] transition-colors hover:bg-brass-bright shadow-[0_20px_50px_-15px_rgba(196,160,53,0.5)]"
+                    className="game-show-btn relative z-0 w-full cursor-pointer rounded-xl py-4 text-center text-[13px] font-semibold uppercase tracking-[0.25em]"
                   >
-                    Start question 1
+                    <span className="relative z-10">Start question 1</span>
                   </motion.button>
                   <button
                     onClick={() => {
                       stop();
                       setTourState("playing");
                     }}
-                    className="w-full cursor-pointer rounded-xl bg-white/[0.03] border border-white/[0.08] py-3 text-center text-[11px] font-mono uppercase tracking-[0.28em] text-muted hover:text-foreground/80 hover:border-white/15 transition-colors"
+                    className="w-full cursor-pointer rounded-xl border border-brass/25 bg-black/40 py-3 text-center text-[11px] font-mono uppercase tracking-[0.28em] text-brass-dim hover:border-brass/50 hover:text-brass-bright hover:bg-black/60 transition-colors"
                   >
                     Replay tour
                   </button>

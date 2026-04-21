@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { formatRupees } from "./QuizGame";
 
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
@@ -159,9 +159,25 @@ export default function EliminationReveal({
   previouslyEliminated,
   embedded = false,
 }: EliminationRevealProps) {
-  const animatedEliminated = useAnimatedCounter(eliminated, 1200, 800);
-  const animatedPot = useAnimatedCounter(potPrize, 1500, 2200);
-  const animatedRemaining = useAnimatedCounter(remainingPlayers, 1200, 2200);
+  // Sequential reveal for embedded mode:
+  //   "grid"   = ONLY the player grid is visible, centered. Players get crossed out.
+  //   "reveal" = Grid is GONE. Details (header + eliminated count + stats + continue) appear centered, solo.
+  // NO side-by-side. The user should feel the grid completely finish, disappear, and THEN details arrive.
+  const [phase, setPhase] = useState<"grid" | "reveal">(embedded ? "grid" : "reveal");
+
+  useEffect(() => {
+    if (!embedded) return;
+    // Xs finish animating around ~2.0s (see PlayerGrid stagger).
+    // Hold on the grid for a breath, then transition to details.
+    const t = setTimeout(() => setPhase("reveal"), 2800);
+    return () => clearTimeout(t);
+  }, [embedded]);
+
+  // Counter delays: in embedded mode the reveal phase starts at 2800ms.
+  // Add ~600ms (grid fade-out + details enter) buffer before counters begin.
+  const animatedEliminated = useAnimatedCounter(eliminated, 1200, embedded ? 3500 : 800);
+  const animatedPot = useAnimatedCounter(potPrize, 1500, embedded ? 4100 : 2200);
+  const animatedRemaining = useAnimatedCounter(remainingPlayers, 1200, embedded ? 4100 : 2200);
 
   // ───────── Reusable pieces ─────────
   const statusChip = playerGotItRight ? (
@@ -186,40 +202,48 @@ export default function EliminationReveal({
     </motion.div>
   );
 
-  const gridPanel = (
+  // Grid panel (large, centered) — used ONLY during embedded "grid" phase
+  const gridPanelLarge = (
     <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
+      initial={{ opacity: 0, scale: 0.94 }}
       animate={{ opacity: 1, scale: 1 }}
-      transition={{ delay: 0.4, duration: 0.6, ease: EASE_OUT }}
-      className="h-full flex flex-col justify-between p-3 rounded-xl bg-black/45 border-2 border-white/[0.1] shadow-inner"
+      exit={{ opacity: 0, scale: 0.92, filter: "blur(4px)" }}
+      transition={{ duration: 0.55, ease: EASE_OUT }}
+      className="p-5 md:p-6 rounded-2xl bg-black/45 border-2 border-white/[0.1] shadow-[inset_0_0_32px_rgba(0,0,0,0.55)]"
     >
-      <div className="flex-1 flex items-center justify-center min-h-0">
+      <div className="w-[min(360px,60vw)]">
         <PlayerGrid
           totalPlayers={totalPlayers}
           previouslyEliminated={previouslyEliminated}
           newlyEliminated={eliminated}
         />
       </div>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 1.5, duration: 0.4 }}
-        className="text-center mt-3 flex-shrink-0"
-      >
-        <div className="inline-flex items-center gap-2">
-          <motion.span
-            className="font-display text-2xl md:text-3xl text-[var(--danger)] tracking-wider"
-            initial={{ scale: 0.5 }}
-            animate={{ scale: 1 }}
-            transition={{ delay: 1.6, type: "spring", bounce: 0.3 }}
-          >
-            {animatedEliminated}
-          </motion.span>
-          <span className="text-[var(--danger)]/55 text-[10px] uppercase tracking-[0.2em]">
-            eliminated this round
-          </span>
-        </div>
-      </motion.div>
+      <p className="mt-4 text-center font-mono text-[10px] uppercase tracking-[0.32em] text-[var(--danger)]/85">
+        {eliminated} eliminated this round
+      </p>
+    </motion.div>
+  );
+
+  const eliminatedCountBlock = (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45, ease: EASE_OUT }}
+      className="relative p-4 rounded-xl overflow-hidden border-2 border-[var(--danger)]/30 bg-[var(--danger)]/[0.06] shadow-[0_0_24px_-4px_rgba(232,72,85,0.18)]"
+    >
+      <div className="relative z-[1] text-center">
+        <motion.span
+          className="font-display text-4xl md:text-5xl text-[var(--danger)] tracking-wider leading-none block"
+          initial={{ scale: 0.5 }}
+          animate={{ scale: 1 }}
+          transition={{ delay: 0.1, type: "spring", bounce: 0.35 }}
+        >
+          {animatedEliminated}
+        </motion.span>
+        <p className="font-mono text-[10px] uppercase tracking-[0.26em] text-[var(--danger)]/75 mt-2">
+          Eliminated this round
+        </p>
+      </div>
     </motion.div>
   );
 
@@ -227,29 +251,29 @@ export default function EliminationReveal({
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 2.0, duration: 0.5, ease: EASE_OUT }}
-      className="grid grid-cols-2 gap-2"
+      transition={{ delay: 0.25, duration: 0.5, ease: EASE_OUT }}
+      className="grid grid-cols-2 gap-3"
     >
-      <div className="relative p-3 rounded-xl overflow-hidden border-2 border-white/[0.2] bg-white/[0.04]">
+      <div className="relative p-4 rounded-xl overflow-hidden border-2 border-white/[0.2] bg-white/[0.04]">
         <div className="panel-sheen-wrap">
           <div className="panel-sheen opacity-40" style={{ animationDuration: "3.6s" }} />
         </div>
         <div className="relative z-[1] text-center">
-          <p className="font-mono text-xl md:text-2xl font-bold text-foreground tabular-nums">
+          <p className="font-mono text-2xl md:text-3xl font-bold text-foreground tabular-nums">
             {animatedRemaining}
           </p>
-          <p className="font-mono text-[8px] uppercase tracking-[0.22em] text-muted mt-0.5">Still standing</p>
+          <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-muted mt-1">Still standing</p>
         </div>
       </div>
-      <div className="relative p-3 rounded-xl overflow-hidden border-2 border-brass/50 bg-brass/[0.1] shadow-[0_0_24px_rgba(196,160,53,0.14)]">
+      <div className="relative p-4 rounded-xl overflow-hidden border-2 border-brass/50 bg-brass/[0.1] shadow-[0_0_24px_rgba(196,160,53,0.14)]">
         <div className="panel-sheen-wrap">
           <div className="panel-sheen opacity-55" style={{ animationDuration: "2.9s" }} />
         </div>
         <div className="relative z-[1] text-center">
-          <p className="font-mono text-xl md:text-2xl font-bold text-brass-bright tabular-nums">
+          <p className="font-mono text-2xl md:text-3xl font-bold text-brass-bright tabular-nums">
             {formatRupees(animatedPot)}
           </p>
-          <p className="font-mono text-[8px] uppercase tracking-[0.22em] text-brass-dim mt-0.5">In the pot</p>
+          <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-brass-dim mt-1">In the pot</p>
         </div>
       </div>
     </motion.div>
@@ -259,13 +283,13 @@ export default function EliminationReveal({
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 2.6, duration: 0.4, ease: EASE_OUT }}
+      transition={{ delay: 0.55, duration: 0.45, ease: EASE_OUT }}
     >
       <motion.button
         onClick={onContinue}
-        whileHover={{ scale: 1.01 }}
-        whileTap={{ scale: 0.98 }}
-        className="game-show-btn relative z-0 w-full cursor-pointer rounded-xl bg-brass py-3.5 text-center text-[13px] font-semibold uppercase tracking-[0.18em] text-[#14110a] transition-colors hover:bg-brass-bright"
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.97 }}
+        className="game-show-btn relative z-0 w-full cursor-pointer rounded-xl py-3.5 text-center text-[13px] font-semibold uppercase tracking-[0.22em]"
       >
         <span className="relative z-10">{isLastQuestion ? "See final results" : "Next question"}</span>
       </motion.button>
@@ -276,12 +300,12 @@ export default function EliminationReveal({
     <motion.div
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.15, duration: 0.5, ease: EASE_OUT }}
+      transition={{ duration: 0.45, ease: EASE_OUT }}
       className="flex items-center justify-between"
     >
-      <div className="flex items-center gap-2">
-        <div className="w-7 h-7 rounded-lg bg-brass/15 border-2 border-brass/35 flex items-center justify-center shadow-[0_0_12px_rgba(196,160,53,0.2)]">
-          <span className="font-display text-xs text-brass-bright">Q{questionNumber}</span>
+      <div className="flex items-center gap-2.5">
+        <div className="w-8 h-8 rounded-lg bg-brass/15 border-2 border-brass/35 flex items-center justify-center shadow-[0_0_12px_rgba(196,160,53,0.2)]">
+          <span className="font-display text-[11px] text-brass-bright">Q{questionNumber}</span>
         </div>
         <div>
           <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-brass-dim/90">After round</p>
@@ -430,7 +454,11 @@ export default function EliminationReveal({
     </div>
   );
 
-  // Embedded mode — 2-column layout: grid LEFT, stats + button RIGHT
+  // Embedded mode — STRICT SEQUENTIAL reveal:
+  //   Phase 1 "grid":   Only the grid is visible, centered. Players get crossed out.
+  //                     NOTHING else is on screen during this phase.
+  //   Phase 2 "reveal": Grid is GONE. Details (header + count + stats + next) appear CENTERED, solo.
+  //   The user should feel the crosses land, the grid vanish, and THEN the results arrive.
   if (embedded) {
     return (
       <motion.div
@@ -440,24 +468,30 @@ export default function EliminationReveal({
         transition={{ duration: 0.4 }}
         className="w-full h-full flex items-center justify-center p-4 md:p-6"
       >
-        <div className="w-full h-full flex flex-col gap-3">
-          {/* Header row on top */}
-          {headerRow}
-
-          {/* 2-column body */}
-          <div className="flex-1 grid grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] gap-4 md:gap-5 items-stretch min-h-0">
-            {/* LEFT: player grid + eliminated count (stretches to column height) */}
-            <div className="h-full flex flex-col min-h-0">
-              {gridPanel}
-            </div>
-
-            {/* RIGHT: stats on top, continue button at bottom (same height as left) */}
-            <div className="h-full flex flex-col justify-between gap-3 min-h-0">
+        <AnimatePresence mode="wait">
+          {phase === "grid" ? (
+            <motion.div
+              key="grid-phase"
+              className="flex items-center justify-center"
+            >
+              {gridPanelLarge}
+            </motion.div>
+          ) : (
+            <motion.div
+              key="reveal-phase"
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5, ease: EASE_OUT }}
+              className="w-full max-w-md mx-auto flex flex-col gap-4"
+            >
+              {headerRow}
+              {eliminatedCountBlock}
               {statsBlock}
               {continueButton}
-            </div>
-          </div>
-        </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     );
   }

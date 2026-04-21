@@ -2,6 +2,11 @@
 
 import { motion } from "framer-motion";
 
+/** Public asset; filename uses narrow no-break space before "PM" (macOS screenshot default). */
+const START_EXPERIENCE_IMAGE = `/questionscreenimages/${encodeURIComponent(
+  "Screenshot 2026-04-16 at 1.47.21\u202fPM.png"
+)}`;
+
 interface StartButtonProps {
   onClick: () => void;
 }
@@ -32,6 +37,12 @@ export default function StartButton({ onClick }: StartButtonProps) {
           <div className="absolute inset-[1px] rounded-[10px] bg-gradient-to-b from-amber-400/10 to-transparent pointer-events-none" />
 
           <div className="flex items-center gap-3">
+            <img
+              src={START_EXPERIENCE_IMAGE}
+              alt=""
+              className="h-9 w-auto max-w-[min(200px,40vw)] object-contain object-left select-none pointer-events-none"
+              draggable={false}
+            />
             <span className="text-amber-100 font-bold text-lg tracking-wide uppercase">
               Start Experience
             </span>

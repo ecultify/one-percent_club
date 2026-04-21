@@ -2,39 +2,7 @@
 
 import { useRef, useEffect, useCallback, useState } from "react";
 import * as THREE from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
-
-const MODEL_PATH = "/1percent-club-gold.glb";
-
-// ── Global preload: starts fetching the GLB the moment this module is imported ──
-let preloadedModel: THREE.Group | null = null;
-let preloadPromise: Promise<THREE.Group> | null = null;
-
-function preloadModel(): Promise<THREE.Group> {
-  if (preloadPromise) return preloadPromise;
-  preloadPromise = new Promise((resolve, reject) => {
-    const loader = new GLTFLoader();
-    const dracoLoader = new DRACOLoader();
-    dracoLoader.setDecoderPath("https://www.gstatic.com/draco/versioned/decoders/1.5.7/");
-    loader.setDRACOLoader(dracoLoader);
-    loader.load(
-      MODEL_PATH,
-      (gltf) => {
-        preloadedModel = gltf.scene;
-        resolve(gltf.scene);
-      },
-      undefined,
-      reject,
-    );
-  });
-  return preloadPromise;
-}
-
-// Kick off preload immediately when module is parsed (during page load)
-if (typeof window !== "undefined") {
-  preloadModel();
-}
+import { getPreloadedClubLogoScene, preloadClubLogoModel } from "@/lib/logoModelPreload";
 
 interface Logo3DProps {
   settled: boolean;
@@ -69,12 +37,23 @@ export default function Logo3D({ settled, className, style, onReady }: Logo3DPro
       renderer.toneMappingExposure = 1.8;
       renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-      const rect = container.getBoundingClientRect();
-      const w = rect.width || 200;
-      const h = rect.height || 200;
+      // Use LAYOUT dimensions (offsetWidth/Height) — NOT getBoundingClientRect.
+      // The parent motion.div is often in mid-transform (scale: 0 → 1) when
+      // Logo3D mounts, and getBoundingClientRect returns TRANSFORMED dims
+      // (0×0 or tiny), which falls through to a fallback 200×200 — the canvas
+      // then stays at 200×200 forever because ResizeObserver doesn't fire on
+      // CSS transform changes. offsetWidth/offsetHeight ignore transforms.
+      const w = container.offsetWidth || 300;
+      const h = container.offsetHeight || 300;
       const dpr = Math.min(window.devicePixelRatio, 2);
       renderer.setPixelRatio(dpr);
-      renderer.setSize(w, h);
+      renderer.setSize(w, h, false);
+      // Ensure canvas fills the container via CSS even if WebGL framebuffer
+      // was initialized at a smaller size (belt-and-suspenders for animation
+      // edge cases).
+      renderer.domElement.style.width = "100%";
+      renderer.domElement.style.height = "100%";
+      renderer.domElement.style.display = "block";
       container.appendChild(renderer.domElement);
 
       const scene = new THREE.Scene();
@@ -248,11 +227,28 @@ export default function Logo3D({ settled, className, style, onReady }: Logo3DPro
         onReady?.();
       };
 
-      if (preloadedModel) {
-        addModel(preloadedModel);
-      } else {
-        preloadModel().then(addModel);
-      }
+      const tryLoad = () => {
+        const cached = getPreloadedClubLogoScene();
+        if (cached) {
+          addModel(cached);
+        } else {
+          preloadClubLogoModel()
+            .then(addModel)
+            .catch((err) => {
+              console.warn("[Logo3D] preload failed, retrying once:", err);
+              preloadClubLogoModel().then(addModel).catch((e) => {
+                console.error("[Logo3D] model load failed:", e);
+                // Unblock the UI — signal ready even though we have no model,
+                // otherwise GameFlow stays stuck at logo-center forever waiting
+                // for logoModelReady to flip. A missing 3D logo is better than
+                // a frozen experience.
+                setModelReady(true);
+                onReady?.();
+              });
+            });
+        }
+      };
+      tryLoad();
 
       // ── Render loop ──
       function animate() {
@@ -286,12 +282,12 @@ export default function Logo3D({ settled, className, style, onReady }: Logo3DPro
     const state = init(container);
 
     const observer = new ResizeObserver(() => {
-      const rect = container.getBoundingClientRect();
-      const w = rect.width || 200;
-      const h = rect.height || 200;
+      // Same reasoning as in init(): use layout dimensions, not transformed.
+      const w = container.offsetWidth || 300;
+      const h = container.offsetHeight || 300;
       state.camera.aspect = w / h;
       state.camera.updateProjectionMatrix();
-      state.renderer.setSize(w, h);
+      state.renderer.setSize(w, h, false);
     });
     observer.observe(container);
 
@@ -311,8 +307,11 @@ export default function Logo3D({ settled, className, style, onReady }: Logo3DPro
       className={className}
       style={{
         ...style,
-        // Hide until model is loaded to prevent empty canvas flash
-        visibility: modelReady ? "visible" : "hidden",
+        // Opacity only — `visibility:hidden` on a WebGL canvas parent can suppress
+        // compositing in some browsers so the logo never appears after load.
+        opacity: modelReady ? 1 : 0,
+        transition: "opacity 0.4s ease-out",
+        pointerEvents: "none",
       }}
     />
   );

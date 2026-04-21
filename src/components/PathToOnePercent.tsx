@@ -34,16 +34,16 @@ export default function PathToOnePercent() {
       {/* Kicker line */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          <p className="font-mono text-[9px] uppercase tracking-[0.38em] text-brass-dim">
+          <p className="font-mono text-[9px] uppercase tracking-[0.38em] text-[#c9a94a]">
             The path
           </p>
-          <p className="text-[11px] text-foreground/60 mt-1">
+          <p className="mt-1 text-[11px] text-[#d8cdb1]/80">
             100 players start. Only 1% finishes.
           </p>
         </div>
         <div className="text-right">
-          <p className="font-mono text-[9px] uppercase tracking-[0.38em] text-brass-dim">Survival</p>
-          <p className="font-display text-brass-bright text-sm tabular-nums font-semibold">
+          <p className="font-mono text-[9px] uppercase tracking-[0.38em] text-[#c9a94a]">Survival</p>
+          <p className="font-display text-sm font-semibold tabular-nums text-[#f4dc7c]">
             100 &rarr; 1
           </p>
         </div>

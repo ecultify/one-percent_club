@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useScroll, useMotionValueEvent } from "framer-motion";
 
 const FRAME_COUNT = 121;
@@ -13,26 +14,51 @@ export default function ScrollyCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imagesRef = useRef<HTMLImageElement[]>([]);
   const [imagesLoaded, setImagesLoaded] = useState(false);
+  const [portalReady, setPortalReady] = useState(false);
   const rafId = useRef<number | null>(null);
   const canvasSized = useRef(false);
 
-  // Preload all frame images
+  useLayoutEffect(() => {
+    setPortalReady(true);
+  }, []);
+
+  // Preload all frame images (count errors too so a missing frame never blocks the page)
   useEffect(() => {
-    let loadedCount = 0;
+    let settledCount = 0;
+    let cancelled = false;
     const imgs: HTMLImageElement[] = [];
+    let maxWaitId: number;
+
+    const finish = () => {
+      if (cancelled) return;
+      window.clearTimeout(maxWaitId);
+      setImagesLoaded(true);
+    };
+
+    const bump = () => {
+      settledCount++;
+      if (settledCount >= FRAME_COUNT) {
+        finish();
+      }
+    };
 
     for (let i = 0; i < FRAME_COUNT; i++) {
       const img = new Image();
+      img.decoding = "async";
       img.src = getFramePath(i);
-      img.onload = () => {
-        loadedCount++;
-        if (loadedCount === FRAME_COUNT) {
-          setImagesLoaded(true);
-        }
-      };
+      img.onload = bump;
+      img.onerror = bump;
       imgs.push(img);
     }
     imagesRef.current = imgs;
+
+    // Never hang forever if frames are missing, slow CDN, or callbacks never fire
+    maxWaitId = window.setTimeout(finish, 12_000) as unknown as number;
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(maxWaitId);
+    };
   }, []);
 
   // Size canvas to window respecting devicePixelRatio for Retina sharpness
@@ -123,6 +149,22 @@ export default function ScrollyCanvas() {
     });
   });
 
+  const bufferingOverlay =
+    portalReady && !imagesLoaded
+      ? createPortal(
+          <div
+            className="pointer-events-none fixed inset-0 z-[9998] flex items-center justify-center bg-[#0a0a0a]"
+            aria-live="polite"
+            aria-busy="true"
+          >
+            <p className="animate-pulse text-sm uppercase tracking-widest text-white/60">
+              Buffering Experience...
+            </p>
+          </div>,
+          document.body
+        )
+      : null;
+
   return (
     <div ref={containerRef} className="relative w-full" style={{ height: "500vh" }}>
       <div className="sticky top-0 h-screen w-full overflow-hidden flex items-center justify-center">
@@ -133,14 +175,8 @@ export default function ScrollyCanvas() {
 
       </div>
 
-      {/* Loading Indicator — fixed + high z so it sits above the Overlay hero text */}
-      {!imagesLoaded && (
-        <div className="fixed inset-0 flex items-center justify-center bg-[#121212] z-[100]">
-          <p className="text-white/50 text-sm tracking-widest uppercase animate-pulse">
-            Buffering Experience...
-          </p>
-        </div>
-      )}
+      {/* Loading UI is portaled to body so it always stacks above Overlay (“The 1% Club”) */}
+      {bufferingOverlay}
     </div>
   );
 }

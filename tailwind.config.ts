@@ -7,6 +7,20 @@ const config: Config = {
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
+    fontFamily: {
+      sans: ["Arial", "Helvetica", "sans-serif"],
+      display: ["Arial", "Helvetica", "sans-serif"],
+      mono: ["Arial", "Helvetica", "sans-serif"],
+      /** Instructions journey only — set via next/font in layout */
+      "inst-display": [
+        "var(--font-inst-display)",
+        "Georgia",
+        "ui-serif",
+        "serif",
+      ],
+      "inst-ui": ["var(--font-inst-ui)", "system-ui", "sans-serif"],
+      "inst-mono": ["var(--font-inst-mono)", "ui-monospace", "monospace"],
+    },
     extend: {
       colors: {
         background: "var(--background)",
@@ -17,11 +31,6 @@ const config: Config = {
         brass: "var(--gold)",
         "brass-bright": "var(--gold-bright)",
         "brass-dim": "var(--gold-dim)",
-      },
-      fontFamily: {
-        sans: ["var(--font-body)", "sans-serif"],
-        display: ["var(--font-display)", "sans-serif"],
-        mono: ["var(--font-mono)", "monospace"],
       },
     },
   },

@@ -397,7 +397,7 @@ export default function ProductTour({ steps, onFinish, onSkip }: ProductTourProp
               <div className="flex items-center justify-between gap-2">
                 <button
                   onClick={handleSkip}
-                  className="text-[10px] font-mono uppercase tracking-[0.22em] text-muted hover:text-foreground/80 transition-colors"
+                  className="text-[10px] font-mono uppercase tracking-[0.22em] text-brass-dim hover:text-brass-bright transition-colors"
                 >
                   Skip tour
                 </button>
@@ -405,17 +405,19 @@ export default function ProductTour({ steps, onFinish, onSkip }: ProductTourProp
                   {stepIndex > 0 && (
                     <button
                       onClick={handlePrev}
-                      className="rounded-lg border border-white/10 bg-white/[0.04] px-3.5 py-2 text-[11px] font-mono uppercase tracking-[0.2em] text-foreground/80 hover:text-foreground hover:border-white/20 transition-colors"
+                      className="rounded-lg border border-brass/30 bg-black/40 px-3.5 py-2 text-[11px] font-mono uppercase tracking-[0.2em] text-brass-dim hover:text-brass-bright hover:border-brass/50 transition-colors"
                     >
                       Back
                     </button>
                   )}
-                  <button
+                  <motion.button
                     onClick={handleNext}
-                    className="rounded-lg bg-brass px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#14110a] hover:bg-brass-bright transition-colors"
+                    whileHover={{ scale: 1.04 }}
+                    whileTap={{ scale: 0.96 }}
+                    className="game-show-btn relative z-0 rounded-lg px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.2em]"
                   >
-                    {isLast ? "Start game" : "Next →"}
-                  </button>
+                    <span className="relative z-10">{isLast ? "Start game" : "Next →"}</span>
+                  </motion.button>
                 </div>
               </div>
             </div>

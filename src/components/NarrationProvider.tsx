@@ -21,8 +21,10 @@ interface NarrationContextValue {
   narrate: (key: string, text: string) => Promise<void>;
   /** Stop any currently playing narration immediately. */
   stop: () => void;
-  /** Call once on a real user gesture (e.g. Start button click) to unlock audio. */
-  unlock: () => void;
+  /** Call on a user gesture to unlock programmatic playback. Resolves when the handshake finishes. */
+  unlock: () => Promise<void>;
+  /** Warm the TTS cache (e.g. on Continue click) so `narrate` can play soon after mount. */
+  prefetchTts: (key: string, text: string) => Promise<void>;
   /** True while narration is audible. */
   isSpeaking: boolean;
 }
@@ -50,7 +52,14 @@ async function fetchAudioBlob(text: string): Promise<string> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text }),
   });
-  if (!res.ok) throw new Error(`TTS failed: ${res.status}`);
+  if (!res.ok) {
+    if (res.status === 500) {
+      console.warn(
+        "[narrate] /api/tts returned 500 — set ELEVENLABS_API_KEY in .env.local (see README or api/tts/route.ts).",
+      );
+    }
+    throw new Error(`TTS failed: ${res.status}`);
+  }
   const blob = await res.blob();
   return URL.createObjectURL(blob);
 }
@@ -116,30 +125,66 @@ export function NarrationProvider({ children }: { children: ReactNode }) {
     setIsSpeaking(false);
   }, []);
 
-  const unlock = useCallback(() => {
-    if (unlockedRef.current) return;
+  const unlock = useCallback((): Promise<void> => {
+    if (unlockedRef.current) return Promise.resolve();
     const a = audioRef.current;
-    if (!a) return;
-    // Play a silent blip during the user gesture to unlock the element for future plays
-    const prevSrc = a.src;
+    if (!a) return Promise.resolve();
+    // Play a silent (volume=0) blip during the user gesture to unlock the
+    // audio element for future programmatic plays. We DO NOT use `a.muted`
+    // because the unmute would later happen async (in `then`) and could race
+    // with a real `narrate()` that sets src + plays in the meantime — leaving
+    // it muted. Setting `volume = 0` doesn't have that race.
+    const prevVolume = a.volume;
+    a.volume = 0;
     a.src = SILENT_MP3;
-    a.muted = true;
+    try {
+      a.load();
+    } catch {
+      /* ignore */
+    }
     const p = a.play();
-    if (p && typeof p.then === "function") {
-      p.then(() => {
+    const finish = () => {
+      try {
         a.pause();
-        try { a.currentTime = 0; } catch { /* ignore */ }
-        a.muted = false;
-        if (prevSrc) a.src = prevSrc;
-        unlockedRef.current = true;
-      }).catch(() => {
-        // Even if it failed, mark as attempted; future plays may still work
-        a.muted = false;
-        unlockedRef.current = true;
-      });
-    } else {
-      a.muted = false;
+      } catch {
+        /* ignore */
+      }
+      try {
+        a.currentTime = 0;
+      } catch {
+        /* ignore */
+      }
+      // Don't touch a.src here — leaving it as SILENT_MP3 is fine; narrate()
+      // will overwrite it with the real audio URL anyway. Restoring an empty
+      // string was racing with narrate() and clobbering its src.
+      a.volume = prevVolume || 1;
       unlockedRef.current = true;
+    };
+    return new Promise<void>((resolve) => {
+      const done = () => {
+        finish();
+        resolve();
+      };
+      if (p && typeof p.then === "function") {
+        p.then(done).catch(() => {
+          a.volume = prevVolume || 1;
+          unlockedRef.current = true;
+          resolve();
+        });
+      } else {
+        done();
+      }
+    });
+  }, []);
+
+  const prefetchTts = useCallback(async (key: string, text: string): Promise<void> => {
+    const cacheKey = `${key}:${textHash(text)}`;
+    if (audioCache.has(cacheKey)) return;
+    try {
+      const url = await fetchAudioBlob(text);
+      audioCache.set(cacheKey, url);
+    } catch (err) {
+      console.warn("[prefetchTts] failed:", err);
     }
   }, []);
 
@@ -238,8 +283,8 @@ export function NarrationProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<NarrationContextValue>(
-    () => ({ muted, toggleMute, narrate, stop, unlock, isSpeaking }),
-    [muted, toggleMute, narrate, stop, unlock, isSpeaking],
+    () => ({ muted, toggleMute, narrate, stop, unlock, prefetchTts, isSpeaking }),
+    [muted, toggleMute, narrate, stop, unlock, prefetchTts, isSpeaking],
   );
 
   return <NarrationContext.Provider value={value}>{children}</NarrationContext.Provider>;

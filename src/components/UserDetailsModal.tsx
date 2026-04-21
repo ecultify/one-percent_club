@@ -1,11 +1,10 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState, useEffect } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { useNarration } from "./NarrationProvider";
 import MuteButton from "./MuteButton";
-import HostSilhouette from "./HostSilhouette";
-import { useParallax } from "./useParallax";
+import { METALLIC_RIM_GRADIENT, PANEL_INNER_FILL } from "./QuestionScreen";
 
 interface UserDetailsModalProps {
   onSubmit: (data: { name: string; phone: string; email: string }) => void;
@@ -30,7 +29,7 @@ export default function UserDetailsModal({ onSubmit }: UserDetailsModalProps) {
     return () => stop();
   }, [narrate, stop]);
 
-  const handleSubmit = (e?: React.FormEvent) => {
+  const handleSubmit = (e?: FormEvent) => {
     if (e) e.preventDefault();
     if (!name.trim() || !phone.trim() || !email.trim()) return;
     onSubmit({ name: name.trim(), phone: phone.trim(), email: email.trim() });
@@ -44,32 +43,27 @@ export default function UserDetailsModal({ onSubmit }: UserDetailsModalProps) {
 
   const isValid = name.trim() && phone.trim() && email.trim();
 
-  const parallax = useParallax();
-
   return (
     <div className="w-full max-w-md mx-4 relative max-h-[90vh] flex flex-col">
       <MuteButton />
 
-      {/* Ambient host silhouette at the right edge of the stage */}
-      <HostSilhouette side="right" opacity={0.16} />
-
-      {/* Atmospheric parallax halo behind the card */}
       <div
-        className="absolute -inset-20 bg-brass/[0.05] rounded-[3rem] blur-[90px] pointer-events-none"
-        style={{
-          transform: `translate(${parallax.x * 10}px, ${parallax.y * 8}px)`,
-          transition: "transform 0.05s linear",
-        }}
-      />
-      <div className="absolute -inset-12 bg-brass/[0.04] rounded-[2rem] blur-3xl pointer-events-none" />
-
-      <div className="relative rounded-2xl border-2 border-brass/25 bg-gradient-to-b from-surface-light/90 to-surface/95 shadow-[0_40px_100px_-24px_rgba(0,0,0,0.75),0_0_60px_-10px_rgba(196,160,53,0.12)] overflow-hidden backdrop-blur-sm">
-        <div className="absolute inset-0 opacity-[0.018] pointer-events-none mix-blend-overlay"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E")`,
-          }}
-        />
-        <div className="absolute top-0 left-4 right-4 h-[2px] bg-gradient-to-r from-transparent via-brass-bright/70 to-transparent shadow-[0_0_20px_rgba(228,207,106,0.35)]" />
+        className="relative overflow-hidden rounded-2xl p-[2.5px] shadow-[0_36px_90px_-28px_rgba(0,0,0,0.72),0_0_28px_-4px_rgba(228,207,106,0.22)]"
+        style={{ background: METALLIC_RIM_GRADIENT }}
+      >
+        <div
+          className="relative overflow-hidden rounded-[13px] backdrop-blur-sm"
+          style={PANEL_INNER_FILL}
+        >
+          <div className="absolute top-2 left-[12%] right-[12%] h-px bg-gradient-to-r from-transparent via-brass-bright/35 to-transparent pointer-events-none" />
+          <div className="absolute bottom-2 left-[12%] right-[12%] h-px bg-gradient-to-r from-transparent via-brass/32 to-transparent pointer-events-none" />
+          <div
+            className="pointer-events-none absolute inset-0 opacity-[0.06] mix-blend-overlay"
+            style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E")`,
+            }}
+          />
+          <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-brass-dim/25 to-transparent pointer-events-none" />
 
         <div className="relative p-8 md:p-10">
           <motion.div
@@ -78,13 +72,10 @@ export default function UserDetailsModal({ onSubmit }: UserDetailsModalProps) {
             transition={{ delay: 0.06, duration: 0.45, ease: [0.23, 1, 0.32, 1] }}
             className="mb-9"
           >
-            <p className="font-mono text-[10px] uppercase tracking-[0.45em] text-brass-dim mb-4">Registration</p>
-            <h2 className="font-display text-3xl md:text-[2rem] font-semibold tracking-[-0.02em] text-foreground leading-tight">
+            <p className="font-mono text-[10px] uppercase tracking-[0.45em] text-brass-dim/90 mb-4">Registration</p>
+            <h2 className="font-display text-3xl md:text-[2rem] font-semibold tracking-[-0.02em] text-foreground leading-tight drop-shadow-[0_1px_12px_rgba(0,0,0,0.75)]">
               Enter the club
             </h2>
-            <p className="mt-3 text-sm text-muted leading-relaxed">
-              One short form — then the floor is yours.
-            </p>
           </motion.div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -106,7 +97,7 @@ export default function UserDetailsModal({ onSubmit }: UserDetailsModalProps) {
                 <div className="relative rounded-xl">
                   {focusedField === field.id && (
                     <motion.div
-                      className="absolute -inset-px rounded-xl bg-brass/10 ring-1 ring-brass/25"
+                      className="absolute -inset-px rounded-xl bg-brass/15 ring-1 ring-brass/40"
                       layoutId="input-focus"
                       transition={{ type: "spring", duration: 0.38, bounce: 0.12 }}
                     />
@@ -119,7 +110,7 @@ export default function UserDetailsModal({ onSubmit }: UserDetailsModalProps) {
                     onFocus={() => setFocusedField(field.id)}
                     onBlur={() => setFocusedField(null)}
                     placeholder={field.placeholder}
-                    className="relative w-full px-4 py-3.5 rounded-xl bg-black/25 border border-white/[0.06] text-foreground placeholder:text-muted/50 text-[15px] outline-none transition-colors duration-200 focus:border-brass/20 focus:bg-black/35"
+                    className="relative w-full px-4 py-3.5 rounded-xl bg-black/45 border border-brass/25 text-foreground placeholder:text-muted/70 text-[15px] outline-none transition-colors duration-200 focus:border-brass/40 focus:bg-black/55 focus:ring-1 focus:ring-brass/25"
                   />
                 </div>
               </motion.div>
@@ -145,12 +136,13 @@ export default function UserDetailsModal({ onSubmit }: UserDetailsModalProps) {
                   <span className="relative z-10">Continue</span>
                 </motion.button>
               ) : (
-                <div className="w-full py-4 rounded-xl bg-white/[0.04] border-2 border-white/[0.14] text-center cursor-not-allowed">
-                  <span className="text-[13px] font-semibold uppercase tracking-[0.2em] text-muted/55">Continue</span>
+                <div className="w-full py-4 rounded-xl bg-black/25 border-2 border-brass/15 text-center cursor-not-allowed">
+                  <span className="text-[13px] font-semibold uppercase tracking-[0.2em] text-muted/45">Continue</span>
                 </div>
               )}
             </motion.div>
           </form>
+        </div>
         </div>
       </div>
     </div>
