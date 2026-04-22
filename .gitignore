@@ -4,6 +4,9 @@ out/
 build/
 dist/
 
+# Server TTS file cache (local dev; Vercel uses /tmp only)
+.cache/
+
 # Dependencies
 node_modules/
 

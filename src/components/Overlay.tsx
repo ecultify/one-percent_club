@@ -218,8 +218,8 @@ function Volumetric3DText({
    - "THE" sits top-right, smaller. "%" sits bottom-right of the same column,
      slightly larger than "THE", together filling the height of the "1".
    - "CLUB" drops below and spans the width underneath.
-   - All four words use Volumetric3DText. The top three are "white" face
-     (ivory + brass rim); "CLUB" is full "brass" face.
+   - The "1" uses "white" face (bright core glow); "THE", "%", and "CLUB" use
+     full "brass" — polished gold extrusion like the broadcast mark.
    ──────────────────────────────────────────────────────────────────────── */
 
 function OnePercentClubLogo() {
@@ -239,14 +239,28 @@ function OnePercentClubLogo() {
         className="flex items-stretch"
         style={{ gap: "calc(var(--logo-scale) * 0.06)" }}
       >
-        {/* The "1" — hero glyph, full row height */}
-        <Volumetric3DText
-          face="white"
-          className="font-display font-black tracking-[-0.05em]"
-          style={{ fontSize: "var(--logo-scale)", lineHeight: 0.82 }}
-        >
-          1
-        </Volumetric3DText>
+        {/* The "1" — hero glyph, full row height; radial bloom reads as the light source */}
+        <div className="relative inline-flex shrink-0 items-center self-stretch">
+          <div
+            className="pointer-events-none absolute left-1/2 top-[46%] -z-10 -translate-x-1/2 -translate-y-1/2"
+            style={{
+              width: "calc(var(--logo-scale) * 0.52)",
+              height: "calc(var(--logo-scale) * 0.88)",
+              background:
+                "radial-gradient(ellipse 50% 48% at 50% 50%, rgba(255,255,255,0.92) 0%, rgba(255,235,200,0.45) 28%, rgba(255,200,120,0.2) 48%, transparent 72%)",
+              filter: "blur(calc(var(--logo-scale) * 0.11))",
+              mixBlendMode: "screen",
+            }}
+            aria-hidden
+          />
+          <Volumetric3DText
+            face="white"
+            className="font-display font-black tracking-[-0.05em]"
+            style={{ fontSize: "var(--logo-scale)", lineHeight: 0.82 }}
+          >
+            1
+          </Volumetric3DText>
+        </div>
 
         {/* Right column: THE stacked on % */}
         <div
@@ -255,7 +269,7 @@ function OnePercentClubLogo() {
           style={{ paddingTop: "calc(var(--logo-scale) * 0.02)" }}
         >
           <Volumetric3DText
-            face="white"
+            face="brass"
             className="font-display font-black tracking-[-0.02em]"
             style={{
               fontSize: "calc(var(--logo-scale) * 0.34)",
@@ -265,7 +279,7 @@ function OnePercentClubLogo() {
             THE
           </Volumetric3DText>
           <Volumetric3DText
-            face="white"
+            face="brass"
             className="font-display font-black tracking-[-0.03em]"
             style={{
               fontSize: "calc(var(--logo-scale) * 0.58)",
@@ -309,54 +323,107 @@ function TextSection({
   const blurPx = useTransform(scrollYProgress, [start, end], [0, 10]);
   const filter = useTransform(blurPx, (b) => `blur(${b}px)`);
 
+  const legibleEyebrow = {
+    color: "#fff8e8",
+    letterSpacing: "0.42em",
+    textShadow: [
+      "0 0 2px rgba(0,0,0,1)",
+      "0 2px 12px rgba(0,0,0,0.95)",
+      "0 0 28px rgba(228, 190, 90, 0.65)",
+      "0 1px 0 rgba(0,0,0,0.9)",
+    ].join(", "),
+  } as const;
+
+  const legibleTagline = {
+    color: "#fff4d4",
+    textShadow: [
+      "0 0 2px rgba(0,0,0,1)",
+      "0 2px 14px rgba(0,0,0,0.92)",
+      "0 0 36px rgba(255, 190, 80, 0.4)",
+    ].join(", "),
+  } as const;
+
   return (
     <motion.div
       style={{ opacity, y, filter }}
-      className="text-center pointer-events-auto max-w-5xl"
+      className="text-center pointer-events-auto max-w-5xl px-4"
     >
-      {/* ─── EYEBROW: Invitation only ───────────────────────────────── */}
       <p
-        className="font-mono text-[10px] md:text-[11px] uppercase font-semibold mb-8"
-        style={{
-          color: "#e7cf6a",
-          letterSpacing: "0.55em",
-          textShadow: [
-            "0 1px 0 rgba(20, 10, 0, 0.55)",
-            "0 0 14px rgba(228, 174, 68, 0.28)",
-          ].join(", "),
-        }}
+        className="font-mono text-[11px] font-bold uppercase sm:text-xs md:text-[13px] mb-6 md:mb-8"
+        style={legibleEyebrow}
       >
         Invitation only
       </p>
 
-      {/* ─── DIVIDER: thin brass bar with specular center ──────────── */}
       <div
-        className="mx-auto mb-10 h-[1.5px] w-20 rounded-full"
+        className="mx-auto mb-6 h-[2px] w-24 rounded-full sm:mb-8 sm:w-28 md:mb-10"
         style={{
           background:
-            "linear-gradient(90deg, transparent 0%, rgba(196, 160, 53, 0.4) 25%, #f4dc7c 50%, rgba(196, 160, 53, 0.4) 75%, transparent 100%)",
-          boxShadow: "0 0 10px rgba(228, 174, 68, 0.45)",
+            "linear-gradient(90deg, transparent 0%, rgba(255,230,160,0.35) 15%, #ffe8a0 50%, rgba(255,230,160,0.35) 85%, transparent 100%)",
+          boxShadow:
+            "0 0 14px rgba(255, 220, 140, 0.85), 0 0 2px rgba(0,0,0,0.9)",
         }}
+        aria-hidden
       />
 
-      {/* ─── TITLE: volumetric 3D TV-show logo ─────────────────────── */}
       <OnePercentClubLogo />
 
-      {/* ─── SUBTITLE ───────────────────────────────────────────────── */}
       <p
-        className="mt-10 max-w-md mx-auto text-base md:text-lg font-medium leading-relaxed italic"
-        style={{
-          color: "rgba(232, 200, 108, 0.82)",
-          letterSpacing: "0.01em",
-          textShadow: [
-            "0 1px 0 rgba(20, 10, 0, 0.55)",
-            "0 2px 0 rgba(20, 10, 0, 0.3)",
-            "0 0 18px rgba(228, 174, 68, 0.18)",
-          ].join(", "),
-        }}
+        className="mt-7 max-w-xl mx-auto text-[13px] font-bold uppercase leading-snug tracking-[0.14em] text-balance sm:mt-9 sm:text-[15px] sm:tracking-[0.16em] md:mt-10 md:text-lg md:tracking-[0.18em]"
+        style={legibleTagline}
       >
         Do you have what it takes?
       </p>
+
+      <motion.button
+        type="button"
+        onClick={() =>
+          window.scrollBy({
+            top: Math.max(140, window.innerHeight * 0.22),
+            behavior: "smooth",
+          })
+        }
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.35, duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+        className="mt-6 sm:mt-7 md:mt-8 mx-auto flex flex-col items-center gap-1.5 rounded-full px-4 py-2.5 sm:px-5 sm:py-3 cursor-pointer touch-manipulation"
+        style={{
+          background:
+            "linear-gradient(180deg, #fff6d2 0%, #f0d56e 18%, #d4a82a 45%, #a67a18 72%, #6b4a0c 100%)",
+          boxShadow:
+            "0 10px 28px -10px rgba(0,0,0,0.75), 0 0 0 1px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,252,230,0.9), inset 0 -2px 6px rgba(40,22,0,0.35)",
+        }}
+        aria-label="Scroll down to continue"
+      >
+        <span
+          className="font-mono text-[9px] font-bold uppercase tracking-[0.28em] sm:text-[10px] sm:tracking-[0.32em]"
+          style={{
+            color: "#2a1a04",
+            textShadow: "0 1px 0 rgba(255,250,220,0.65)",
+          }}
+        >
+          Scroll down
+        </span>
+        <motion.span
+          aria-hidden
+          className="flex items-center justify-center"
+          animate={{ y: [0, 4, 0] }}
+          transition={{ duration: 1.35, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#0a0a0a"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M12 5v14M5 13l7 7 7-7" />
+          </svg>
+        </motion.span>
+      </motion.button>
     </motion.div>
   );
 }

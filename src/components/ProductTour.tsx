@@ -23,6 +23,18 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { motion, AnimatePresence } from "framer-motion";
 import { useNarration } from "./NarrationProvider";
 
+/**
+ * After `narrate()` resolves: if audio actually played, use a short buffer; if narration
+ * was skipped (muted, TTS off, or instant failure), use a longer read-time pause so the
+ * tour still advances and animations stay in sync with the app flow.
+ */
+function pauseAfterNarrationMs(voiceText: string, narrateElapsedMs: number): number {
+  if (narrateElapsedMs < 380) {
+    return Math.max(2200, Math.min(5600, voiceText.length * 50));
+  }
+  return 700;
+}
+
 export interface TourStep {
   targetId: string;
   placement?: "top" | "bottom" | "left" | "right";
@@ -200,33 +212,36 @@ export default function ProductTour({ steps, onFinish, onSkip }: ProductTourProp
     };
   }, [currentStep, padding]);
 
-  // Fire narration per step + auto-advance when voice finishes
+  // Fire narration per step + auto-advance when voice finishes (or after read-time if muted / no TTS)
   useEffect(() => {
     if (!currentStep) return;
 
     let cancelled = false;
+    let advanceTimer: number | null = null;
     setVoiceActive(true);
 
-    narrate(currentStep.voiceKey, currentStep.voiceText).then(() => {
-      setVoiceActive(false);
+    const narrateStarted = performance.now();
+    void narrate(currentStep.voiceKey, currentStep.voiceText).then(() => {
       if (cancelled) return;
-      // Only auto-advance if voice actually played (not muted)
-      if (!muted) {
-        // Small buffer so user has a moment to read before moving on
-        const t = setTimeout(() => {
-          if (cancelled) return;
-          setStepIndex((i) => (i < steps.length - 1 ? i + 1 : i));
-          if (stepIndex === steps.length - 1) onFinish();
-        }, 700);
-        return () => clearTimeout(t);
-      }
+      setVoiceActive(false);
+      const elapsed = performance.now() - narrateStarted;
+      const pauseMs = pauseAfterNarrationMs(currentStep.voiceText, elapsed);
+      advanceTimer = window.setTimeout(() => {
+        advanceTimer = null;
+        if (cancelled) return;
+        setStepIndex((i) => {
+          if (i < steps.length - 1) return i + 1;
+          onFinish();
+          return i;
+        });
+      }, pauseMs);
     });
 
     return () => {
       cancelled = true;
+      if (advanceTimer !== null) window.clearTimeout(advanceTimer);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stepIndex, currentStep]);
+  }, [stepIndex, currentStep, narrate, onFinish, steps.length]);
 
   const handleNext = useCallback(() => {
     stop();

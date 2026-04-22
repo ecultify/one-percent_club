@@ -11,8 +11,15 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import type { Question } from "./QuizGame";
 import { formatRupees } from "./QuizGame";
+import { useNarration } from "./NarrationProvider";
 
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
+
+/** Last N seconds on the clock — one tick sound per second (WAV may ring slightly past 1s). */
+const TIMER_TICK_LAST_SECONDS = 10;
+/** Fire `onTimerVoCue` when remaining time hits this (3s before tick strip). */
+const TIMER_VO_CUE_AT_REMAINING = TIMER_TICK_LAST_SECONDS + 3;
+const TIMER_TICK_SRC = encodeURI("/sound/450509__abyeditsound__clockticksound_01.wav");
 
 interface QuestionScreenProps {
   question: Question;
@@ -24,6 +31,8 @@ interface QuestionScreenProps {
   playerName: string;
   onAnswer: (index: number) => void;
   onTimeUp: () => void;
+  /** When ~3s remain before the last-10s tick SFX (13s left on a full round). */
+  onTimerVoCue?: () => void;
   answered: boolean;
   selectedAnswer: number | null;
   isCorrect: boolean;
@@ -33,6 +42,46 @@ interface QuestionScreenProps {
 }
 
 const OPTION_LABELS = ["A", "B", "C", "D"];
+
+function answerChromeStyles(
+  i: number,
+  question: Question,
+  selected: number | null,
+  selectedAnswer: number | null,
+  answered: boolean,
+) {
+  const isSelected = selected === i || selectedAnswer === i;
+  const isCorrectOption = i === question.correctIndex;
+  const showResult = answered;
+  let rimBg: string = METALLIC_RIM_GRADIENT;
+  let glow = `0 0 18px ${GOLD_GLOW}, 0 10px 28px -12px rgba(0,0,0,0.7)`;
+  let textColor = GOLD_BRIGHT;
+  let innerBg = "rgba(6,4,2,0.92)";
+
+  if (showResult && isCorrectOption) {
+    rimBg =
+      "linear-gradient(180deg, #b7f7cb 0%, #5ad491 30%, #2a9a63 65%, #0d4d31 100%)";
+    glow = "0 0 28px rgba(61,170,122,0.65), 0 10px 28px -12px rgba(0,0,0,0.7)";
+    textColor = "#9bf0c0";
+  } else if (showResult && isSelected && !isCorrectOption) {
+    rimBg =
+      "linear-gradient(180deg, #ffb3b3 0%, #f05050 30%, #a82626 65%, #4a0d0d 100%)";
+    glow = "0 0 26px rgba(217,74,92,0.55), 0 10px 28px -12px rgba(0,0,0,0.7)";
+    textColor = "#ffc0c0";
+  } else if (showResult && !isSelected) {
+    rimBg =
+      "linear-gradient(180deg, rgba(228,207,106,0.28) 0%, rgba(122,90,20,0.25) 100%)";
+    glow = "none";
+    textColor = "rgba(228,207,106,0.35)";
+    innerBg = "rgba(6,4,2,0.72)";
+  } else if (isSelected) {
+    rimBg =
+      "linear-gradient(180deg, #fff4c8 0%, #f9e89a 22%, #d9b446 50%, #a6801f 78%, #6d4e13 100%)";
+    glow = `0 0 28px ${GOLD_GLOW}, 0 0 0 2px rgba(255,240,190,0.6), 0 10px 28px -12px rgba(0,0,0,0.7)`;
+  }
+
+  return { isSelected, isCorrectOption, showResult, rimBg, glow, textColor, innerBg };
+}
 
 // Uniform styling — every option wears the same black fill + metallic gold rim + metallic gold badge.
 const GOLD = "#e0a02b";
@@ -259,6 +308,7 @@ export default function QuestionScreen({
   playerName,
   onAnswer,
   onTimeUp,
+  onTimerVoCue,
   answered,
   selectedAnswer,
   isCorrect,
@@ -269,6 +319,53 @@ export default function QuestionScreen({
   const [selected, setSelected] = useState<number | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasCalledTimeUp = useRef(false);
+  const tickAudioRef = useRef<HTMLAudioElement | null>(null);
+  const timerVoCueFiredRef = useRef(false);
+  const { muted: narrationMuted } = useNarration();
+
+  useEffect(() => {
+    timerVoCueFiredRef.current = false;
+  }, [questionNumber, question.id]);
+
+  useEffect(() => {
+    if (!onTimerVoCue) return;
+    if (answered || paused) return;
+    if (question.timeLimit < TIMER_VO_CUE_AT_REMAINING) return;
+    if (timeLeft !== TIMER_VO_CUE_AT_REMAINING) return;
+    if (timerVoCueFiredRef.current) return;
+    timerVoCueFiredRef.current = true;
+    onTimerVoCue();
+  }, [timeLeft, answered, paused, onTimerVoCue, question.timeLimit, question.id]);
+
+  const stopTickSound = useCallback(() => {
+    const a = tickAudioRef.current;
+    if (a) {
+      try {
+        a.pause();
+        a.currentTime = 0;
+      } catch {}
+      tickAudioRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (narrationMuted || answered || paused) {
+      stopTickSound();
+      return;
+    }
+    if (timeLeft > TIMER_TICK_LAST_SECONDS || timeLeft < 1) {
+      stopTickSound();
+      return;
+    }
+    stopTickSound();
+    const a = new Audio(TIMER_TICK_SRC);
+    tickAudioRef.current = a;
+    a.volume = 0.48;
+    void a.play().catch(() => {});
+    return () => {
+      stopTickSound();
+    };
+  }, [timeLeft, narrationMuted, answered, paused, stopTickSound]);
 
   useEffect(() => {
     if (answered || paused) {
@@ -292,12 +389,16 @@ export default function QuestionScreen({
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [answered, onTimeUp, paused]);
 
-  const handleSelect = useCallback((index: number) => {
-    if (answered || selected !== null || paused) return;
-    setSelected(index);
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    onAnswer(index);
-  }, [answered, selected, onAnswer, paused]);
+  const handleSelect = useCallback(
+    (index: number) => {
+      if (answered || selected !== null || paused) return;
+      stopTickSound();
+      setSelected(index);
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      onAnswer(index);
+    },
+    [answered, selected, onAnswer, paused, stopTickSound],
+  );
 
   return (
     <motion.div
@@ -473,19 +574,19 @@ export default function QuestionScreen({
           className="pointer-events-auto relative rounded-xl p-[1.5px] shadow-[0_12px_32px_-10px_rgba(0,0,0,0.75)]"
           style={{ background: METALLIC_RIM_GRADIENT }}
         >
-          <div className="relative flex flex-col items-center rounded-[10px] bg-black/70 backdrop-blur-md px-3 md:px-3.5 py-4 md:py-5">
+          <div className="relative flex min-h-[min(72vh,640px)] w-[5.25rem] flex-col items-stretch rounded-[10px] bg-black/70 backdrop-blur-md px-2 py-5 sm:w-[5.75rem] md:w-[6.25rem] md:px-3 md:py-6">
             <p
-              className="font-mono text-[9px] md:text-[10px] uppercase font-bold mb-3 md:mb-3.5"
+              className="shrink-0 text-center font-mono text-[9px] font-bold uppercase leading-tight sm:text-[10px] md:text-[11px] px-0.5"
               style={{
                 color: "#e7cf6a",
-                letterSpacing: "0.32em",
+                letterSpacing: "0.18em",
                 textShadow:
-                  "0 1px 0 rgba(20,10,0,0.6), 0 0 8px rgba(228,174,68,0.25)",
+                  "0 1px 0 rgba(20,10,0,0.6), 0 0 10px rgba(228,174,68,0.28)",
               }}
             >
               Journey
             </p>
-            <div className="relative flex flex-col items-center gap-2.5 md:gap-3.5">
+            <div className="relative flex min-h-0 flex-1 flex-col items-center justify-evenly py-3 md:py-4">
               {JOURNEY.map((pct) => {
                 const isCurrent = pct === question.percentage;
                 const isReached = pct >= question.percentage;
@@ -496,17 +597,17 @@ export default function QuestionScreen({
                       initial={{ scale: 0.6 }}
                       animate={{ scale: 1 }}
                       transition={{ type: "spring", bounce: 0.5 }}
-                      className="relative"
+                      className="relative flex items-center justify-center"
                     >
                       <div
-                        className="absolute -inset-2 rounded-md blur-md opacity-75"
+                        className="absolute -inset-3 rounded-lg blur-xl opacity-90 sm:-inset-3.5"
                         style={{
                           background:
-                            "radial-gradient(closest-side, rgba(255,220,130,0.6), rgba(200,150,60,0.25) 60%, transparent 85%)",
+                            "radial-gradient(closest-side, rgba(255,230,150,0.75), rgba(228,190,80,0.35) 55%, transparent 82%)",
                         }}
                       />
                       <div
-                        className="metallic-chip relative px-2 py-[3px] md:px-2.5 md:py-1 rounded-md text-[11px] md:text-xs font-display font-bold tabular-nums leading-none"
+                        className="metallic-chip relative rounded-lg px-3 py-2 text-sm font-bold tabular-nums leading-none shadow-[0_0_20px_rgba(228,207,106,0.45)] sm:px-3.5 sm:py-2.5 sm:text-base md:px-4 md:py-3 md:text-lg font-display"
                         style={{
                           color: "#1a1105",
                           textShadow:
@@ -524,11 +625,11 @@ export default function QuestionScreen({
                 return (
                   <span
                     key={pct}
-                    className="font-display text-xs md:text-sm tabular-nums font-bold leading-none transition-colors"
+                    className="font-display text-sm font-bold tabular-nums leading-none transition-colors sm:text-base md:text-lg"
                     style={{
                       color: isReached ? "#f4dc7c" : "rgba(228,207,106,0.62)",
                       textShadow: isReached
-                        ? "0 1px 0 rgba(20,10,0,0.75), 0 0 8px rgba(228,174,68,0.35)"
+                        ? "0 1px 0 rgba(20,10,0,0.75), 0 0 10px rgba(228,174,68,0.38)"
                         : "0 1px 0 rgba(20,10,0,0.75)",
                     }}
                   >
@@ -648,16 +749,48 @@ export default function QuestionScreen({
                     )}
                   </motion.div>
 
-                  {/* ───────── MEDIA BLOCK — renders above the question when the
-                        question carries an image, a row of images, or a row of
-                        glyph tiles (Q1 animal-emoji placeholders). Every block
-                        wears the same METALLIC_RIM_GRADIENT border used across
-                        the rest of the UI so the gold language stays consistent. */}
+                  {/* ───────── QUESTION PANEL — renders FIRST inside the
+                        frame (above any media / word blocks / options). Gold
+                        rim + dark bronze fill matches the registration modal. */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.25, duration: 0.5, ease: EASE_OUT }}
+                    className="relative w-full"
+                    data-tour-id="question-area"
+                  >
+                    <div
+                      className="relative w-full rounded-2xl p-[2.5px] overflow-hidden"
+                      style={{
+                        background: METALLIC_RIM_GRADIENT,
+                        boxShadow:
+                          "0 0 24px -4px rgba(228,207,106,0.35), 0 12px 32px -14px rgba(0,0,0,0.7)",
+                      }}
+                    >
+                      <div
+                        className="relative w-full min-w-0 overflow-hidden rounded-[14px] backdrop-blur-sm"
+                        style={PANEL_INNER_FILL}
+                      >
+                        <div className="absolute top-1.5 left-[14%] right-[14%] h-px bg-gradient-to-r from-transparent via-brass-bright/40 to-transparent" />
+                        <div className="absolute bottom-1.5 left-[14%] right-[14%] h-px bg-gradient-to-r from-transparent via-brass/35 to-transparent" />
+                        <div className="px-5 md:px-8 py-4 md:py-6 text-center flex items-center justify-center min-h-[84px] md:min-h-[104px]">
+                          <p className="text-base md:text-lg lg:text-xl text-foreground font-medium leading-[1.4] tracking-[-0.005em]">
+                            {question.question}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+
+                  {/* ───────── MEDIA BLOCK — images / row of images / glyph
+                        tiles. Renders BELOW the question panel and ABOVE the
+                        options. Every variant wears the METALLIC_RIM_GRADIENT
+                        border to stay consistent with the rest of the UI. */}
                   {(question.image || question.images || question.labelGlyphs) && (
                     <motion.div
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.22, duration: 0.45, ease: EASE_OUT }}
+                      transition={{ delay: 0.3, duration: 0.45, ease: EASE_OUT }}
                       className="relative w-full flex justify-center"
                     >
                       {/* 1a. Single image — Q2 (cards vs glasses), Q7 (shirt) */}
@@ -685,42 +818,147 @@ export default function QuestionScreen({
                               photos), Q6 (4 transport images). Caption sits
                               under each tile in a small mono label. */}
                       {question.images && (
-                        <div className="w-full overflow-x-auto">
+                        <div
+                          className="w-full overflow-x-auto"
+                          data-tour-id={question.imagesAreOptions ? "options-area" : undefined}
+                        >
                           <div
-                            className={`flex flex-nowrap md:flex-wrap items-stretch justify-center gap-2.5 md:gap-3 min-w-max md:min-w-0`}
+                            className={
+                              (question.compactImageRow
+                                ? "flex flex-nowrap items-stretch justify-center gap-2 sm:gap-2.5 w-full min-w-0"
+                                : "flex flex-nowrap md:flex-wrap items-stretch justify-center gap-2.5 md:gap-3 min-w-max md:min-w-0") +
+                              (question.imagesAreOptions
+                                ? " pt-3.5 pl-2.5 pr-1 sm:pt-4 sm:pl-3 md:pt-4 md:pl-3.5"
+                                : "")
+                            }
                           >
-                            {question.images.map((src, i) => (
-                              <div
-                                key={`${src}-${i}`}
-                                className="relative rounded-xl p-[2px] overflow-hidden flex-shrink-0"
-                                style={{
-                                  background: METALLIC_RIM_GRADIENT,
-                                  boxShadow:
-                                    "0 0 14px -4px rgba(228,207,106,0.35), 0 8px 22px -14px rgba(0,0,0,0.7)",
-                                }}
-                              >
-                                <div className="relative rounded-[10px] bg-black/75 p-1.5 md:p-2 flex flex-col items-center gap-1.5">
-                                  <img
-                                    src={src}
-                                    alt={question.imageCaptions?.[i] ?? `image ${i + 1}`}
-                                    className="h-[120px] md:h-[150px] w-auto object-contain rounded"
-                                    draggable={false}
-                                  />
-                                  {question.imageCaptions?.[i] && (
-                                    <span
-                                      className="font-mono text-[9px] md:text-[10px] uppercase tracking-[0.25em] font-bold px-1.5 py-0.5 rounded"
+                            {question.images.map((src, i) => {
+                              if (question.imagesAreOptions) {
+                                const { rimBg, glow, innerBg, showResult, isCorrectOption, isSelected } =
+                                  answerChromeStyles(i, question, selected, selectedAnswer, answered);
+                                const imgH = question.compactImageRow
+                                  ? "h-[92px] sm:h-[108px] md:h-[120px] w-auto max-w-[min(22vw,120px)] md:max-w-[min(20vw,140px)]"
+                                  : "h-[236px] sm:h-[252px] md:h-[300px] lg:h-[320px] w-auto max-w-[min(34vw,200px)] md:max-w-[min(30vw,280px)]";
+                                return (
+                                  <motion.button
+                                    key={`${src}-${i}`}
+                                    type="button"
+                                    initial={{ opacity: 0, y: 8 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: 0.3 + i * 0.06, duration: 0.4, ease: EASE_OUT }}
+                                    onClick={() => handleSelect(i)}
+                                    disabled={answered || selected !== null || paused}
+                                    className={`relative group flex-shrink-0 border-0 bg-transparent p-0 appearance-none text-left ${
+                                      !answered && selected === null && !paused
+                                        ? "cursor-pointer hover:-translate-y-0.5"
+                                        : "cursor-not-allowed"
+                                    } ${paused && !answered ? "opacity-60 saturate-50" : ""} transition-transform duration-200`}
+                                    style={{
+                                      animation:
+                                        showResult && isSelected && !isCorrectOption
+                                          ? "wrong-shake 0.4s ease-in-out"
+                                          : undefined,
+                                    }}
+                                  >
+                                    <div
+                                      className="relative rounded-xl p-[2.5px] overflow-hidden"
+                                      style={{ background: rimBg, boxShadow: glow }}
+                                    >
+                                      <div
+                                        className="relative rounded-[10px] flex flex-col items-center gap-1.5 p-1.5 md:p-2"
+                                        style={{
+                                          backgroundColor: innerBg,
+                                          boxShadow:
+                                            "inset 0 1px 0 rgba(255,245,210,0.06), inset 0 -1px 0 rgba(0,0,0,0.55), inset 0 0 24px rgba(0,0,0,0.45)",
+                                        }}
+                                      >
+                                        <img
+                                          src={src}
+                                          alt={question.imageCaptions?.[i] ?? `Photo ${i + 1}`}
+                                          className={`${imgH} object-contain rounded`}
+                                          draggable={false}
+                                        />
+                                        {question.imageCaptions?.[i] && (
+                                          <span
+                                            className="font-mono text-[9px] md:text-[10px] uppercase tracking-[0.25em] font-bold px-1.5 py-0.5 rounded"
+                                            style={{
+                                              color: "#e7cf6a",
+                                              background: "rgba(0,0,0,0.55)",
+                                              textShadow: "0 1px 0 rgba(20,10,0,0.7)",
+                                            }}
+                                          >
+                                            {question.imageCaptions[i]}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div
+                                      className="absolute -top-2 -left-2 md:-top-2.5 md:-left-2.5 w-8 h-8 md:w-9 md:h-9 rounded-md p-[1.5px] overflow-hidden pointer-events-none"
                                       style={{
-                                        color: "#e7cf6a",
-                                        background: "rgba(0,0,0,0.55)",
-                                        textShadow: "0 1px 0 rgba(20,10,0,0.7)",
+                                        background: METALLIC_RIM_STRONG,
+                                        boxShadow:
+                                          "0 2px 6px rgba(0,0,0,0.55), 0 0 12px rgba(228,207,106,0.4), 0 0 0 1px rgba(0,0,0,0.6)",
                                       }}
                                     >
-                                      {question.imageCaptions[i]}
-                                    </span>
-                                  )}
+                                      <div
+                                        className="relative w-full h-full rounded-[5px] flex items-center justify-center font-display font-bold text-xs md:text-sm"
+                                        style={{
+                                          background:
+                                            "linear-gradient(180deg, #7a5816 0%, #a6801f 10%, #d9b446 28%, #f4dc7c 46%, #f9e89a 52%, #e4c55a 62%, #b28622 82%, #6d4e13 100%)",
+                                          color: "#1a1105",
+                                          textShadow:
+                                            "0 1px 0 rgba(255,246,200,0.75), 0 -1px 0 rgba(36,22,0,0.45)",
+                                          boxShadow:
+                                            "inset 0 1px 0 rgba(255,252,220,0.95), inset 0 -1px 0 rgba(40,24,0,0.6), inset 0 -2px 4px rgba(60,38,6,0.3)",
+                                        }}
+                                      >
+                                        <span className="relative z-[3]">{OPTION_LABELS[i]}</span>
+                                      </div>
+                                    </div>
+                                  </motion.button>
+                                );
+                              }
+                              return (
+                                <div
+                                  key={`${src}-${i}`}
+                                  className="relative rounded-xl p-[2px] overflow-hidden flex-shrink-0"
+                                  style={{
+                                    background: METALLIC_RIM_GRADIENT,
+                                    boxShadow:
+                                      "0 0 14px -4px rgba(228,207,106,0.35), 0 8px 22px -14px rgba(0,0,0,0.7)",
+                                  }}
+                                >
+                                  <div
+                                    className={`relative rounded-[10px] bg-black/75 flex flex-col items-center gap-1.5 ${
+                                      question.compactImageRow ? "p-1 md:p-1.5" : "p-1.5 md:p-2"
+                                    }`}
+                                  >
+                                    <img
+                                      src={src}
+                                      alt={question.imageCaptions?.[i] ?? `image ${i + 1}`}
+                                      className={
+                                        question.compactImageRow
+                                          ? "h-[88px] sm:h-[104px] md:h-[118px] w-auto max-w-[min(24vw,130px)] object-contain rounded"
+                                          : "h-[200px] md:h-[260px] w-auto object-contain rounded"
+                                      }
+                                      draggable={false}
+                                    />
+                                    {question.imageCaptions?.[i] && (
+                                      <span
+                                        className="font-mono text-[9px] md:text-[10px] uppercase tracking-[0.25em] font-bold px-1.5 py-0.5 rounded"
+                                        style={{
+                                          color: "#e7cf6a",
+                                          background: "rgba(0,0,0,0.55)",
+                                          textShadow: "0 1px 0 rgba(20,10,0,0.7)",
+                                        }}
+                                      >
+                                        {question.imageCaptions[i]}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
                       )}
@@ -764,72 +1002,100 @@ export default function QuestionScreen({
                     </motion.div>
                   )}
 
-                  {/* Question panel — gold rim; inner fill matches registration modal */}
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.25, duration: 0.5, ease: EASE_OUT }}
-                    className="relative w-full"
-                    data-tour-id="question-area"
-                  >
-                    <div
-                      className="relative w-full rounded-2xl p-[2.5px] overflow-hidden"
-                      style={{
-                        background: METALLIC_RIM_GRADIENT,
-                        boxShadow:
-                          "0 0 24px -4px rgba(228,207,106,0.35), 0 12px 32px -14px rgba(0,0,0,0.7)",
-                      }}
+                  {/* ───────── WORD SEQUENCE ROW — Q4. Each word becomes a
+                        chip; the final "?" chip calls out the slot the player
+                        is solving for. Rendered only when the question carries
+                        a wordSequence array. */}
+                  {question.wordSequence && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.32, duration: 0.45, ease: EASE_OUT }}
+                      className="relative w-full flex justify-center"
+                    >
+                      <div className="flex flex-wrap items-stretch justify-center gap-2 md:gap-2.5">
+                        {question.wordSequence.map((word, i) => {
+                          const isBlank = word === "?";
+                          return (
+                            <div
+                              key={`${word}-${i}`}
+                              className="relative rounded-xl p-[2px] overflow-hidden"
+                              style={{
+                                background: METALLIC_RIM_GRADIENT,
+                                boxShadow: isBlank
+                                  ? "0 0 18px -2px rgba(228,207,106,0.55), 0 8px 22px -14px rgba(0,0,0,0.7)"
+                                  : "0 0 14px -4px rgba(228,207,106,0.35), 0 8px 22px -14px rgba(0,0,0,0.7)",
+                              }}
+                            >
+                              <div
+                                className="relative rounded-[10px] bg-black/75 px-3.5 py-2 md:px-4 md:py-2.5 flex items-center justify-center min-w-[64px] md:min-w-[76px]"
+                                style={isBlank ? { background: "rgba(20,12,0,0.88)" } : undefined}
+                              >
+                                <span
+                                  className="font-display text-base md:text-lg font-bold leading-none tracking-wide"
+                                  style={{
+                                    color: isBlank ? "#fff0c2" : "#f4dc7c",
+                                    textShadow:
+                                      "0 1px 0 rgba(20,10,0,0.75), 0 0 10px rgba(228,174,68,0.35)",
+                                  }}
+                                >
+                                  {word}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* ───────── WORD PUZZLE BLOCK — Q8. Shows a single large
+                        monospace string (e.g. "TNECREPE _ _") so the reversed-
+                        phrase puzzle reads at a glance between the question
+                        and the options. */}
+                  {question.wordPuzzle && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.32, duration: 0.45, ease: EASE_OUT }}
+                      className="relative w-full flex justify-center"
                     >
                       <div
-                        className="relative w-full min-w-0 overflow-hidden rounded-[14px] backdrop-blur-sm"
-                        style={PANEL_INNER_FILL}
+                        className="relative rounded-xl p-[2.5px] overflow-hidden"
+                        style={{
+                          background: METALLIC_RIM_GRADIENT,
+                          boxShadow:
+                            "0 0 26px -2px rgba(228,207,106,0.55), 0 10px 28px -14px rgba(0,0,0,0.7)",
+                        }}
                       >
-                        <div className="absolute top-1.5 left-[14%] right-[14%] h-px bg-gradient-to-r from-transparent via-brass-bright/40 to-transparent" />
-                        <div className="absolute bottom-1.5 left-[14%] right-[14%] h-px bg-gradient-to-r from-transparent via-brass/35 to-transparent" />
-                        <div className="px-5 md:px-8 py-4 md:py-6 text-center flex items-center justify-center min-h-[84px] md:min-h-[104px]">
-                          <p className="text-base md:text-lg lg:text-xl text-foreground font-medium leading-[1.4] tracking-[-0.005em]">
-                            {question.question}
-                          </p>
+                        <div
+                          className="relative rounded-[10px] px-6 py-4 md:px-10 md:py-6 flex items-center justify-center"
+                          style={{ background: "rgba(8,5,2,0.92)" }}
+                        >
+                          <span
+                            className="font-mono font-bold tabular-nums leading-none tracking-[0.35em] md:tracking-[0.45em] text-2xl md:text-4xl lg:text-5xl"
+                            style={{
+                              color: "#f9e89a",
+                              textShadow:
+                                "0 1px 0 rgba(20,10,0,0.85), 0 0 14px rgba(249,232,154,0.45), 0 0 28px rgba(228,174,68,0.25)",
+                            }}
+                          >
+                            {question.wordPuzzle}
+                          </span>
                         </div>
                       </div>
-                    </div>
-                  </motion.div>
+                    </motion.div>
+                  )}
 
-                  {/* Options row — 4 uniform metallic-rim cards with metallic brass badge */}
-                  <div className="grid grid-cols-4 gap-3 md:gap-4" data-tour-id="options-area">
+                  {/* Options row — hidden when images are the answers (Q3). */}
+                  {!question.imagesAreOptions && (
+                  <div
+                    className={`${question.options.length === 3 ? "grid grid-cols-3" : "grid grid-cols-4"} gap-3 md:gap-4`}
+                    data-tour-id="options-area"
+                  >
                     {question.options.map((option, i) => {
-                      const isSelected = selected === i || selectedAnswer === i;
-                      const isCorrectOption = i === question.correctIndex;
-                      const showResult = answered;
-
-                      // State-driven rim + text + glow. Base rim is the metallic gradient;
-                      // correct/wrong states swap the rim color for semantic feedback.
-                      let rimBg: string = METALLIC_RIM_GRADIENT;
-                      let glow = `0 0 18px ${GOLD_GLOW}, 0 10px 28px -12px rgba(0,0,0,0.7)`;
-                      let textColor = GOLD_BRIGHT;
-                      let innerBg = "rgba(6,4,2,0.92)";
-
-                      if (showResult && isCorrectOption) {
-                        rimBg =
-                          "linear-gradient(180deg, #b7f7cb 0%, #5ad491 30%, #2a9a63 65%, #0d4d31 100%)";
-                        glow = "0 0 28px rgba(61,170,122,0.65), 0 10px 28px -12px rgba(0,0,0,0.7)";
-                        textColor = "#9bf0c0";
-                      } else if (showResult && isSelected && !isCorrectOption) {
-                        rimBg =
-                          "linear-gradient(180deg, #ffb3b3 0%, #f05050 30%, #a82626 65%, #4a0d0d 100%)";
-                        glow = "0 0 26px rgba(217,74,92,0.55), 0 10px 28px -12px rgba(0,0,0,0.7)";
-                        textColor = "#ffc0c0";
-                      } else if (showResult && !isSelected) {
-                        rimBg =
-                          "linear-gradient(180deg, rgba(228,207,106,0.28) 0%, rgba(122,90,20,0.25) 100%)";
-                        glow = "none";
-                        textColor = "rgba(228,207,106,0.35)";
-                        innerBg = "rgba(6,4,2,0.72)";
-                      } else if (isSelected) {
-                        rimBg =
-                          "linear-gradient(180deg, #fff4c8 0%, #f9e89a 22%, #d9b446 50%, #a6801f 78%, #6d4e13 100%)";
-                        glow = `0 0 28px ${GOLD_GLOW}, 0 0 0 2px rgba(255,240,190,0.6), 0 10px 28px -12px rgba(0,0,0,0.7)`;
-                      }
+                      const { isSelected, isCorrectOption, showResult, rimBg, glow, textColor, innerBg } =
+                        answerChromeStyles(i, question, selected, selectedAnswer, answered);
 
                       return (
                         <motion.button
@@ -927,6 +1193,7 @@ export default function QuestionScreen({
                       );
                     })}
                   </div>
+                  )}
               </div>
 
               {/* ───────── FEEDBACK BANNER ───────── */}

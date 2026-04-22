@@ -10,34 +10,34 @@ import {
   useState,
   ReactNode,
 } from "react";
+import { runSecondaryAudioUnlocks } from "@/lib/secondaryAudioUnlock";
 
 interface NarrationContextValue {
   muted: boolean;
   toggleMute: () => void;
-  /**
-   * Speak the given text. If muted, becomes a no-op.
-   * `key` caches audio client-side so repeat calls don't re-hit the API.
-   */
   narrate: (key: string, text: string) => Promise<void>;
-  /** Stop any currently playing narration immediately. */
+  /** Play a static audio file (e.g. pre-recorded VO). Works even when TTS is disabled. */
+  narrateUrl: (key: string, src: string) => Promise<void>;
   stop: () => void;
-  /** Call on a user gesture to unlock programmatic playback. Resolves when the handshake finishes. */
   unlock: () => Promise<void>;
-  /** Warm the TTS cache (e.g. on Continue click) so `narrate` can play soon after mount. */
   prefetchTts: (key: string, text: string) => Promise<void>;
-  /** True while narration is audible. */
+  prefetchAudioUrl: (src: string) => Promise<void>;
   isSpeaking: boolean;
 }
 
 const NarrationContext = createContext<NarrationContextValue | null>(null);
 
-// Module-level cache so blob URLs persist across component unmounts.
+const TTS_DISABLED =
+  process.env.NEXT_PUBLIC_DISABLE_TTS === "1" ||
+  process.env.NEXT_PUBLIC_DISABLE_TTS?.toLowerCase() === "true";
+
 const audioCache = new Map<string, string>();
 
-/**
- * Lightweight string hash. Used to bust the cache when narration text changes
- * under the same logical key (e.g. "q-1" text was edited — don't serve stale audio).
- */
+const inflightBlob = new Map<string, Promise<string>>();
+
+const SILENT_MP3 =
+  "data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCA";
+
 function textHash(text: string): string {
   let h = 0;
   for (let i = 0; i < text.length; i++) {
@@ -64,34 +64,42 @@ async function fetchAudioBlob(text: string): Promise<string> {
   return URL.createObjectURL(blob);
 }
 
-// 1x1 silent mp3 data URI — used to "unlock" audio playback on initial user gesture
-const SILENT_MP3 =
-  "data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCA";
+async function getBlobUrlCached(cacheKey: string, text: string): Promise<string> {
+  const hit = audioCache.get(cacheKey);
+  if (hit) return hit;
+  let p = inflightBlob.get(cacheKey);
+  if (!p) {
+    p = fetchAudioBlob(text)
+      .then((url) => {
+        audioCache.set(cacheKey, url);
+        return url;
+      })
+      .finally(() => {
+        inflightBlob.delete(cacheKey);
+      });
+    inflightBlob.set(cacheKey, p);
+  }
+  return p;
+}
 
 export function NarrationProvider({ children }: { children: ReactNode }) {
   const [muted, setMuted] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
 
-  // Persistent single audio element — reused for all narrations
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const unlockedRef = useRef(false);
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
 
-  // Sequence token — cancels stale in-flight narrations
   const seqRef = useRef(0);
 
-  // Restore mute preference
   useEffect(() => {
     try {
       const saved = localStorage.getItem("narration-muted");
       if (saved === "1") setMuted(true);
-    } catch {
-      /* ignore */
-    }
+    } catch {}
   }, []);
 
-  // Ensure a persistent <audio> element exists (created on client only)
   useEffect(() => {
     if (audioRef.current) return;
     const a = new Audio();
@@ -115,48 +123,37 @@ export function NarrationProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const stop = useCallback(() => {
-    // Invalidate any in-flight narrate()
     seqRef.current += 1;
     const a = audioRef.current;
     if (a) {
       a.pause();
-      try { a.currentTime = 0; } catch { /* ignore */ }
+      try {
+        a.currentTime = 0;
+      } catch {}
     }
     setIsSpeaking(false);
   }, []);
 
   const unlock = useCallback((): Promise<void> => {
+    runSecondaryAudioUnlocks();
+
     if (unlockedRef.current) return Promise.resolve();
     const a = audioRef.current;
     if (!a) return Promise.resolve();
-    // Play a silent (volume=0) blip during the user gesture to unlock the
-    // audio element for future programmatic plays. We DO NOT use `a.muted`
-    // because the unmute would later happen async (in `then`) and could race
-    // with a real `narrate()` that sets src + plays in the meantime — leaving
-    // it muted. Setting `volume = 0` doesn't have that race.
     const prevVolume = a.volume;
     a.volume = 0;
     a.src = SILENT_MP3;
     try {
       a.load();
-    } catch {
-      /* ignore */
-    }
+    } catch {}
     const p = a.play();
     const finish = () => {
       try {
         a.pause();
-      } catch {
-        /* ignore */
-      }
+      } catch {}
       try {
         a.currentTime = 0;
-      } catch {
-        /* ignore */
-      }
-      // Don't touch a.src here — leaving it as SILENT_MP3 is fine; narrate()
-      // will overwrite it with the real audio URL anyway. Restoring an empty
-      // string was racing with narrate() and clobbering its src.
+      } catch {}
       a.volume = prevVolume || 1;
       unlockedRef.current = true;
     };
@@ -178,27 +175,38 @@ export function NarrationProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const prefetchTts = useCallback(async (key: string, text: string): Promise<void> => {
+    if (TTS_DISABLED) return;
     const cacheKey = `${key}:${textHash(text)}`;
-    if (audioCache.has(cacheKey)) return;
     try {
-      const url = await fetchAudioBlob(text);
-      audioCache.set(cacheKey, url);
+      await getBlobUrlCached(cacheKey, text);
     } catch (err) {
       console.warn("[prefetchTts] failed:", err);
+    }
+  }, []);
+
+  const prefetchAudioUrl = useCallback(async (src: string): Promise<void> => {
+    try {
+      const res = await fetch(src);
+      if (res.ok) await res.blob();
+    } catch (err) {
+      console.warn("[prefetchAudioUrl] failed:", err);
     }
   }, []);
 
   const toggleMute = useCallback(() => {
     setMuted((m) => {
       const next = !m;
-      try { localStorage.setItem("narration-muted", next ? "1" : "0"); } catch { /* ignore */ }
+      try {
+        localStorage.setItem("narration-muted", next ? "1" : "0");
+      } catch {}
       if (next) {
-        // Muting: hard stop
         seqRef.current += 1;
         const a = audioRef.current;
         if (a) {
           a.pause();
-          try { a.currentTime = 0; } catch { /* ignore */ }
+          try {
+            a.currentTime = 0;
+          } catch {}
         }
         setIsSpeaking(false);
       }
@@ -208,42 +216,33 @@ export function NarrationProvider({ children }: { children: ReactNode }) {
 
   const narrate = useCallback(async (key: string, text: string): Promise<void> => {
     if (mutedRef.current) return;
+    if (TTS_DISABLED) return;
     const a = audioRef.current;
     if (!a) return;
 
-    // Bump sequence — this call owns playback from here
     const mySeq = ++seqRef.current;
 
-    // Hard stop any currently playing audio
     a.pause();
-    try { a.currentTime = 0; } catch { /* ignore */ }
+    try {
+      a.currentTime = 0;
+    } catch {}
 
     try {
-      // Compose cache key from logical key + hash of actual text.
-      // If the text changes, the hash changes → cache miss → fresh audio.
       const cacheKey = `${key}:${textHash(text)}`;
 
-      let url = audioCache.get(cacheKey);
-      if (!url) {
-        url = await fetchAudioBlob(text);
-        audioCache.set(cacheKey, url);
-      }
+      const url = await getBlobUrlCached(cacheKey, text);
 
-      // Was this request superseded while we were fetching?
       if (mySeq !== seqRef.current) return;
       if (mutedRef.current) return;
 
       a.src = url;
 
-      // Return a promise that resolves when the audio finishes, is replaced,
-      // or errors. Callers can await this to sync UI with audio timing.
       return await new Promise<void>((resolve) => {
         const cleanup = () => {
           a.removeEventListener("ended", onEnded);
           a.removeEventListener("error", onError);
         };
         const onEnded = () => {
-          // Only resolve if this is still the latest request
           if (mySeq === seqRef.current) {
             cleanup();
             resolve();
@@ -256,7 +255,6 @@ export function NarrationProvider({ children }: { children: ReactNode }) {
         a.addEventListener("ended", onEnded);
         a.addEventListener("error", onError);
 
-        // Watchdog — if sequence bumps, resolve quickly to unblock awaiters
         const watchdog = setInterval(() => {
           if (mySeq !== seqRef.current) {
             clearInterval(watchdog);
@@ -264,7 +262,6 @@ export function NarrationProvider({ children }: { children: ReactNode }) {
             resolve();
           }
         }, 120);
-        // Tie watchdog to event cleanup
         a.addEventListener("ended", () => clearInterval(watchdog), { once: true });
         a.addEventListener("error", () => clearInterval(watchdog), { once: true });
 
@@ -282,9 +279,74 @@ export function NarrationProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const narrateUrl = useCallback(async (_key: string, src: string): Promise<void> => {
+    if (mutedRef.current) return;
+    const a = audioRef.current;
+    if (!a) return;
+
+    const mySeq = ++seqRef.current;
+
+    a.pause();
+    try {
+      a.currentTime = 0;
+    } catch {}
+
+    if (mySeq !== seqRef.current) return;
+    if (mutedRef.current) return;
+
+    a.src = src;
+
+    return await new Promise<void>((resolve) => {
+      const cleanup = () => {
+        a.removeEventListener("ended", onEnded);
+        a.removeEventListener("error", onError);
+      };
+      const onEnded = () => {
+        if (mySeq === seqRef.current) {
+          cleanup();
+          resolve();
+        }
+      };
+      const onError = () => {
+        cleanup();
+        resolve();
+      };
+      a.addEventListener("ended", onEnded);
+      a.addEventListener("error", onError);
+
+      const watchdog = setInterval(() => {
+        if (mySeq !== seqRef.current) {
+          clearInterval(watchdog);
+          cleanup();
+          resolve();
+        }
+      }, 120);
+      a.addEventListener("ended", () => clearInterval(watchdog), { once: true });
+      a.addEventListener("error", () => clearInterval(watchdog), { once: true });
+
+      a.play().catch((err) => {
+        console.warn("[narrateUrl] play blocked:", err);
+        clearInterval(watchdog);
+        cleanup();
+        setIsSpeaking(false);
+        resolve();
+      });
+    });
+  }, []);
+
   const value = useMemo<NarrationContextValue>(
-    () => ({ muted, toggleMute, narrate, stop, unlock, prefetchTts, isSpeaking }),
-    [muted, toggleMute, narrate, stop, unlock, prefetchTts, isSpeaking],
+    () => ({
+      muted,
+      toggleMute,
+      narrate,
+      narrateUrl,
+      stop,
+      unlock,
+      prefetchTts,
+      prefetchAudioUrl,
+      isSpeaking,
+    }),
+    [muted, toggleMute, narrate, narrateUrl, stop, unlock, prefetchTts, prefetchAudioUrl, isSpeaking],
   );
 
   return <NarrationContext.Provider value={value}>{children}</NarrationContext.Provider>;

@@ -28,6 +28,8 @@ export default function MuteButton({ variant = "fixed", className = "" }: MuteBu
 
   return (
     <motion.button
+      type="button"
+      data-no-ui-click
       onClick={toggleMute}
       aria-label={muted ? "Unmute narration" : "Mute narration"}
       whileHover={{ scale: 1.04 }}

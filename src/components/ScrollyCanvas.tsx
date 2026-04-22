@@ -3,13 +3,16 @@
 import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useScroll, useMotionValueEvent } from "framer-motion";
+import { SCROLL_STORY_FRAME_COUNT, useScrollScrolly } from "@/contexts/ScrollScrollyContext";
 
-const FRAME_COUNT = 121;
+/** Frames from `scrollvideo.mp4` (bottom band cropped off; see `scripts/extract_scroll_frames.py`). */
+const FRAME_COUNT = SCROLL_STORY_FRAME_COUNT;
 
 const getFramePath = (index: number) =>
   `/sharp-frames/frame_${(index + 1).toString().padStart(3, "0")}.jpg`;
 
 export default function ScrollyCanvas() {
+  const { setScrollyFrameIndex } = useScrollScrolly();
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imagesRef = useRef<HTMLImageElement[]>([]);
@@ -102,34 +105,42 @@ export default function ScrollyCanvas() {
     ctx.drawImage(img, offsetX, offsetY, newWidth, newHeight);
   }, [sizeCanvas]);
 
-  // Render first frame once loaded
-  useEffect(() => {
-    if (imagesLoaded) {
-      sizeCanvas();
-      renderFrame(0);
-    }
-  }, [imagesLoaded, sizeCanvas, renderFrame]);
+  const publishFrameIndex = useCallback(
+    (latest: number) => {
+      const frameIndex = Math.min(FRAME_COUNT - 1, Math.floor(latest * FRAME_COUNT));
+      setScrollyFrameIndex(frameIndex);
+      return frameIndex;
+    },
+    [setScrollyFrameIndex],
+  );
 
-  // Handle resize: re-size canvas and re-render current frame
   const { scrollYProgress } = useScroll({
     target: containerRef,
     offset: ["start start", "end end"],
   });
 
+  // Render first frame once loaded
+  useEffect(() => {
+    if (imagesLoaded) {
+      sizeCanvas();
+      const progress = scrollYProgress.get();
+      const frameIndex = publishFrameIndex(progress);
+      renderFrame(frameIndex);
+    }
+  }, [imagesLoaded, sizeCanvas, renderFrame, publishFrameIndex, scrollYProgress]);
+
+  // Handle resize: re-size canvas and re-render current frame
   useEffect(() => {
     const handleResize = () => {
       if (!imagesLoaded) return;
       sizeCanvas();
       const progress = scrollYProgress.get();
-      const frameIndex = Math.min(
-        FRAME_COUNT - 1,
-        Math.floor(progress * FRAME_COUNT)
-      );
+      const frameIndex = publishFrameIndex(progress);
       renderFrame(frameIndex);
     };
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, [imagesLoaded, scrollYProgress, sizeCanvas, renderFrame]);
+  }, [imagesLoaded, scrollYProgress, sizeCanvas, renderFrame, publishFrameIndex]);
 
   // Map scroll progress to frame index with rAF dedup
   useMotionValueEvent(scrollYProgress, "change", (latest) => {
@@ -140,10 +151,7 @@ export default function ScrollyCanvas() {
     }
 
     rafId.current = requestAnimationFrame(() => {
-      const frameIndex = Math.min(
-        FRAME_COUNT - 1,
-        Math.floor(latest * FRAME_COUNT)
-      );
+      const frameIndex = publishFrameIndex(latest);
       renderFrame(frameIndex);
       rafId.current = null;
     });

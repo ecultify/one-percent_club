@@ -1,10 +1,24 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, type CSSProperties } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { formatRupees } from "./QuizGame";
+import { useNarration } from "./NarrationProvider";
 
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
+
+/** Dramatic elimination decision stinger — plays once during the grid phase.
+ *  Clip is ~9s long; the grid animation duration is tuned to match (see GRID_PHASE_MS). */
+const ELIMINATION_DECISION_SRC = encodeURI("/sound/eliminationdecision.wav");
+/** Applause: full level ~5s, then long fade to silence. */
+const APPLAUSE_SRC = encodeURI("/sound/appluase2.wav");
+const APPLAUSE_FULL_VOL_MS = 5000;
+const APPLAUSE_FADE_MS = 4000;
+/** Grid-phase duration. Matches the length of ELIMINATION_DECISION_SRC so the
+ *  red/blue siren animation lives exactly as long as the dramatic audio. */
+const GRID_PHASE_MS = 9000;
+/** After crosses + copy are visible, hold before showing the stats / applause card. */
+const POST_CROSS_HOLD_MS = 2000;
 
 interface EliminationRevealProps {
   questionNumber: number;
@@ -43,33 +57,80 @@ function useAnimatedCounter(target: number, duration: number = 1500, delay: numb
   return count;
 }
 
-// ── Person Icon (silhouette with elimination state) ──
-function PersonIcon({ eliminated, isNew, delay }: { eliminated: boolean; isNew: boolean; delay: number }) {
+// During stinger: CSS steps() siren (blue/red only). After .wav ends: gold / solid red + X / dim prior.
+function PersonIcon({
+  wasPrevious,
+  isNew,
+  crossStagger,
+  iconIndex,
+  gridSequenceActive,
+  showCrossAfterAudio,
+}: {
+  wasPrevious: boolean;
+  isNew: boolean;
+  crossStagger: number;
+  iconIndex: number;
+  gridSequenceActive: boolean;
+  showCrossAfterAudio: boolean;
+}) {
+  const sirenOn = gridSequenceActive && !showCrossAfterAudio;
+  const flickerDuration = 0.38 + ((iconIndex * 47) % 11) * 0.035;
+  const flickerDelay = ((iconIndex * 73 + 19) % 100) / 1000;
+
+  const resolvedSvg = (
+    <svg
+      width="100%"
+      height="100%"
+      viewBox="0 0 24 24"
+      fill="none"
+      className={`relative transition-colors duration-300 ${
+        wasPrevious
+          ? "text-red-500/25"
+          : isNew
+            ? "text-red-500/85"
+            : "text-[var(--gold)]/60"
+      }`}
+    >
+      <circle cx="12" cy="7" r="4" fill="currentColor" />
+      <path
+        d="M12 13c-4.42 0-8 1.79-8 4v1h16v-1c0-2.21-3.58-4-8-4z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+
   return (
     <motion.div className="relative flex items-center justify-center">
-      <svg
-        width="100%"
-        height="100%"
-        viewBox="0 0 24 24"
-        fill="none"
-        className={`transition-all duration-500 ${
-          eliminated ? "text-red-500/20" : "text-[var(--gold)]/60"
-        }`}
-      >
-        <circle cx="12" cy="7" r="4" fill="currentColor" />
-        <path
-          d="M12 13c-4.42 0-8 1.79-8 4v1h16v-1c0-2.21-3.58-4-8-4z"
-          fill="currentColor"
-        />
-      </svg>
+      {sirenOn ? (
+        <svg
+          width="100%"
+          height="100%"
+          viewBox="0 0 24 24"
+          fill="none"
+          className={`relative elimination-siren ${wasPrevious ? "elimination-siren--dim" : ""}`}
+          style={
+            {
+              "--siren-duration": `${flickerDuration}s`,
+              "--siren-delay": `${flickerDelay}s`,
+            } as CSSProperties
+          }
+        >
+          <circle cx="12" cy="7" r="4" fill="#2563eb" />
+          <path
+            d="M12 13c-4.42 0-8 1.79-8 4v1h16v-1c0-2.21-3.58-4-8-4z"
+            fill="#2563eb"
+          />
+        </svg>
+      ) : (
+        resolvedSvg
+      )}
 
-      {/* Animated X for eliminated */}
-      {eliminated && isNew && (
+      {isNew && showCrossAfterAudio && (
         <motion.div
           className="absolute inset-0 flex items-center justify-center"
           initial={{ opacity: 0, scale: 0, rotate: -45 }}
           animate={{ opacity: 1, scale: 1, rotate: 0 }}
-          transition={{ delay, duration: 0.2, ease: "easeOut" }}
+          transition={{ delay: crossStagger, duration: 0.22, ease: "easeOut" }}
         >
           <svg width="70%" height="70%" viewBox="0 0 24 24" fill="none">
             <path
@@ -81,8 +142,8 @@ function PersonIcon({ eliminated, isNew, delay }: { eliminated: boolean; isNew: 
           </svg>
         </motion.div>
       )}
-      {eliminated && !isNew && (
-        <div className="absolute inset-0 flex items-center justify-center">
+      {wasPrevious && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <svg width="70%" height="70%" viewBox="0 0 24 24" fill="none">
             <path
               d="M18 6L6 18M6 6l12 12"
@@ -103,10 +164,14 @@ function PlayerGrid({
   totalPlayers,
   previouslyEliminated,
   newlyEliminated,
+  gridSequenceActive,
+  showCrossAfterAudio,
 }: {
   totalPlayers: number;
   previouslyEliminated: number;
   newlyEliminated: number;
+  gridSequenceActive: boolean;
+  showCrossAfterAudio: boolean;
 }) {
   const eliminatedIndices = useMemo(() => {
     const indices = Array.from({ length: totalPlayers }, (_, i) => i);
@@ -119,25 +184,38 @@ function PlayerGrid({
     return { previousSet, newSet };
   }, [totalPlayers, previouslyEliminated, newlyEliminated]);
 
+  /** Random order for cross stagger after audio (seeded, not sorted by cell index). */
+  const crossOrderIndex = useMemo(() => {
+    const arr = Array.from(eliminatedIndices.newSet.values());
+    let seed = previouslyEliminated * 1009 + newlyEliminated * 503 + arr.length * 17;
+    for (let k = arr.length - 1; k > 0; k--) {
+      seed = (seed * 1103515245 + 12345) >>> 0;
+      const j = seed % (k + 1);
+      [arr[k], arr[j]] = [arr[j], arr[k]];
+    }
+    const map = new Map<number, number>();
+    arr.forEach((cellIdx, ord) => map.set(cellIdx, ord));
+    return map;
+  }, [eliminatedIndices.newSet, previouslyEliminated, newlyEliminated]);
+
   return (
     <div className="grid grid-cols-10 gap-[3px] max-w-[300px] mx-auto">
       {Array.from({ length: totalPlayers }).map((_, i) => {
         const wasPreviouslyEliminated = eliminatedIndices.previousSet.has(i);
         const isNewlyEliminated = eliminatedIndices.newSet.has(i);
-        const isEliminated = wasPreviouslyEliminated || isNewlyEliminated;
 
-        const newSetArr = Array.from(eliminatedIndices.newSet);
-        const idx = newSetArr.indexOf(i);
-        const staggerDelay = isNewlyEliminated
-          ? 0.8 + (idx / Math.max(newSetArr.length, 1)) * 1.0
-          : 0;
+        const ord = crossOrderIndex.get(i) ?? 0;
+        const crossStagger = isNewlyEliminated ? Math.min(ord * 0.055, 0.72) : 0;
 
         return (
           <div key={i} className="aspect-square w-full">
             <PersonIcon
-              eliminated={isEliminated}
+              wasPrevious={wasPreviouslyEliminated}
               isNew={isNewlyEliminated}
-              delay={staggerDelay}
+              crossStagger={crossStagger}
+              iconIndex={i}
+              gridSequenceActive={gridSequenceActive}
+              showCrossAfterAudio={showCrossAfterAudio}
             />
           </div>
         );
@@ -159,25 +237,123 @@ export default function EliminationReveal({
   previouslyEliminated,
   embedded = false,
 }: EliminationRevealProps) {
+  const { muted: narrationMuted } = useNarration();
+
   // Sequential reveal for embedded mode:
   //   "grid"   = ONLY the player grid is visible, centered. Players get crossed out.
   //   "reveal" = Grid is GONE. Details (header + eliminated count + stats + continue) appear centered, solo.
   // NO side-by-side. The user should feel the grid completely finish, disappear, and THEN details arrive.
   const [phase, setPhase] = useState<"grid" | "reveal">(embedded ? "grid" : "reveal");
+  /** Crosses on new eliminations only after eliminationdecision.wav fires `ended`. */
+  const [eliminationAudioEnded, setEliminationAudioEnded] = useState(false);
+
+  // Grid phase: elimination SFX plays; crosses appear when the clip ends (or fallback).
+  useEffect(() => {
+    if (!embedded || phase !== "grid") return;
+    setEliminationAudioEnded(false);
+
+    const a = new Audio(ELIMINATION_DECISION_SRC);
+    a.loop = false;
+    a.volume = narrationMuted ? 0 : 0.7;
+
+    let closed = false;
+    const settle = () => {
+      if (closed) return;
+      closed = true;
+      window.clearTimeout(fallbackId);
+      setEliminationAudioEnded(true);
+    };
+
+    const fallbackId = window.setTimeout(settle, GRID_PHASE_MS + 300);
+    a.addEventListener("ended", settle);
+    void a.play().catch(() => {
+      /* wait for fallback */
+    });
+
+    return () => {
+      closed = true;
+      window.clearTimeout(fallbackId);
+      a.removeEventListener("ended", settle);
+      a.pause();
+      try {
+        a.currentTime = 0;
+        a.src = "";
+      } catch {
+        /* ignore */
+      }
+    };
+  }, [embedded, phase, narrationMuted]);
+
+  // Reveal phase: applause at steady volume, then slow fade (clip may be longer than fade).
+  useEffect(() => {
+    if (!embedded || phase !== "reveal" || narrationMuted) return;
+    const a = new Audio(APPLAUSE_SRC);
+    a.loop = false;
+    const peak = 0.78;
+    a.volume = peak;
+    let raf = 0;
+    let cancelled = false;
+    const t0 = performance.now();
+
+    const tick = (now: number) => {
+      if (cancelled) return;
+      const elapsed = now - t0;
+      if (elapsed <= APPLAUSE_FULL_VOL_MS) {
+        a.volume = peak;
+      } else if (elapsed <= APPLAUSE_FULL_VOL_MS + APPLAUSE_FADE_MS) {
+        const u = (elapsed - APPLAUSE_FULL_VOL_MS) / APPLAUSE_FADE_MS;
+        a.volume = Math.max(0, peak * (1 - u));
+      } else {
+        a.volume = 0;
+        try {
+          a.pause();
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+
+    void a.play().catch(() => {});
+    raf = requestAnimationFrame(tick);
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+      a.pause();
+      try {
+        a.currentTime = 0;
+        a.src = "";
+      } catch {
+        /* ignore */
+      }
+    };
+  }, [embedded, phase, narrationMuted]);
 
   useEffect(() => {
-    if (!embedded) return;
-    // Xs finish animating around ~2.0s (see PlayerGrid stagger).
-    // Hold on the grid for a breath, then transition to details.
-    const t = setTimeout(() => setPhase("reveal"), 2800);
+    if (!embedded || phase !== "grid" || !eliminationAudioEnded) return;
+    const maxStaggerSec = Math.min(Math.max(0, eliminated - 1) * 0.055, 0.72);
+    const crossResolveMs = Math.round((maxStaggerSec + 0.22 + 0.45) * 1000);
+    const t = window.setTimeout(
+      () => setPhase("reveal"),
+      Math.max(crossResolveMs, 500) + POST_CROSS_HOLD_MS,
+    );
     return () => clearTimeout(t);
-  }, [embedded]);
+  }, [embedded, phase, eliminationAudioEnded, eliminated]);
 
-  // Counter delays: in embedded mode the reveal phase starts at 2800ms.
-  // Add ~600ms (grid fade-out + details enter) buffer before counters begin.
-  const animatedEliminated = useAnimatedCounter(eliminated, 1200, embedded ? 3500 : 800);
-  const animatedPot = useAnimatedCounter(potPrize, 1500, embedded ? 4100 : 2200);
-  const animatedRemaining = useAnimatedCounter(remainingPlayers, 1200, embedded ? 4100 : 2200);
+  useEffect(() => {
+    if (!embedded || phase !== "grid") return;
+    const safety = window.setTimeout(() => setPhase("reveal"), GRID_PHASE_MS + 10000);
+    return () => clearTimeout(safety);
+  }, [embedded, phase]);
+
+  const embeddedStatDelay = !embedded || phase === "reveal" ? (embedded ? 380 : 800) : 999000;
+  const embeddedPotDelay = !embedded || phase === "reveal" ? (embedded ? 720 : 2200) : 999000;
+  const embeddedRemainingDelay = !embedded || phase === "reveal" ? (embedded ? 720 : 2200) : 999000;
+  const animatedEliminated = useAnimatedCounter(eliminated, 1200, embeddedStatDelay);
+  const animatedPot = useAnimatedCounter(potPrize, 1500, embeddedPotDelay);
+  const animatedRemaining = useAnimatedCounter(remainingPlayers, 1200, embeddedRemainingDelay);
 
   // ───────── Reusable pieces ─────────
   const statusChip = playerGotItRight ? (
@@ -216,11 +392,20 @@ export default function EliminationReveal({
           totalPlayers={totalPlayers}
           previouslyEliminated={previouslyEliminated}
           newlyEliminated={eliminated}
+          gridSequenceActive={phase === "grid"}
+          showCrossAfterAudio={phase === "grid" ? eliminationAudioEnded : false}
         />
       </div>
-      <p className="mt-4 text-center font-mono text-[10px] uppercase tracking-[0.32em] text-[var(--danger)]/85">
-        {eliminated} eliminated this round
-      </p>
+      {eliminationAudioEnded && (
+        <motion.p
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.32, ease: EASE_OUT }}
+          className="mt-4 text-center font-mono text-[10px] uppercase tracking-[0.32em] text-[var(--danger)]/85"
+        >
+          {eliminated} eliminated this round
+        </motion.p>
+      )}
     </motion.div>
   );
 
@@ -376,6 +561,8 @@ export default function EliminationReveal({
                 totalPlayers={totalPlayers}
                 previouslyEliminated={previouslyEliminated}
                 newlyEliminated={eliminated}
+                gridSequenceActive={false}
+                showCrossAfterAudio
               />
             </motion.div>
 

@@ -7,24 +7,37 @@ import UserDetailsModal from "./UserDetailsModal";
 import Instructions from "./Instructions";
 import QuizGame from "./QuizGame";
 import ReadyToPlayGate from "./ReadyToPlayGate";
+import GameShowAudio from "./GameShowAudio";
 import { useNarration } from "./NarrationProvider";
-import { buildInstructionsNarration } from "./Instructions";
 import { warmClubLogoGlbAsset } from "@/lib/warmClubLogoAsset";
+import { useVideoAutoplay } from "@/lib/useVideoAutoplay";
+import { useScrollScrolly } from "@/contexts/ScrollScrollyContext";
 
 const Logo3D = dynamic(() => import("./Logo3D"), { ssr: false });
 
 /** Studio backdrop for registration (details) + instructions — rendered blurred beneath the content. */
 const DETAILS_INSTRUCTIONS_BG = `/questionscreenimages/${encodeURIComponent("Gemini_Generated_Image_i8attui8attui8at-ezremove.png")}`;
 
-/** Circular Enter button (idle phase) — filename uses narrow no-break space before "PM" (macOS screenshot default). */
-const ENTER_BUTTON_IMAGE = `/questionscreenimages/${encodeURIComponent(
-  "Screenshot 2026-04-16 at 1.47.21\u202fPM.png"
-)}`;
-
 /** Teaser that plays after the Start Experience button. Originally hosted on
  *  ecultify.com; served through a Next.js rewrite (see next.config.mjs) so the
  *  browser treats it as same-origin and skips the cross-origin CORS check. */
 const WELCOME_VIDEO_SRC = "/teaser-video.mp4";
+
+const DHAK_SRC = "/sound/dhak.wav";
+/** Story frames 25 and 79 (1-based) → zero-based scrolly indices. */
+const DHAK_MILESTONES_0 = [24, 78] as const;
+/** Twin Petes theme starts at story frame 117 (1-based). */
+const THEME_START_SCROLL_FRAME_0 = 116;
+
+function playDhakHit() {
+  try {
+    const hit = new Audio(DHAK_SRC);
+    hit.volume = 0.9;
+    void hit.play().catch(() => {});
+  } catch {
+    /* ignore */
+  }
+}
 
 type Phase =
   | "idle"
@@ -40,8 +53,6 @@ type Phase =
 
 interface PlayerData {
   name: string;
-  phone: string;
-  email: string;
 }
 
 // GPU-accelerated easing curves
@@ -116,6 +127,9 @@ function useLogoPositions() {
 }
 
 export default function GameFlow() {
+  const { scrollyFrameIndex } = useScrollScrolly();
+  const [idleScrollThemeArmed, setIdleScrollThemeArmed] = useState(false);
+  const prevScrollyFrameRef = useRef(0);
   const [phase, setPhase] = useState<Phase>("idle");
   const [player, setPlayer] = useState<PlayerData | null>(null);
   const [showButton, setShowButton] = useState(false);
@@ -127,14 +141,25 @@ export default function GameFlow() {
   // fade — which was happening because the logo sits at z-[85] and the video
   // containers fade opacity 0↔1 at z-[95].
   const [videoOverlayActive, setVideoOverlayActive] = useState(false);
+  /** True while the question-screen countdown is actively ticking. Pauses the
+   *  theme so the ITV timer bed (QuizGame) takes over. */
+  const [questionTimerActive, setQuestionTimerActive] = useState(false);
+  /** Post-answer (incl. reaction wait) + elimination UI until "Next question". */
+  const [eliminationSequenceActive, setEliminationSequenceActive] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const welcomeVideoRef = useRef<HTMLVideoElement>(null);
+  const themeUnlockRef = useRef<(() => void) | null>(null);
 
   // Refs for stale-closure-safe access in setTimeout chains
   const modelReadyRef = useRef(false);
   const pendingFlyToCorner = useRef(false);
 
   const positions = useLogoPositions();
-  const { unlock: unlockAudio, prefetchTts } = useNarration();
+  const { unlock: unlockAudio, prefetchAudioUrl } = useNarration();
+
+  const handleThemeUnlockReady = useCallback((unlockTheme: () => void) => {
+    themeUnlockRef.current = unlockTheme;
+  }, []);
 
   useEffect(() => { modelReadyRef.current = logoModelReady; }, [logoModelReady]);
 
@@ -175,10 +200,12 @@ export default function GameFlow() {
   }, [phase]);
 
   const { scrollYProgress } = useScroll();
+  // Theme unlock is NOT driven from scroll: browsers do not treat wheel/scroll as
+  // a user activation for audible media. Unlock happens on tap/click/key via GameShowAudio
+  // (and on Enter / ReadyToPlayGate via explicit handlers below).
   useMotionValueEvent(scrollYProgress, "change", (v) => {
     if (phase === "idle") {
       setShowButton(v > 0.75);
-      // User is approaching the CTA — decode GLB if first paint was too early.
       if (v > 0.45) {
         void import("@/lib/logoModelPreload")
           .then((m) => m.preloadClubLogoModel())
@@ -186,6 +213,26 @@ export default function GameFlow() {
       }
     }
   });
+
+  // Opening scroll: dhak on story frames 25 & 79; Twin Petes theme from frame 117 onward (idle only).
+  useEffect(() => {
+    if (phase !== "idle") {
+      prevScrollyFrameRef.current = scrollyFrameIndex;
+      return;
+    }
+    const prev = prevScrollyFrameRef.current;
+    const f = scrollyFrameIndex;
+    if (f > prev) {
+      for (const m of DHAK_MILESTONES_0) {
+        if (prev < m && f >= m) playDhakHit();
+      }
+      if (prev < THEME_START_SCROLL_FRAME_0 && f >= THEME_START_SCROLL_FRAME_0) {
+        setIdleScrollThemeArmed(true);
+        themeUnlockRef.current?.();
+      }
+    }
+    prevScrollyFrameRef.current = f;
+  }, [phase, scrollyFrameIndex]);
 
   const flyToCorner = useCallback(() => {
     setPhase("logo-fly-corner");
@@ -217,6 +264,7 @@ export default function GameFlow() {
   const handleStart = useCallback(() => {
     // Unlock audio now — this is our only guaranteed user gesture for autoplay
     unlockAudio();
+    themeUnlockRef.current?.();
 
     if (buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
@@ -265,13 +313,11 @@ export default function GameFlow() {
   const handleDetailsSubmit = useCallback(
     (data: PlayerData) => {
       setPlayer(data);
-      // Start ElevenLabs fetch on the same click as unlock so audio is often
-      // cached before Instructions mounts (avoids play() after a long gap).
-      const instructionsText = buildInstructionsNarration(data.name);
-      void prefetchTts("instructions-intro", instructionsText);
+      // Warm-cache instructions VO before Instructions mounts.
+      void prefetchAudioUrl("/sound/howitworks1percentclub.mp3");
       void unlockAudio().then(() => setPhase("instructions"));
     },
-    [unlockAudio, prefetchTts],
+    [unlockAudio, prefetchAudioUrl],
   );
 
   const handleBeginGame = useCallback(() => {
@@ -284,6 +330,32 @@ export default function GameFlow() {
 
   const showWelcomeVideo = phase === "welcome-video";
   const showPostVideoGate = phase === "post-video-gate";
+
+  /** Keep welcome teaser playing — autoplay can stall after heavy 3D work,
+   *  tab switches, or a hard reload landing on bfcache. Shared hook so the
+   *  same recovery logic runs for the question-intro and reaction overlays
+   *  inside QuizGame. */
+  useVideoAutoplay(welcomeVideoRef, showWelcomeVideo);
+
+  /** Theme music choreography:
+   *   - `idle`: theme only after scrolly story frame 117 (Twin Petes); dhak.wav on frames 25 & 79.
+   *   - After Enter — through post-video ReadyToPlayGate — theme runs
+   *     (muted until gesture, then audible). Pauses only during full-screen videos.
+   *   - `details` + `instructions`: theme on; volume ducks while host narrates (`GameShowAudio` + `isSpeaking`).
+   *   - `playing`: on for tour / intros; off during question-intro & reaction videos,
+   *     off while the 45s question timer is live (ITV timer MP3), and off from
+   *     answer lock-in through elimination (stinger + applause) until Next question. */
+  const playBgm =
+    (phase === "idle" && idleScrollThemeArmed) ||
+    phase === "ripple" ||
+    phase === "logo-enter" ||
+    phase === "logo-center" ||
+    phase === "logo-fly-corner" ||
+    phase === "details" ||
+    phase === "instructions" ||
+    showPostVideoGate ||
+    (phase === "playing" && !questionTimerActive && !eliminationSequenceActive);
+  const bgmSuppressForVideo = showWelcomeVideo || videoOverlayActive;
 
   // Welcome video is controlled entirely by phase, so sync it here. Quiz-phase
   // videos (question-intro, reaction) are reported via QuizGame's callback.
@@ -385,52 +457,32 @@ export default function GameFlow() {
           >
             {/* Ambient brass halo — always on so the CTA reads from across the room */}
             <div
-              className="pointer-events-none absolute -inset-10 rounded-full bg-amber-400/15 blur-3xl motion-safe:animate-[glow-pulse_2.8s_ease-in-out_infinite] md:-inset-14"
+              className="pointer-events-none absolute -inset-7 rounded-full bg-amber-400/15 blur-2xl motion-safe:animate-[glow-pulse_2.8s_ease-in-out_infinite] md:-inset-9"
               aria-hidden
             />
             {/* Expanding ring — always visible (subtle); stronger on hover */}
-            <div className="absolute -inset-5 rounded-full opacity-[0.45] transition-opacity duration-500 group-hover:opacity-90 md:-inset-6">
+            <div className="absolute -inset-3.5 rounded-full opacity-[0.45] transition-opacity duration-500 group-hover:opacity-90 md:-inset-4">
               <div
                 className="h-full w-full rounded-full border border-brass/35"
                 style={{ animation: "pulse-ring 2.2s ease-out infinite" }}
               />
             </div>
-            <div className="absolute -inset-6 rounded-full opacity-0 transition-opacity duration-500 group-hover:opacity-100 md:-inset-8">
+            <div className="absolute -inset-4 rounded-full opacity-0 transition-opacity duration-500 group-hover:opacity-100 md:-inset-5">
               <div
                 className="h-full w-full rounded-full border border-brass/50"
                 style={{ animation: "pulse-ring 2.2s ease-out infinite" }}
               />
             </div>
-            <div className="absolute -inset-12 rounded-full bg-brass/14 blur-[56px] transition-all duration-500 group-hover:bg-brass/24 md:-inset-16" />
+            <div className="absolute -inset-8 rounded-full bg-brass/14 blur-[40px] transition-all duration-500 group-hover:bg-brass/24 md:-inset-10" />
             <div
-              className="enter-cta-metallic-ring relative size-[min(252px,54vw)] sm:size-[min(270px,44vw)] md:size-[280px]"
+              className="enter-cta-metallic-ring relative size-[min(168px,42vw)] sm:size-[min(178px,36vw)] md:size-[188px]"
             >
-              <div className="relative z-0 size-full overflow-hidden rounded-full shadow-[inset_0_0_0_1px_rgba(0,0,0,0.35),inset_0_2px_12px_rgba(0,0,0,0.25)]">
-                <img
-                  src={ENTER_BUTTON_IMAGE}
-                  alt=""
-                  className="size-full scale-110 object-cover object-[50%_40%]"
-                />
-                <div className="absolute inset-0 z-[3] flex items-center justify-center bg-black/30 transition-colors duration-300 group-hover:bg-black/12">
-                <svg
-                  width="44"
-                  height="44"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  className="ml-1 text-white drop-shadow-[0_3px_12px_rgba(0,0,0,0.75)] md:h-12 md:w-12"
-                  aria-hidden
-                >
-                  <path
-                    d="M8 5.14v13.72a1 1 0 001.5.86l11.04-6.86a1 1 0 000-1.72L9.5 4.28A1 1 0 008 5.14z"
-                    fill="currentColor"
-                  />
-                </svg>
-                </div>
+              <div className="relative z-0 flex size-full items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-[#1a0f1f] via-[#0d0608] to-[#1a1020] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.35),inset_0_2px_12px_rgba(0,0,0,0.25)] transition-[box-shadow] duration-300 group-hover:shadow-[inset_0_0_0_1px_rgba(0,0,0,0.35),inset_0_2px_12px_rgba(0,0,0,0.25),inset_0_0_0_1px_rgba(251,191,36,0.12)]">
+                <span className="relative z-[3] px-[0.2em] pt-[0.08em] font-mono text-[clamp(1rem,3.4vw,1.45rem)] font-semibold uppercase tracking-[0.32em] text-brass-bright drop-shadow-[0_2px_14px_rgba(0,0,0,0.95)] md:tracking-[0.36em]">
+                  Enter
+                </span>
               </div>
             </div>
-            <span className="absolute -bottom-11 left-1/2 -translate-x-1/2 whitespace-nowrap font-mono text-[11px] font-semibold uppercase tracking-[0.52em] text-brass-bright drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] md:-bottom-12 md:text-xs md:tracking-[0.55em]">
-              Enter
-            </span>
           </motion.button>
         )}
       </AnimatePresence>
@@ -522,10 +574,25 @@ export default function GameFlow() {
             transition={{ duration: 0.6, ease: EASE_SMOOTH }}
           >
             <video
+              ref={welcomeVideoRef}
               className="w-full h-full object-cover"
               autoPlay
               playsInline
+              preload="auto"
+              onLoadedData={() => {
+                void welcomeVideoRef.current?.play().catch(() => {});
+              }}
+              onCanPlay={() => {
+                void welcomeVideoRef.current?.play().catch(() => {});
+              }}
+              onStalled={() => {
+                void welcomeVideoRef.current?.play().catch(() => {});
+              }}
+              onWaiting={() => {
+                void welcomeVideoRef.current?.play().catch(() => {});
+              }}
               onEnded={handleVideoEnd}
+              onError={handleVideoEnd}
               src={WELCOME_VIDEO_SRC}
             />
             {/* Skip button — bottom right, no other video controls visible */}
@@ -578,10 +645,9 @@ export default function GameFlow() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.4, ease: EASE_OUT }}
           >
-            {(phase === "details" || phase === "instructions") && (
+            {phase === "details" && (
               <>
-                {/* Blurred backdrop image — scaled up slightly so the blur edges
-                    don't reveal the black void behind it. */}
+                {/* Blurred backdrop — registration only; instructions journey uses solid black in Instructions.tsx */}
                 <img
                   src={DETAILS_INSTRUCTIONS_BG}
                   alt=""
@@ -594,7 +660,6 @@ export default function GameFlow() {
                     transformOrigin: "center",
                   }}
                 />
-                {/* Dark veil — keeps foreground text readable on top of the blur. */}
                 <div
                   aria-hidden
                   className="absolute inset-0 z-[1] pointer-events-none"
@@ -604,6 +669,12 @@ export default function GameFlow() {
                   }}
                 />
               </>
+            )}
+            {phase === "instructions" && (
+              <div
+                aria-hidden
+                className="absolute inset-0 z-0 bg-[#04020a] pointer-events-none"
+              />
             )}
 
             {phase !== "details" && phase !== "instructions" && (
@@ -658,12 +729,20 @@ export default function GameFlow() {
                 <QuizGame
                   playerName={player?.name || "Player"}
                   onVideoOverlayChange={setVideoOverlayActive}
+                  onQuestionTimerActiveChange={setQuestionTimerActive}
+                  onEliminationSequenceActiveChange={setEliminationSequenceActive}
                 />
               </motion.div>
             )}
           </motion.div>
         )}
       </AnimatePresence>
+
+      <GameShowAudio
+        playBgm={playBgm}
+        suppressForVideo={bgmSuppressForVideo}
+        onThemeUnlockReady={handleThemeUnlockReady}
+      />
     </>
   );
 }

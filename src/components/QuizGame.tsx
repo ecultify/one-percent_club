@@ -9,6 +9,34 @@ import { useNarration } from "./NarrationProvider";
 import ProductTour, { TourStep } from "./ProductTour";
 import HostSilhouette from "./HostSilhouette";
 import FadeWipe from "./FadeWipe";
+import { useVideoAutoplay } from "@/lib/useVideoAutoplay";
+
+const Q1_RX = "/questionrxns/question1";
+
+const QUESTION_INTRO_FILES = [
+  "1stquestion",
+  "2ndquestion",
+  "3rdquestion",
+  "4thquestion",
+  "5thquestion",
+  "6thquestion",
+  "7thquestion",
+  "8thquestion",
+] as const;
+
+const SFX_CORRECT = encodeURI("/sound/644963__craigscottuk__quiz-gameshow-correct-ping-14.mp3");
+const SFX_WRONG = encodeURI("/sound/131657__bertrof__game-sound-wrong.wav");
+/** Bed for the live countdown (clip is ~30s; looped so it covers the full 45s limit). */
+const SFX_QUESTION_TIMER = encodeURI("/sound/ITV's _ The 1 club - 30 Second Timer.mp3");
+/** ~2s VO: plays once when **13s** remain (3s before the last-10s tick SFX). */
+const TIMER_VO_SRC = encodeURI("/sound/timerVO.mp3");
+
+function playQuizSfx(kind: "correct" | "wrong", muted: boolean) {
+  if (muted) return;
+  const a = new Audio(kind === "correct" ? SFX_CORRECT : SFX_WRONG);
+  a.volume = kind === "correct" ? 0.72 : 0.55;
+  void a.play().catch(() => {});
+}
 
 const TOUR_STEPS: TourStep[] = [
   {
@@ -67,20 +95,26 @@ const TOUR_STEPS: TourStep[] = [
  * host is STILL talking — no "Sawaal number X" restarts, no formal
  * restart. Witty openers per question keep the game-show energy alive.
  */
+/** Pre-recorded VO in `public/sound/q{N}VO.mp3` (sync with QUESTIONS ids). */
+function questionVoSrc(id: number): string | null {
+  if (id >= 1 && id <= 8) return `/sound/q${id}VO.mp3`;
+  return null;
+}
+
 function buildQuestionNarration(q: Question): string {
   const labels = ["A", "B", "C", "D"];
-  const optionsText = q.options
-    .map((opt, i) => `Option ${labels[i]}: ${opt}.`)
-    .join(" ");
+  const optionsText = q.imagesAreOptions
+    ? "Tap the photograph you mean."
+    : q.options.map((opt, i) => `Option ${labels[i]}: ${opt}.`).join(" ");
 
   // Per-question witty Hinglish opener — picks up the thread of the intro video.
   const openers: Record<number, string> = {
     1: "Toh pehla sawaal — zara dhyaan se dekho. Chaar animals hain screen par — Bat, Cricket, Cock, Duck.",
     2: "Chaliye, ek picture puzzle. Ginna shuroo kijiye.",
     3: "Ab zara ghor se dekhiye. Teen photographs — Gandhiji ki. Lekin ek mein kuchh gadbad hai.",
-    4: "Pattern recognition ka waqt. Shabdon ka silsila dhyaan se suniye.",
+    4: "Pattern recognition ka waqt. Shabdon ki line dhyaan se dekhiye — Hot, Hard, Small, Cold, Easy, aur phir ek question mark.",
     5: "Chaar words. Chaar mein se teen ek pattern follow karte hain, ek nahin. Sochiye kaunsa.",
-    6: "Mumbai walon, yeh aapke liye ghar ka sawaal hai. Arrangement kaunsa sahi hai?",
+    6: "Chaar vehicles screen par hain, alphabetical order mein. Unhe passenger capacity ke hisaab se kam-se-zyaada rearrange kijiye.",
     7: "Kyaal se sochiye. Calendar logic. Satmohan ki lucky shirt kab aati hai pehan mein?",
     8: "Aur… lo, aa gaya woh aakhri sawaal. Letters ko ulta padh ke dekhiye.",
   };
@@ -121,11 +155,23 @@ export interface Question {
   image?: string;
   /** Row of images shown above the question text, each in a golden rim. */
   images?: string[];
+  /** When true, images are the only answers (no diamond option row); tap image i → option i. */
+  imagesAreOptions?: boolean;
+  /** Smaller fixed row of images (e.g. Q6 — four vehicles) to save vertical space. */
+  compactImageRow?: boolean;
   /** Optional caption per image in `images` (e.g. "1", "2", "3"). */
   imageCaptions?: string[];
   /** Row of glyph tiles (emoji placeholders) — used when picture options are
    *  referenced in the question (e.g. Q1: A-Bat, B-Cricket, C-Cock, D-Duck). */
   labelGlyphs?: LabelGlyph[];
+  /** Row of chip-style word labels rendered between the question and the
+   *  options. Used for Q4 — the "Hot · Hard · Small · Cold · Easy · ?" pattern
+   *  sequence shown as distinct word chips. */
+  wordSequence?: string[];
+  /** Large letter puzzle block rendered between the question and the options.
+   *  Used for Q8 — e.g. "TNECREPE _ _" shown in oversized monospace letters so
+   *  the reversed-phrase puzzle reads clearly. */
+  wordPuzzle?: string;
   /** If true, ANY selected option is treated as correct. Used for subjective /
    *  trick questions (e.g. Q3 — "which Gandhi photo can't be real"). */
   acceptAny?: boolean;
@@ -159,7 +205,7 @@ const QUESTIONS: Question[] = [
     ],
     options: ["AB", "BC", "DA", "B"],
     correctIndex: 3, // D — the lone "B", i.e. just Cricket
-    timeLimit: 30,
+    timeLimit: 45,
   },
   {
     id: 2,
@@ -167,9 +213,9 @@ const QUESTIONS: Question[] = [
     // Q2 — single group image (cards vs. glasses). User counts and picks.
     question: "Count carefully — which are there more of in the picture?",
     image: "/questionscreenimages/question2/question2group-ezremove.png",
-    options: ["Cards", "Glasses", "Both are equal", "Cannot tell"],
+    options: ["Cards", "Glasses", "Both are equal"],
     correctIndex: 0, // A — Cards
-    timeLimit: 30,
+    timeLimit: 45,
   },
   {
     id: 3,
@@ -183,21 +229,23 @@ const QUESTIONS: Question[] = [
       "/questionscreenimages/question3/gandhjiaccurate2-ezremove.png",
     ],
     imageCaptions: ["1", "2", "3"],
-    options: ["Photo 1", "Photo 2", "Photo 3", "All are real"],
-    correctIndex: 1, // B — the one with the phone
+    imagesAreOptions: true,
+    options: ["Photo 1", "Photo 2", "Photo 3"],
+    correctIndex: 1,
     acceptAny: true,
-    timeLimit: 30,
+    timeLimit: 45,
   },
   {
     id: 4,
     percentage: 60,
-    // Q4 — word-pair pattern. Opposite sequence: Hot/Cold, Hard/Small, Easy/?
-    // The pattern alternates opposites: Hot→Cold, Hard→Small (size), so Easy→Big? Actually
-    // the user specified Correct = A. Big. Keep options as provided.
-    question: "Complete the sequence — Hot, Hard, Small, Cold, Easy, ?",
-    options: ["Big", "Fast", "Slow", "Tall"],
+    // Q4 — word-pair pattern. The sequence "Hot, Hard, Small, Cold, Easy, ?"
+    // renders as a dedicated chip row (wordSequence) between question and
+    // options. Only 3 options per the screenshot. Correct = A. Big.
+    question: "What replaces the question mark in this sequence?",
+    wordSequence: ["Hot", "Hard", "Small", "Cold", "Easy", "?"],
+    options: ["Big", "Fast", "Slow"],
     correctIndex: 0, // A — Big
-    timeLimit: 30,
+    timeLimit: 45,
   },
   {
     id: 5,
@@ -215,18 +263,20 @@ const QUESTIONS: Question[] = [
     id: 6,
     percentage: 30,
     // Q6 — transport ordering (autorickshaw, bus, cycle, local train).
-    // Arrangement puzzle — correct arrangement is #2.
+    // Four modes shown alphabetically; user rearranges by passenger count
+    // (low → high) and reports how many stay in the same position.
     question:
-      "Arrange these vehicles from slowest to fastest. Which arrangement is correct?",
+      "Four modes of transport are arranged below alphabetically. If you rearrange them from lowest to highest by the number of passengers they typically carry, how many will stay in the same place?",
     images: [
-      "/questionscreenimages/question6/cycle-ezremove.png",
       "/questionscreenimages/question6/auto-ezremove.png",
       "/questionscreenimages/question6/bus-ezremove.png",
+      "/questionscreenimages/question6/cycle-ezremove.png",
       "/questionscreenimages/question6/localtrain-ezremove.png",
     ],
-    imageCaptions: ["Cycle", "Autorickshaw", "Bus", "Local train"],
-    options: ["1", "2", "3", "Cannot tell"],
-    correctIndex: 1, // B — arrangement 2
+    imageCaptions: ["Autorickshaw", "Bus", "Cycle", "Local train"],
+    compactImageRow: true,
+    options: ["1", "2", "3"],
+    correctIndex: 1, // B — exactly 2 stay in place
     timeLimit: 45,
   },
   {
@@ -243,18 +293,21 @@ const QUESTIONS: Question[] = [
       "Monday 5th May",
     ],
     correctIndex: 2, // C — Friday 2nd May
-    timeLimit: 60,
+    timeLimit: 45,
   },
   {
     id: 8,
     percentage: 1,
     // Q8 — TNECREPE is "ONE PERCENT" reversed, truncated to first 8 letters.
     // Appending "NO" gives the full reversal: TNECREPENO → ONEPERCENT.
+    // wordPuzzle renders the letters in a large dedicated block so the
+    // reversed phrase reads at a glance.
     question:
       "TNECREPE is the beginning of a reversed phrase. Which two letters complete it?",
+    wordPuzzle: "TNECREPE _ _",
     options: ["RC", "AR", "NO", "TE"],
     correctIndex: 2, // C — NO (completes ONE PERCENT reversed)
-    timeLimit: 60,
+    timeLimit: 45,
   },
 ];
 
@@ -315,9 +368,21 @@ interface QuizGameProps {
    *  active, false when none are. Lets the parent hide the 3D logo so it
    *  can't peek through the video's fade-in/out transitions. */
   onVideoOverlayChange?: (active: boolean) => void;
+  /** Fires true when the question-screen countdown is actively ticking (tour
+   *  done, narration finished, not yet answered). Lets the parent pause the
+   *  theme music so the ITV 30-second timer jingle takes the sonic stage. */
+  onQuestionTimerActiveChange?: (active: boolean) => void;
+  /** True from answer submitted through elimination (until Next question); pauses BGM. */
+  onEliminationSequenceActiveChange?: (active: boolean) => void;
 }
 
-export default function QuizGame({ playerName, onGameEnd, onVideoOverlayChange }: QuizGameProps) {
+export default function QuizGame({
+  playerName,
+  onGameEnd,
+  onVideoOverlayChange,
+  onQuestionTimerActiveChange,
+  onEliminationSequenceActiveChange,
+}: QuizGameProps) {
   const [gameState, setGameState] = useState<GameState>({
     currentQuestion: 0,
     totalPlayers: 100,
@@ -349,7 +414,14 @@ export default function QuizGame({ playerName, onGameEnd, onVideoOverlayChange }
   // Reaction video overlay state
   const [reactionVideo, setReactionVideo] = useState<"correct" | "wrong" | "winner" | null>(null);
   const pendingEliminationRef = useRef<{ eliminated: number; addedToPot: number } | null>(null);
-  const { narrate, stop, muted } = useNarration();
+  const { narrate, narrateUrl, stop, muted } = useNarration();
+
+  // Refs for the two full-screen video overlays. Used by useVideoAutoplay below
+  // to retry play() across canplay / stalled / waiting / visibilitychange — the
+  // bare `autoPlay` attribute fails silently on reload + bfcache cases, which
+  // was the root cause of "the next video doesn't play sometimes after reload".
+  const introVideoRef = useRef<HTMLVideoElement | null>(null);
+  const reactionVideoRef = useRef<HTMLVideoElement | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -373,16 +445,26 @@ export default function QuizGame({ playerName, onGameEnd, onVideoOverlayChange }
 
     let cancelled = false;
     setNarratingQuestion(true);
-    narrate(`q-${q.id}`, buildQuestionNarration(q)).then(() => {
-      if (!cancelled) setNarratingQuestion(false);
-    });
+    const delayMs = 2000;
+    const delayId = window.setTimeout(() => {
+      if (cancelled) return;
+      const vo = questionVoSrc(q.id);
+      const done = vo
+        ? narrateUrl(`q-${q.id}-vo`, vo)
+        : narrate(`q-${q.id}`, buildQuestionNarration(q));
+      void done.then(() => {
+        if (!cancelled) setNarratingQuestion(false);
+      });
+    }, delayMs);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(delayId);
+      stop();
       setNarratingQuestion(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameState.currentQuestion, gameState.phase, tourState]);
+  }, [gameState.currentQuestion, gameState.phase, tourState, stop]);
 
   const handleStartTour = useCallback(() => {
     setTourState("playing");
@@ -418,13 +500,31 @@ export default function QuizGame({ playerName, onGameEnd, onVideoOverlayChange }
     setTimeout(() => { setWipeActive(false); }, 560);
   }, []);
 
+  /** Prevents double transition (Q1 timer + onEnded, or skip + timer). */
+  const questionIntroDoneRef = useRef(false);
+
   // Question intro video handlers
   const handleQuestionIntroEnd = useCallback(() => {
-    // Wipe then swap to question phase
+    if (questionIntroDoneRef.current) return;
+    questionIntroDoneRef.current = true;
     runWipeThen(() => {
       setGameState(prev => ({ ...prev, phase: "question" }));
     });
   }, [runWipeThen]);
+
+  useEffect(() => {
+    if (gameState.phase === "question-intro" && tourState === "done") {
+      questionIntroDoneRef.current = false;
+    }
+  }, [gameState.phase, gameState.currentQuestion, tourState]);
+
+  /** Q1 intro is 10s; transition (fade/wipe) at 7s — do not wait for full clip. */
+  useEffect(() => {
+    if (gameState.phase !== "question-intro" || tourState !== "done") return;
+    if (gameState.currentQuestion !== 0) return;
+    const id = window.setTimeout(() => handleQuestionIntroEnd(), 7000);
+    return () => clearTimeout(id);
+  }, [gameState.phase, gameState.currentQuestion, tourState, handleQuestionIntroEnd]);
 
   // Narrate the ready-gate prompt once when it opens
   useEffect(() => {
@@ -456,6 +556,8 @@ export default function QuizGame({ playerName, onGameEnd, onVideoOverlayChange }
       playerCorrect: [...prev.playerCorrect, isCorrect],
     }));
 
+    playQuizSfx(isCorrect ? "correct" : "wrong", muted);
+
     // Stop any narration, queue elimination data, wait 2s, then wipe and play reaction
     stop();
     pendingEliminationRef.current = { eliminated, addedToPot };
@@ -464,7 +566,7 @@ export default function QuizGame({ playerName, onGameEnd, onVideoOverlayChange }
     setTimeout(() => {
       runWipeThen(() => setReactionVideo(reaction));
     }, 2000);
-  }, [gameState.currentQuestion, gameState.remainingPlayers, gameState.stakePerPlayer, stop, runWipeThen]);
+  }, [gameState.currentQuestion, gameState.remainingPlayers, gameState.stakePerPlayer, stop, runWipeThen, muted]);
 
   const handleTimeUp = useCallback(() => {
     const q = QUESTIONS[gameState.currentQuestion];
@@ -479,13 +581,15 @@ export default function QuizGame({ playerName, onGameEnd, onVideoOverlayChange }
       playerCorrect: [...prev.playerCorrect, false],
     }));
 
+    playQuizSfx("wrong", muted);
+
     // Time up is always "wrong" reaction, same 2s + wipe flow
     stop();
     pendingEliminationRef.current = { eliminated, addedToPot };
     setTimeout(() => {
       runWipeThen(() => setReactionVideo("wrong"));
     }, 2000);
-  }, [gameState.currentQuestion, gameState.remainingPlayers, gameState.stakePerPlayer, stop, runWipeThen]);
+  }, [gameState.currentQuestion, gameState.remainingPlayers, gameState.stakePerPlayer, stop, runWipeThen, muted]);
 
   const handleReactionVideoEnd = useCallback(() => {
     const pending = pendingEliminationRef.current;
@@ -534,7 +638,101 @@ export default function QuizGame({ playerName, onGameEnd, onVideoOverlayChange }
     .slice(0, -1)
     .reduce((sum, n) => sum + n, 0);
 
-  // Final result screen
+  const reactionVideoSrc =
+    reactionVideo == null
+      ? null
+      : (() => {
+          const qIdx = gameState.currentQuestion;
+          if (qIdx === 0) {
+            if (reactionVideo === "correct") return `${Q1_RX}/q1correctvid.mp4`;
+            if (reactionVideo === "wrong") return `${Q1_RX}/q1wrongvid.mp4`;
+          }
+          if (reactionVideo === "correct") return "/reaction-correct.mp4";
+          if (reactionVideo === "wrong") return "/reaction-wrong.mp4";
+          return "/reaction-winner.mp4";
+        })();
+
+  const questionIntroVideoSrc =
+    gameState.currentQuestion === 0
+      ? `${Q1_RX}/q1introvid.mp4`
+      : `/questionvideos/${QUESTION_INTRO_FILES[gameState.currentQuestion]}.mp4`;
+
+  // Hide the floating mute button whenever a full-screen video overlay is on,
+  // otherwise it stacks on top of the video's own "Skip ▸" button bottom-right.
+  const videoOverlayActive =
+    !!reactionVideoSrc ||
+    (gameState.phase === "question-intro" && tourState === "done");
+
+  // Robust autoplay for the two full-screen overlays. Without this, after a
+  // hard reload the second video in the chain occasionally never starts —
+  // browsers silently refuse to honor the `autoPlay` attribute when the
+  // element is mounted into a freshly-painted overlay during a heavy
+  // animation tick. The hook retries play() on every relevant media event
+  // plus a short watchdog poll.
+  useVideoAutoplay(
+    introVideoRef,
+    gameState.phase === "question-intro" && tourState === "done",
+  );
+  useVideoAutoplay(reactionVideoRef, !!reactionVideoSrc);
+
+  // Mirror this to the parent so it can hide the 3D logo while a video plays.
+  useEffect(() => {
+    onVideoOverlayChange?.(videoOverlayActive);
+  }, [videoOverlayActive, onVideoOverlayChange]);
+
+  /** The question timer is "live" only when: tour is done, we're on a real
+   *  question screen (not intro video / elimination / answered), the host has
+   *  finished narrating the question, and no full-screen video overlay is up.
+   *  This is the window in which the ITV timer bed plays (looped) and the
+   *  background theme is paused. Question `timeLimit` is 45s. */
+  const questionTimerActive =
+    tourState === "done" &&
+    gameState.phase === "question" &&
+    !narratingQuestion &&
+    !videoOverlayActive;
+
+  // Surface this flag upward so GameFlow can suppress the theme music.
+  useEffect(() => {
+    onQuestionTimerActiveChange?.(questionTimerActive);
+  }, [questionTimerActive, onQuestionTimerActiveChange]);
+
+  /** Suppress game-show BGM from post-answer through elimination until "Next question". */
+  const eliminationSequenceActive =
+    gameState.phase === "answered" || gameState.phase === "elimination";
+  useEffect(() => {
+    onEliminationSequenceActiveChange?.(eliminationSequenceActive);
+  }, [eliminationSequenceActive, onEliminationSequenceActiveChange]);
+
+  const playTimerVoCue = useCallback(() => {
+    if (muted) return;
+    const a = new Audio(TIMER_VO_SRC);
+    a.volume = 0.85;
+    void a.play().catch(() => {});
+  }, [muted]);
+
+  // When the timer goes live, play the ITV timer bed (looped). `timerVO` is fired
+  // from QuestionScreen when 13s remain (3s before the 10s tick strip).
+  const timerAudioRef = useRef<HTMLAudioElement | null>(null);
+  useEffect(() => {
+    if (!questionTimerActive) return;
+    if (muted) return;
+    const a = new Audio(SFX_QUESTION_TIMER);
+    a.volume = 0.6;
+    a.loop = true;
+    timerAudioRef.current = a;
+    void a.play().catch(() => {});
+    return () => {
+      a.pause();
+      try {
+        a.currentTime = 0;
+        a.src = "";
+      } catch {
+        /* ignore */
+      }
+      if (timerAudioRef.current === a) timerAudioRef.current = null;
+    };
+  }, [questionTimerActive, muted]);
+
   if (gameState.phase === "final-result") {
     const correct = gameState.playerCorrect.filter(Boolean).length;
     const lastCorrectIndex = gameState.playerCorrect.lastIndexOf(true);
@@ -551,37 +749,6 @@ export default function QuizGame({ playerName, onGameEnd, onVideoOverlayChange }
       />
     );
   }
-
-  const reactionVideoSrc =
-    reactionVideo === "correct"
-      ? "/reaction-correct.mp4"
-      : reactionVideo === "wrong"
-      ? "/reaction-wrong.mp4"
-      : reactionVideo === "winner"
-      ? "/reaction-winner.mp4"
-      : null;
-
-  const questionIntroVideoSrc = `/questionvideos/${[
-    "1stquestion",
-    "2ndquestion",
-    "3rdquestion",
-    "4thquestion",
-    "5thquestion",
-    "6thquestion",
-    "7thquestion",
-    "8thquestion",
-  ][gameState.currentQuestion] ?? "1stquestion"}.mp4`;
-
-  // Hide the floating mute button whenever a full-screen video overlay is on,
-  // otherwise it stacks on top of the video's own "Skip ▸" button bottom-right.
-  const videoOverlayActive =
-    !!reactionVideoSrc ||
-    (gameState.phase === "question-intro" && tourState === "done");
-
-  // Mirror this to the parent so it can hide the 3D logo while a video plays.
-  useEffect(() => {
-    onVideoOverlayChange?.(videoOverlayActive);
-  }, [videoOverlayActive, onVideoOverlayChange]);
 
   return (
     <div className="w-full h-full relative">
@@ -602,12 +769,14 @@ export default function QuizGame({ playerName, onGameEnd, onVideoOverlayChange }
             className="fixed inset-0 z-[95] bg-black flex items-center justify-center"
           >
             <video
+              ref={introVideoRef}
               key={questionIntroVideoSrc}
               className="w-full h-full object-cover"
               autoPlay
               playsInline
+              preload="auto"
               muted={muted}
-              onEnded={handleQuestionIntroEnd}
+              onEnded={gameState.currentQuestion === 0 ? undefined : handleQuestionIntroEnd}
               onError={handleQuestionIntroEnd}
               src={questionIntroVideoSrc}
             />
@@ -633,10 +802,12 @@ export default function QuizGame({ playerName, onGameEnd, onVideoOverlayChange }
             className="fixed inset-0 z-[95] bg-black flex items-center justify-center"
           >
             <video
+              ref={reactionVideoRef}
               key={reactionVideoSrc}
               className="w-full h-full object-cover"
               autoPlay
               playsInline
+              preload="auto"
               muted={muted}
               onEnded={handleReactionVideoEnd}
               onError={handleReactionVideoEnd}
@@ -790,6 +961,7 @@ export default function QuizGame({ playerName, onGameEnd, onVideoOverlayChange }
             playerName={playerName}
             onAnswer={handleAnswer}
             onTimeUp={handleTimeUp}
+            onTimerVoCue={playTimerVoCue}
             answered={gameState.phase === "answered" || gameState.phase === "elimination"}
             selectedAnswer={gameState.playerAnswers[gameState.currentQuestion] ?? null}
             isCorrect={gameState.playerCorrect[gameState.currentQuestion] ?? false}
@@ -842,7 +1014,7 @@ function FinalResult({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.6 }}
-      className="w-full h-full flex items-center justify-center relative overflow-hidden"
+      className="min-h-[100dvh] w-full h-full flex flex-col items-center justify-center relative overflow-x-hidden overflow-y-auto py-10"
     >
       {/* ━━ Atmospheric Background ━━ */}
       <div className="absolute inset-0 pointer-events-none">
@@ -961,11 +1133,28 @@ function FinalResult({
                 className="mt-5 p-4 rounded-xl bg-black/20 border border-white/[0.06]"
               >
                 <p className="text-foreground/70 text-sm leading-relaxed">
-                  You reached the <span className="text-brass-bright font-semibold">{reachedPercentage}%</span> bracket.
+                  You reached the{" "}
+                  <span className="text-brass-bright font-semibold">
+                    {Number.isFinite(reachedPercentage) ? reachedPercentage : 0}%
+                  </span>{" "}
+                  bracket.
                 </p>
                 <p className="text-muted text-xs mt-2">Seven rounds separate the crowd from the club.</p>
               </motion.div>
             )}
+
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 1.15, duration: 0.5 }}
+              className="mt-8 pt-6 border-t border-white/[0.08]"
+            >
+              <p className="font-mono text-[9px] md:text-[10px] uppercase tracking-[0.22em] text-muted leading-relaxed text-center">
+                MAKE YOUR BRAND A PART OF THE 1% CLUB
+                <br />
+                <span className="text-foreground/55">COMING SOON | Aug 2026</span>
+              </p>
+            </motion.div>
           </div>
         </div>
       </div>

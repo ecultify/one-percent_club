@@ -61,6 +61,28 @@ body {
   50% { opacity: 0.8; transform: scale(1.05); }
 }
 
+/* Elimination grid siren: strict blue ↔ red (no RGB tween purple/pink). */
+@keyframes elimination-siren-fill {
+  0% { fill: #2563eb; }
+  100% { fill: #dc2626; }
+}
+
+@keyframes elimination-siren-fill-dim {
+  0% { fill: rgba(96, 165, 250, 0.52); }
+  100% { fill: rgba(248, 113, 113, 0.52); }
+}
+
+.elimination-siren circle,
+.elimination-siren path {
+  animation: elimination-siren-fill var(--siren-duration, 0.52s) steps(2) infinite;
+  animation-delay: var(--siren-delay, 0s);
+}
+
+.elimination-siren--dim circle,
+.elimination-siren--dim path {
+  animation-name: elimination-siren-fill-dim;
+}
+
 /* Full-height horizontal sheen (use inside overflow:hidden; inset-y-0 on the moving layer) */
 @keyframes sheen-ltr {
   0% { transform: translateX(-120%); }

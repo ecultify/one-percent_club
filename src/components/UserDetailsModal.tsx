@@ -7,19 +7,16 @@ import MuteButton from "./MuteButton";
 import { METALLIC_RIM_GRADIENT, PANEL_INNER_FILL } from "./QuestionScreen";
 
 interface UserDetailsModalProps {
-  onSubmit: (data: { name: string; phone: string; email: string }) => void;
+  onSubmit: (data: { name: string }) => void;
 }
 
 // Phonetically tuned for ElevenLabs multilingual — short, clean sentences
 const DETAILS_NARRATION =
-  "Game shuroo karne se pehle, apne baare mein thodi si jaankaari dijiye. " +
-  "Neeche form mein apna naam, phone number, aur email bhar dijiye. " +
+  "Game shuroo karne se pehle, apna naam bata dijiye. " +
   "Sirf ek chhoti si formality, phir asli game shuroo karte hain.";
 
 export default function UserDetailsModal({ onSubmit }: UserDetailsModalProps) {
   const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const { narrate, stop } = useNarration();
 
@@ -31,17 +28,15 @@ export default function UserDetailsModal({ onSubmit }: UserDetailsModalProps) {
 
   const handleSubmit = (e?: FormEvent) => {
     if (e) e.preventDefault();
-    if (!name.trim() || !phone.trim() || !email.trim()) return;
-    onSubmit({ name: name.trim(), phone: phone.trim(), email: email.trim() });
+    if (!name.trim()) return;
+    onSubmit({ name: name.trim() });
   };
 
   const fields = [
     { id: "name", label: "Your name", type: "text", value: name, setter: setName, placeholder: "Full name", delay: 0.12 },
-    { id: "phone", label: "Phone", type: "tel", value: phone, setter: setPhone, placeholder: "+91 · · · · · · · · · ·", delay: 0.18 },
-    { id: "email", label: "Email", type: "email", value: email, setter: setEmail, placeholder: "you@example.com", delay: 0.24 },
   ];
 
-  const isValid = name.trim() && phone.trim() && email.trim();
+  const isValid = Boolean(name.trim());
 
   return (
     <div className="w-full max-w-md mx-4 relative max-h-[90vh] flex flex-col">
