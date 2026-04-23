@@ -10,7 +10,8 @@ interface MuteButtonProps {
 }
 
 export default function MuteButton({ variant = "fixed", className = "" }: MuteButtonProps) {
-  const { muted, toggleMute, isSpeaking } = useNarration();
+  const { muted, toggleMute, isSpeaking, hostVoiceDucksBgm } = useNarration();
+  const hostVoiceActivity = isSpeaking || hostVoiceDucksBgm;
 
   // Same metallic brass language as the HUD chips, option badges, and host-speaking pill.
   // Dark engraved icon + label reads as enamel-on-brass. Muted state dims via saturation.
@@ -76,7 +77,7 @@ export default function MuteButton({ variant = "fixed", className = "" }: MuteBu
           </svg>
         )}
         {/* Speaking pulse — a dark "indicator light" with warm halo */}
-        {isSpeaking && !muted && (
+        {hostVoiceActivity && !muted && (
           <>
             <span
               className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full animate-pulse"

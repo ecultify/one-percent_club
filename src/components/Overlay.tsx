@@ -27,6 +27,8 @@ export default function Overlay() {
    -------------
    - "brass" : front face uses the polished brass gradient (for CLUB and
      any word that should feel like a solid gold casting).
+   - "button" : front face uses the same golden metallic fill as the hero
+     CTA buttons (lighter top → deep amber bottom), with brass extrusion.
    - "white" : front face is warm ivory with a brass text-stroke, side
      walls ramp in brass only (not bronze). Matches the TV-show treatment
      of THE / 1 / % — ivory face with a golden bevel pouring down the
@@ -64,6 +66,15 @@ const BRASS_GRADIENT = `linear-gradient(180deg,
   #5c3e0d 100%
 )`;
 
+/** Hero CTA / primary buttons — same fill as the "Scroll down" control in this overlay. */
+const HERO_BUTTON_METALLIC = `linear-gradient(180deg,
+  #fff6d2 0%,
+  #f0d56e 18%,
+  #d4a82a 45%,
+  #a67a18 72%,
+  #6b4a0c 100%
+)`;
+
 /** Side-wall colour at depth t (0 = deepest, 1 = just behind front). */
 function rampBronze(t: number) {
   // Dark bronze at the back, warming to mid brass near the front.
@@ -78,7 +89,7 @@ function rampBrassSide(t: number) {
   return `hsl(42, 74%, ${l}%)`;
 }
 
-type FaceVariant = "brass" | "white";
+type FaceVariant = "brass" | "white" | "button";
 
 function Volumetric3DText({
   children,
@@ -135,8 +146,9 @@ function Volumetric3DText({
                 "drop-shadow(0 1px 0 rgba(20, 10, 0, 0.85))",
               ].join(" ");
             } else {
-              // BRASS FRONT — polished brass gradient + warm halo + floor shadow.
-              spanStyle.background = BRASS_GRADIENT;
+              // BRASS or BUTTON — gradient-filled face + warm halo + floor shadow.
+              spanStyle.background =
+                face === "button" ? HERO_BUTTON_METALLIC : BRASS_GRADIENT;
               spanStyle.WebkitBackgroundClip = "text";
               spanStyle.backgroundClip = "text";
               spanStyle.WebkitTextFillColor = "transparent";
@@ -217,9 +229,11 @@ function Volumetric3DText({
    - The "1" is the dominant form, taking the full height of the top row.
    - "THE" sits top-right, smaller. "%" sits bottom-right of the same column,
      slightly larger than "THE", together filling the height of the "1".
-   - "CLUB" drops below and spans the width underneath.
-   - The "1" uses "white" face (bright core glow); "THE", "%", and "CLUB" use
-     full "brass" — polished gold extrusion like the broadcast mark.
+   - "CLUB" drops below; its line is slightly smaller than the top band so the
+     "1" block stays primary. The top row and CLUB sit in a column flex with
+     stretch so both rows share the same width (the wider of the two).
+   - All glyphs use the hero CTA "button" metallic face so the mark matches
+     the Scroll down / primary gold controls.
    ──────────────────────────────────────────────────────────────────────── */
 
 function OnePercentClubLogo() {
@@ -227,16 +241,16 @@ function OnePercentClubLogo() {
     <div
       aria-label="The 1% Club"
       role="img"
-      className="inline-flex flex-col items-center leading-none select-none"
+      className="inline-grid w-max max-w-full grid-cols-1 place-items-stretch self-center leading-none select-none"
       // Sizes cascade from --logo-scale. Tuned so the whole mark comfortably
       // fills a 1024px hero at desktop while scaling down to mobile.
       style={{
         ["--logo-scale" as string]: "clamp(4rem, 18vw, 13.5rem)",
       }}
     >
-      {/* ─── TOP ROW: 1 + (THE / %) stack ─────────────────────────────── */}
+      {/* ─── TOP ROW: 1 + (THE / %) stack — w-full so width matches CLUB row ── */}
       <div
-        className="flex items-stretch"
+        className="flex w-full min-w-0 items-stretch justify-center"
         style={{ gap: "calc(var(--logo-scale) * 0.06)" }}
       >
         {/* The "1" — hero glyph, full row height; radial bloom reads as the light source */}
@@ -254,7 +268,7 @@ function OnePercentClubLogo() {
             aria-hidden
           />
           <Volumetric3DText
-            face="white"
+            face="button"
             className="font-display font-black tracking-[-0.05em]"
             style={{ fontSize: "var(--logo-scale)", lineHeight: 0.82 }}
           >
@@ -269,7 +283,7 @@ function OnePercentClubLogo() {
           style={{ paddingTop: "calc(var(--logo-scale) * 0.02)" }}
         >
           <Volumetric3DText
-            face="brass"
+            face="button"
             className="font-display font-black tracking-[-0.02em]"
             style={{
               fontSize: "calc(var(--logo-scale) * 0.34)",
@@ -279,7 +293,7 @@ function OnePercentClubLogo() {
             THE
           </Volumetric3DText>
           <Volumetric3DText
-            face="brass"
+            face="button"
             className="font-display font-black tracking-[-0.03em]"
             style={{
               fontSize: "calc(var(--logo-scale) * 0.58)",
@@ -292,18 +306,22 @@ function OnePercentClubLogo() {
         </div>
       </div>
 
-      {/* ─── BOTTOM ROW: CLUB — full brass ─────────────────────────────── */}
-      <Volumetric3DText
-        face="brass"
-        className="font-display font-black tracking-[-0.02em]"
-        style={{
-          fontSize: "calc(var(--logo-scale) * 0.62)",
-          lineHeight: 0.9,
-          marginTop: "calc(var(--logo-scale) * 0.04)",
-        }}
+      {/* ─── BOTTOM ROW: CLUB — same metallic, slightly smaller, centered in shared width */}
+      <div
+        className="flex w-full justify-center"
+        style={{ marginTop: "calc(var(--logo-scale) * 0.04)" }}
       >
-        CLUB
-      </Volumetric3DText>
+        <Volumetric3DText
+          face="button"
+          className="font-display font-black tracking-[-0.02em]"
+          style={{
+            fontSize: "calc(var(--logo-scale) * 0.52)",
+            lineHeight: 0.9,
+          }}
+        >
+          CLUB
+        </Volumetric3DText>
+      </div>
     </div>
   );
 }
@@ -388,8 +406,7 @@ function TextSection({
         transition={{ delay: 0.35, duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
         className="mt-6 sm:mt-7 md:mt-8 mx-auto flex flex-col items-center gap-1.5 rounded-full px-4 py-2.5 sm:px-5 sm:py-3 cursor-pointer touch-manipulation"
         style={{
-          background:
-            "linear-gradient(180deg, #fff6d2 0%, #f0d56e 18%, #d4a82a 45%, #a67a18 72%, #6b4a0c 100%)",
+          background: HERO_BUTTON_METALLIC,
           boxShadow:
             "0 10px 28px -10px rgba(0,0,0,0.75), 0 0 0 1px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,252,230,0.9), inset 0 -2px 6px rgba(40,22,0,0.35)",
         }}

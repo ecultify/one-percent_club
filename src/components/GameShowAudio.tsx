@@ -7,7 +7,30 @@ import { useNarration } from "./NarrationProvider";
 const THEME_SRC = encodeURI("/sound/The 1 Club Theme Tune - Twin Petes (1).mp3");
 
 const VOL_NORMAL = 0.42;
-const VO_DUCK = 0.09;
+/** BGM while host voice is requested but not on the bus yet (TTS fetch, or gap after pause). */
+const VO_DUCK_INTENT = 0.1;
+/** BGM when host TTS/VO is actually playing — duck a little more so dialogue stays clear. */
+const VO_DUCK_SPEAKING = 0.055;
+
+/**
+ * One shared HTMLAudioElement for the game-show bed for the whole app lifetime.
+ * Creating a new `Audio()` per mount (and especially after cleanup `src = ""`) can
+ * leave multiple decoded streams / elements in a bad state; on tab return, retry
+ * logic + a second `play()` then stacks two loops. A singleton prevents that.
+ */
+let gameShowThemeSingleton: HTMLAudioElement | null = null;
+function getGameShowThemeElement(): HTMLAudioElement {
+  if (typeof window === "undefined") {
+    throw new Error("getGameShowThemeElement is browser-only");
+  }
+  if (!gameShowThemeSingleton) {
+    const el = new Audio(THEME_SRC);
+    el.loop = true;
+    el.preload = "auto";
+    gameShowThemeSingleton = el;
+  }
+  return gameShowThemeSingleton;
+}
 
 type GameShowAudioProps = {
   /** When true, theme can play (still respects video suppression). */
@@ -32,7 +55,7 @@ export default function GameShowAudio({
   suppressForVideo,
   onThemeUnlockReady,
 }: GameShowAudioProps) {
-  const { isSpeaking } = useNarration();
+  const { isSpeaking, hostVoiceDucksBgm } = useNarration();
   const ref = useRef<HTMLAudioElement | null>(null);
   /** True after audible autoplay succeeded OR after a successful gesture unlock. */
   const themeAudibleRef = useRef(false);
@@ -44,6 +67,10 @@ export default function GameShowAudio({
   /** Latest props for gesture / unlock paths (avoid stale closures). */
   const playBgmRef = useRef(playBgm);
   const suppressRef = useRef(suppressForVideo);
+  const isSpeakingRef = useRef(isSpeaking);
+  const hostVoiceDucksBgmRef = useRef(hostVoiceDucksBgm);
+  const syncBgmRef = useRef<() => void>(() => {});
+
   /** User gestured while theme was disallowed — promote to audible once policy allows. */
   const pendingGestureUnlockRef = useRef(false);
 
@@ -51,6 +78,11 @@ export default function GameShowAudio({
     playBgmRef.current = playBgm;
     suppressRef.current = suppressForVideo;
   }, [playBgm, suppressForVideo]);
+
+  useEffect(() => {
+    isSpeakingRef.current = isSpeaking;
+    hostVoiceDucksBgmRef.current = hostVoiceDucksBgm;
+  }, [isSpeaking, hostVoiceDucksBgm]);
 
   const unlockAudible = useCallback(() => {
     const el = ref.current;
@@ -89,8 +121,6 @@ export default function GameShowAudio({
       void el.play().catch(() => {});
     };
 
-    
-
     const hangGuard = window.setTimeout(settleFail, 4000);
 
     const p = el.play();
@@ -110,17 +140,10 @@ export default function GameShowAudio({
     }
   }, []);
 
-  // Create the Audio node on first client render so useLayoutEffect can play immediately.
-  if (typeof window !== "undefined" && !ref.current) {
-    const el = new Audio(THEME_SRC);
-    el.loop = true;
-    el.preload = "auto";
-    ref.current = el;
-  }
-
   // First paint: attempt **audible** autoplay before user touches anything.
   useLayoutEffect(() => {
-    const el = ref.current;
+    const el = ref.current ?? getGameShowThemeElement();
+    ref.current = el;
     if (!el) return;
 
     el.muted = false;
@@ -144,24 +167,73 @@ export default function GameShowAudio({
       finish(true);
     }
   }, []);
-  
+
+  const applyBgmState = useCallback(() => {
+    const el = ref.current ?? getGameShowThemeElement();
+    ref.current = el;
+    if (!el) return;
+
+    const allow = playBgm && !suppressForVideo;
+
+    if (allow && pendingGestureUnlockRef.current && !themeAudibleRef.current) {
+      pendingGestureUnlockRef.current = false;
+      queueMicrotask(() => {
+        unlockAudible();
+      });
+      return;
+    }
+
+    if (!allow) {
+      el.pause();
+      return;
+    }
+
+    // Tab in background: never stack play() on top of a still-running background decode.
+    if (typeof document !== "undefined" && document.hidden) {
+      el.pause();
+      return;
+    }
+
+    if (!autoplaySettled) return;
+
+    if (!themeAudibleRef.current) {
+      el.muted = true;
+      el.volume = 0;
+      void el.play().catch(() => {});
+      return;
+    }
+
+    el.muted = false;
+    const duck = hostVoiceDucksBgmRef.current;
+    const speaking = isSpeakingRef.current;
+    el.volume = duck
+      ? speaking
+        ? VO_DUCK_SPEAKING
+        : VO_DUCK_INTENT
+      : VOL_NORMAL;
+
+    // Idempotent: avoid redundant play() storms when many listeners fire on focus/visibility.
+    if (el.paused) {
+      void el.play().catch(() => {});
+    }
+  }, [playBgm, suppressForVideo, autoplaySettled, unlockAudible]);
+
+  syncBgmRef.current = applyBgmState;
 
   useEffect(() => {
     onThemeUnlockReady?.(unlockAudible);
-    const el = ref.current;
+  }, [onThemeUnlockReady, unlockAudible]);
+
+  // Do NOT `src = ""` or drop the singleton — that can orphan a playing decode and the next
+  // remount + play() stacks a second track. Only pause; element stays the single shared node.
+  useEffect(() => {
     return () => {
+      const el = ref.current;
       if (el) {
         el.pause();
-        try {
-          el.src = "";
-        } catch {
-          /* ignore */
-        }
       }
-      ref.current = null;
-      themeAudibleRef.current = false;
     };
-  }, [onThemeUnlockReady, unlockAudible]);
+  }, []);
 
   useEffect(() => {
     return registerSecondaryAudioUnlock(() => {
@@ -187,60 +259,40 @@ export default function GameShowAudio({
     };
   }, [unlockAudible]);
 
+  /** When the tab is hidden, pause the bed. When visible again, one sync (no double play). */
   useEffect(() => {
-    if (typeof window === "undefined" || typeof document === "undefined") return;
-    const retry = () => {
-      const el = ref.current;
-      if (!el) return;
-      if (el.paused) {
-        void el.play().catch(() => {});
-      }
-    };
+    if (typeof document === "undefined") return;
+
     const onVis = () => {
-      if (document.visibilityState === "visible") retry();
+      if (document.visibilityState === "hidden") {
+        const el = ref.current;
+        if (el) {
+          el.pause();
+        }
+        return;
+      }
+      requestAnimationFrame(() => {
+        syncBgmRef.current();
+      });
     };
+
     document.addEventListener("visibilitychange", onVis);
-    window.addEventListener("focus", retry);
-    window.addEventListener("pageshow", retry);
     return () => {
       document.removeEventListener("visibilitychange", onVis);
-      window.removeEventListener("focus", retry);
-      window.removeEventListener("pageshow", retry);
     };
   }, []);
 
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-
-    const allow = playBgm && !suppressForVideo;
-
-    if (allow && pendingGestureUnlockRef.current && !themeAudibleRef.current) {
-      pendingGestureUnlockRef.current = false;
-      queueMicrotask(() => {
-        unlockAudible();
-      });
-      return;
-    }
-
-    if (!allow) {
-      el.pause();
-      return;
-    }
-
-    if (!autoplaySettled) return;
-
-    if (!themeAudibleRef.current) {
-      el.muted = true;
-      el.volume = 0;
-      void el.play().catch(() => {});
-      return;
-    }
-
-    el.muted = false;
-    el.volume = isSpeaking ? VO_DUCK : VOL_NORMAL;
-    void el.play().catch(() => {});
-  }, [playBgm, suppressForVideo, isSpeaking, playbackNonce, autoplaySettled, unlockAudible]);
+    applyBgmState();
+  }, [
+    playBgm,
+    suppressForVideo,
+    isSpeaking,
+    hostVoiceDucksBgm,
+    playbackNonce,
+    autoplaySettled,
+    applyBgmState,
+  ]);
 
   return null;
 }

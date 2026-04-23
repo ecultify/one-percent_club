@@ -23,6 +23,12 @@ interface NarrationContextValue {
   prefetchTts: (key: string, text: string) => Promise<void>;
   prefetchAudioUrl: (src: string) => Promise<void>;
   isSpeaking: boolean;
+  /**
+   * True for the full host narration lifecycle (TTS/VO load + playback). Game-show BGM
+   * should stay ducked the whole time — not only on `isSpeaking`, which misses fetch gaps
+   * and the initial `pause()` before `play()`.
+   */
+  hostVoiceDucksBgm: boolean;
 }
 
 const NarrationContext = createContext<NarrationContextValue | null>(null);
@@ -85,6 +91,7 @@ async function getBlobUrlCached(cacheKey: string, text: string): Promise<string>
 export function NarrationProvider({ children }: { children: ReactNode }) {
   const [muted, setMuted] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [hostVoiceDucksBgm, setHostVoiceDucksBgm] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const unlockedRef = useRef(false);
@@ -132,6 +139,7 @@ export function NarrationProvider({ children }: { children: ReactNode }) {
       } catch {}
     }
     setIsSpeaking(false);
+    setHostVoiceDucksBgm(false);
   }, []);
 
   const unlock = useCallback((): Promise<void> => {
@@ -209,6 +217,7 @@ export function NarrationProvider({ children }: { children: ReactNode }) {
           } catch {}
         }
         setIsSpeaking(false);
+        setHostVoiceDucksBgm(false);
       }
       return next;
     });
@@ -221,6 +230,7 @@ export function NarrationProvider({ children }: { children: ReactNode }) {
     if (!a) return;
 
     const mySeq = ++seqRef.current;
+    setHostVoiceDucksBgm(true);
 
     a.pause();
     try {
@@ -233,7 +243,10 @@ export function NarrationProvider({ children }: { children: ReactNode }) {
       const url = await getBlobUrlCached(cacheKey, text);
 
       if (mySeq !== seqRef.current) return;
-      if (mutedRef.current) return;
+      if (mutedRef.current) {
+        setHostVoiceDucksBgm(false);
+        return;
+      }
 
       a.src = url;
 
@@ -244,11 +257,13 @@ export function NarrationProvider({ children }: { children: ReactNode }) {
         };
         const onEnded = () => {
           if (mySeq === seqRef.current) {
+            setHostVoiceDucksBgm(false);
             cleanup();
             resolve();
           }
         };
         const onError = () => {
+          if (mySeq === seqRef.current) setHostVoiceDucksBgm(false);
           cleanup();
           resolve();
         };
@@ -270,12 +285,14 @@ export function NarrationProvider({ children }: { children: ReactNode }) {
           clearInterval(watchdog);
           cleanup();
           setIsSpeaking(false);
+          if (mySeq === seqRef.current) setHostVoiceDucksBgm(false);
           resolve();
         });
       });
     } catch (err) {
       console.warn("[narrate] failed:", err);
       setIsSpeaking(false);
+      if (mySeq === seqRef.current) setHostVoiceDucksBgm(false);
     }
   }, []);
 
@@ -285,6 +302,7 @@ export function NarrationProvider({ children }: { children: ReactNode }) {
     if (!a) return;
 
     const mySeq = ++seqRef.current;
+    setHostVoiceDucksBgm(true);
 
     a.pause();
     try {
@@ -292,7 +310,10 @@ export function NarrationProvider({ children }: { children: ReactNode }) {
     } catch {}
 
     if (mySeq !== seqRef.current) return;
-    if (mutedRef.current) return;
+    if (mutedRef.current) {
+      setHostVoiceDucksBgm(false);
+      return;
+    }
 
     a.src = src;
 
@@ -303,11 +324,13 @@ export function NarrationProvider({ children }: { children: ReactNode }) {
       };
       const onEnded = () => {
         if (mySeq === seqRef.current) {
+          setHostVoiceDucksBgm(false);
           cleanup();
           resolve();
         }
       };
       const onError = () => {
+        if (mySeq === seqRef.current) setHostVoiceDucksBgm(false);
         cleanup();
         resolve();
       };
@@ -329,6 +352,7 @@ export function NarrationProvider({ children }: { children: ReactNode }) {
         clearInterval(watchdog);
         cleanup();
         setIsSpeaking(false);
+        if (mySeq === seqRef.current) setHostVoiceDucksBgm(false);
         resolve();
       });
     });
@@ -345,8 +369,20 @@ export function NarrationProvider({ children }: { children: ReactNode }) {
       prefetchTts,
       prefetchAudioUrl,
       isSpeaking,
+      hostVoiceDucksBgm,
     }),
-    [muted, toggleMute, narrate, narrateUrl, stop, unlock, prefetchTts, prefetchAudioUrl, isSpeaking],
+    [
+      muted,
+      toggleMute,
+      narrate,
+      narrateUrl,
+      stop,
+      unlock,
+      prefetchTts,
+      prefetchAudioUrl,
+      isSpeaking,
+      hostVoiceDucksBgm,
+    ],
   );
 
   return <NarrationContext.Provider value={value}>{children}</NarrationContext.Provider>;
