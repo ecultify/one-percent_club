@@ -39,9 +39,12 @@ export async function GET(req: NextRequest) {
             text,
             model_id: TTS_MODEL_ID,
             voice_settings: {
-              stability: 0.55,
-              similarity_boost: 0.8,
-              style: 0.25,
+              // Tuned for name pronunciation consistency.
+              // Requested: speed 0.88, stability 50%, similarity high, style 19%.
+              speed: 0.88,
+              stability: 0.5,
+              similarity_boost: 1.0,
+              style: 0.19,
               use_speaker_boost: true,
             },
           }),

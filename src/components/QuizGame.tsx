@@ -16,7 +16,8 @@ const SFX_WRONG = encodeURI("/sound/131657__bertrof__game-sound-wrong.wav");
 /** Bed for the live countdown (clip is ~30s; looped so it covers the full 30s limit). */
 const SFX_QUESTION_TIMER = encodeURI("/sound/ITV's _ The 1 club - 30 Second Timer.mp3");
 const SFX_APPLAUSE = encodeURI("/sound/appluase2.wav");
-const ENDING_VO_SRC = encodeURI("/questionscreenimages/endingVO.mp3");
+const ENDING_VO_ALL_CORRECT = encodeURI("/questionscreenimages/endingvoallcorrect.mp3");
+const ENDING_VO_IF_EVEN_ONE_WRONG = encodeURI("/questionscreenimages/endingvoifevenonewrong.mp3");
 /** ~2s VO: plays once when **13s** remain (3s before the last-10s tick SFX). */
 const TIMER_VO_SRC = encodeURI("/sound/timerVO.mp3");
 
@@ -1286,7 +1287,7 @@ function FinalResult({
 }) {
   const isWinner = correctCount === totalQuestions;
   const shareOfPot = isWinner ? Math.round(potPrize / Math.max(remainingPlayers, 1)) : 0;
-  const endingVoPlayedRef = useRef(false);
+  const endingVoPlayedRef = useRef<"all-correct" | "one-wrong" | null>(null);
 
   useEffect(() => {
     if (!isWinner || muted) return;
@@ -1306,9 +1307,10 @@ function FinalResult({
 
   useEffect(() => {
     if (muted) return;
-    if (endingVoPlayedRef.current) return;
-    endingVoPlayedRef.current = true;
-    const a = new Audio(ENDING_VO_SRC);
+    const variant: "all-correct" | "one-wrong" = isWinner ? "all-correct" : "one-wrong";
+    if (endingVoPlayedRef.current === variant) return;
+    endingVoPlayedRef.current = variant;
+    const a = new Audio(isWinner ? ENDING_VO_ALL_CORRECT : ENDING_VO_IF_EVEN_ONE_WRONG);
     a.volume = 0.85;
     void a.play().catch(() => {});
     return () => {
@@ -1320,7 +1322,7 @@ function FinalResult({
         /* ignore */
       }
     };
-  }, [muted]);
+  }, [muted, isWinner]);
 
   return (
     <motion.div
