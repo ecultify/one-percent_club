@@ -361,9 +361,8 @@ export default function EliminationReveal({
       initial={{ scale: 0.5, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
       transition={{ type: "spring", bounce: 0.4, delay: 0.3 }}
-      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--success)]/10 border border-[var(--success)]/30"
+      className="flex items-center justify-center gap-0 px-3 py-1.5 rounded-full bg-[var(--success)]/10 border border-[var(--success)]/30"
     >
-      <div className="w-1.5 h-1.5 rounded-full bg-[var(--success)] shadow-[0_0_6px_rgba(67,181,129,0.6)]" />
       <span className="text-[var(--success)] text-[10px] font-semibold uppercase tracking-wider">Survived</span>
     </motion.div>
   ) : (
@@ -371,9 +370,8 @@ export default function EliminationReveal({
       initial={{ scale: 0.5, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
       transition={{ type: "spring", bounce: 0.4, delay: 0.3 }}
-      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--danger)]/10 border border-[var(--danger)]/30"
+      className="flex items-center justify-center gap-0 px-3 py-1.5 rounded-full bg-[var(--danger)]/10 border border-[var(--danger)]/30"
     >
-      <div className="w-1.5 h-1.5 rounded-full bg-[var(--danger)] shadow-[0_0_6px_rgba(232,72,85,0.6)]" />
       <span className="text-[var(--danger)] text-[10px] font-semibold uppercase tracking-wider">Eliminated</span>
     </motion.div>
   );
@@ -401,9 +399,10 @@ export default function EliminationReveal({
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.32, ease: EASE_OUT }}
-          className="mt-4 text-center font-mono text-[10px] uppercase tracking-[0.32em] text-[var(--danger)]/85"
+          className="mt-4 text-center font-mono text-sm sm:text-base font-bold uppercase tracking-[0.22em] leading-snug"
         >
-          {eliminated} eliminated this round
+          <span className="text-[var(--danger)] tabular-nums font-semibold">{eliminated}</span>
+          <span className="text-white"> eliminated this round</span>
         </motion.p>
       )}
     </motion.div>
@@ -425,7 +424,7 @@ export default function EliminationReveal({
         >
           {animatedEliminated}
         </motion.span>
-        <p className="font-mono text-[10px] uppercase tracking-[0.26em] text-[var(--danger)]/75 mt-2">
+        <p className="font-mono text-[10px] uppercase tracking-[0.26em] text-white font-bold mt-2 opacity-90">
           Eliminated this round
         </p>
       </div>
@@ -447,7 +446,7 @@ export default function EliminationReveal({
           <p className="font-mono text-2xl md:text-3xl font-bold text-foreground tabular-nums">
             {animatedRemaining}
           </p>
-          <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-muted mt-1">Still standing</p>
+          <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-white/88 font-semibold mt-1">Still standing</p>
         </div>
       </div>
       <div className="relative p-4 rounded-xl overflow-hidden border-2 border-brass/50 bg-brass/[0.1] shadow-[0_0_24px_rgba(196,160,53,0.14)]">
@@ -458,7 +457,7 @@ export default function EliminationReveal({
           <p className="font-mono text-2xl md:text-3xl font-bold text-brass-bright tabular-nums">
             {formatRupees(animatedPot)}
           </p>
-          <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-brass-dim mt-1">In the pot</p>
+          <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-white/80 font-semibold mt-1">In the pot</p>
         </div>
       </div>
     </motion.div>
@@ -490,11 +489,11 @@ export default function EliminationReveal({
     >
       <div className="flex items-center gap-2.5">
         <div className="w-8 h-8 rounded-lg bg-brass/15 border-2 border-brass/35 flex items-center justify-center shadow-[0_0_12px_rgba(196,160,53,0.2)]">
-          <span className="font-display text-[11px] text-brass-bright">Q{questionNumber}</span>
+          <span className="font-display text-[11px] font-semibold text-brass-bright">Q{questionNumber}</span>
         </div>
         <div>
-          <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-brass-dim/90">After round</p>
-          <p className="text-xs text-foreground/80 font-mono font-medium">{percentage}% question</p>
+          <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-white/90 font-semibold">After round</p>
+          <p className="text-xs text-foreground/90 font-mono font-semibold">{percentage}% question</p>
         </div>
       </div>
       {statusChip}
@@ -519,11 +518,11 @@ export default function EliminationReveal({
             >
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-lg bg-brass/15 border-2 border-brass/35 flex items-center justify-center shadow-[0_0_12px_rgba(196,160,53,0.2)]">
-                  <span className="font-display text-xs text-brass-bright">Q{questionNumber}</span>
+                  <span className="font-display text-xs font-semibold text-brass-bright">Q{questionNumber}</span>
                 </div>
                 <div>
-                  <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-brass-dim/90">After round</p>
-                  <p className="text-xs text-foreground/80 font-mono font-medium">{percentage}% question</p>
+                  <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-white/90 font-semibold">After round</p>
+                  <p className="text-xs text-foreground/90 font-mono font-semibold">{percentage}% question</p>
                 </div>
               </div>
 
@@ -532,9 +531,8 @@ export default function EliminationReveal({
                   initial={{ scale: 0.5, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ type: "spring", bounce: 0.4, delay: 0.3 }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--success)]/8 border border-[var(--success)]/20"
+                  className="flex items-center justify-center gap-0 px-3 py-1.5 rounded-full bg-[var(--success)]/8 border border-[var(--success)]/20"
                 >
-                  <div className="w-1.5 h-1.5 rounded-full bg-[var(--success)] shadow-[0_0_6px_rgba(67,181,129,0.6)]" />
                   <span className="text-[var(--success)] text-[10px] font-semibold uppercase tracking-wider">Survived</span>
                 </motion.div>
               ) : (
@@ -542,9 +540,8 @@ export default function EliminationReveal({
                   initial={{ scale: 0.5, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ type: "spring", bounce: 0.4, delay: 0.3 }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--danger)]/8 border border-[var(--danger)]/20"
+                  className="flex items-center justify-center gap-0 px-3 py-1.5 rounded-full bg-[var(--danger)]/8 border border-[var(--danger)]/20"
                 >
-                  <div className="w-1.5 h-1.5 rounded-full bg-[var(--danger)] shadow-[0_0_6px_rgba(232,72,85,0.6)]" />
                   <span className="text-[var(--danger)] text-[10px] font-semibold uppercase tracking-wider">Eliminated</span>
                 </motion.div>
               )}
@@ -582,7 +579,7 @@ export default function EliminationReveal({
                 >
                   {animatedEliminated}
                 </motion.span>
-                <span className="text-[var(--danger)]/40 text-[10px] uppercase tracking-[0.2em]">
+                <span className="text-white font-bold text-[10px] uppercase tracking-[0.2em]">
                   eliminated this round
                 </span>
               </div>
@@ -604,7 +601,7 @@ export default function EliminationReveal({
                   <p className="font-mono text-2xl font-bold text-foreground tabular-nums">
                     {animatedRemaining}
                   </p>
-                  <p className="font-mono text-[8px] uppercase tracking-[0.22em] text-muted mt-0.5">Still standing</p>
+                  <p className="font-mono text-[8px] uppercase tracking-[0.22em] text-white/88 font-semibold mt-0.5">Still standing</p>
                 </div>
               </div>
 
@@ -616,7 +613,7 @@ export default function EliminationReveal({
                   <p className="font-mono text-2xl font-bold text-brass-bright tabular-nums">
                     {formatRupees(animatedPot)}
                   </p>
-                  <p className="font-mono text-[8px] uppercase tracking-[0.22em] text-brass-dim mt-0.5">In the pot</p>
+                  <p className="font-mono text-[8px] uppercase tracking-[0.22em] text-white/80 font-semibold mt-0.5">In the pot</p>
                 </div>
               </div>
             </motion.div>

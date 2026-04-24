@@ -29,10 +29,12 @@ interface QuestionScreenProps {
   remainingPlayers: number;
   totalPlayers: number;
   playerName: string;
-  onAnswer: (index: number) => void;
+  onAnswer: (index: number, typedAnswer?: string) => void | Promise<void>;
   onTimeUp: () => void;
   /** When ~3s remain before the last-10s tick SFX (13s left on a full round). */
   onTimerVoCue?: () => void;
+  /** Notifies when async text/number validation is in progress (stops parent timer SFX). */
+  onAnswerValidationPendingChange?: (pending: boolean) => void;
   answered: boolean;
   selectedAnswer: number | null;
   isCorrect: boolean;
@@ -42,6 +44,19 @@ interface QuestionScreenProps {
 }
 
 const OPTION_LABELS = ["A", "B", "C", "D"];
+
+/** Skip bottom caption when it only repeats the corner letter (e.g. Q4 "A"/"B"/"C"). */
+function isRedundantLetterCaption(caption: string, optionIndex: number): boolean {
+  const label = OPTION_LABELS[optionIndex];
+  if (!label) return false;
+  return caption.trim().toUpperCase() === label.toUpperCase();
+}
+
+function correctAnswerLabel(q: Question): string {
+  if (q.textInput && q.correctAnswerText) return q.correctAnswerText;
+  if (q.numberInput && q.correctNumber !== undefined) return String(q.correctNumber);
+  return q.options[q.correctIndex] ?? "—";
+}
 
 function answerChromeStyles(
   i: number,
@@ -309,14 +324,23 @@ export default function QuestionScreen({
   onAnswer,
   onTimeUp,
   onTimerVoCue,
+  onAnswerValidationPendingChange,
   answered,
   selectedAnswer,
   isCorrect,
   paused = false,
   afterRoundOverlay,
 }: QuestionScreenProps) {
+  const isThreeImageOptions =
+    question.imagesAreOptions === true &&
+    question.images?.length === 3 &&
+    !question.compactImageRow;
+
   const [timeLeft, setTimeLeft] = useState(question.timeLimit);
   const [selected, setSelected] = useState<number | null>(null);
+  const [textInputValue, setTextInputValue] = useState("");
+  const [numberInputValue, setNumberInputValue] = useState("");
+  const [answerChecking, setAnswerChecking] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasCalledTimeUp = useRef(false);
   const tickAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -328,14 +352,24 @@ export default function QuestionScreen({
   }, [questionNumber, question.id]);
 
   useEffect(() => {
+    onAnswerValidationPendingChange?.(answerChecking);
+  }, [answerChecking, onAnswerValidationPendingChange]);
+
+  useEffect(() => {
+    return () => {
+      onAnswerValidationPendingChange?.(false);
+    };
+  }, [onAnswerValidationPendingChange]);
+
+  useEffect(() => {
     if (!onTimerVoCue) return;
-    if (answered || paused) return;
+    if (answered || paused || answerChecking) return;
     if (question.timeLimit < TIMER_VO_CUE_AT_REMAINING) return;
     if (timeLeft !== TIMER_VO_CUE_AT_REMAINING) return;
     if (timerVoCueFiredRef.current) return;
     timerVoCueFiredRef.current = true;
     onTimerVoCue();
-  }, [timeLeft, answered, paused, onTimerVoCue, question.timeLimit, question.id]);
+  }, [timeLeft, answered, paused, answerChecking, onTimerVoCue, question.timeLimit, question.id]);
 
   const stopTickSound = useCallback(() => {
     const a = tickAudioRef.current;
@@ -349,7 +383,7 @@ export default function QuestionScreen({
   }, []);
 
   useEffect(() => {
-    if (narrationMuted || answered || paused) {
+    if (narrationMuted || answered || paused || answerChecking) {
       stopTickSound();
       return;
     }
@@ -365,10 +399,10 @@ export default function QuestionScreen({
     return () => {
       stopTickSound();
     };
-  }, [timeLeft, narrationMuted, answered, paused, stopTickSound]);
+  }, [timeLeft, narrationMuted, answered, paused, answerChecking, stopTickSound]);
 
   useEffect(() => {
-    if (answered || paused) {
+    if (answered || paused || answerChecking) {
       if (intervalRef.current) clearInterval(intervalRef.current);
       return;
     }
@@ -387,7 +421,7 @@ export default function QuestionScreen({
       });
     }, 1000);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [answered, onTimeUp, paused]);
+  }, [answered, onTimeUp, paused, answerChecking]);
 
   const handleSelect = useCallback(
     (index: number) => {
@@ -399,6 +433,39 @@ export default function QuestionScreen({
     },
     [answered, selected, onAnswer, paused, stopTickSound],
   );
+
+  const submitTextOrNumber = useCallback(
+    async (typed: string) => {
+      if (answered || paused || answerChecking) return;
+      const t = typed.trim();
+      if (!t) return;
+      stopTickSound();
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      setAnswerChecking(true);
+      try {
+        await Promise.resolve(onAnswer(0, t));
+      } finally {
+        setAnswerChecking(false);
+      }
+    },
+    [answered, paused, answerChecking, onAnswer, stopTickSound],
+  );
+
+  const handleTextSubmit = useCallback(() => {
+    void submitTextOrNumber(textInputValue);
+  }, [submitTextOrNumber, textInputValue]);
+
+  const handleNumberChange = useCallback(
+    (raw: string, maxDigits: number) => {
+      const digits = raw.replace(/\D/g, "").slice(0, maxDigits);
+      setNumberInputValue(digits);
+    },
+    [],
+  );
+
+  const handleNumberSubmit = useCallback(() => {
+    void submitTextOrNumber(numberInputValue);
+  }, [submitTextOrNumber, numberInputValue]);
 
   return (
     <motion.div
@@ -793,8 +860,8 @@ export default function QuestionScreen({
                       transition={{ delay: 0.3, duration: 0.45, ease: EASE_OUT }}
                       className="relative w-full flex justify-center"
                     >
-                      {/* 1a. Single image — Q2 (cards vs glasses), Q7 (shirt) */}
-                      {question.image && !question.images && !question.labelGlyphs && (
+                      {/* 1a. Single image — not shown here when numberInput+image (see numberInput block) */}
+                      {question.image && !question.images && !question.labelGlyphs && !question.numberInput && (
                         <div
                           className="relative rounded-xl p-[2.5px] overflow-hidden"
                           style={{
@@ -819,17 +886,22 @@ export default function QuestionScreen({
                               under each tile in a small mono label. */}
                       {question.images && (
                         <div
-                          className="w-full overflow-x-auto"
+                          className={isThreeImageOptions ? "w-full" : "w-full overflow-x-auto"}
                           data-tour-id={question.imagesAreOptions ? "options-area" : undefined}
                         >
                           <div
                             className={
-                              (question.compactImageRow
-                                ? "flex flex-nowrap items-stretch justify-center gap-2 sm:gap-2.5 w-full min-w-0"
-                                : "flex flex-nowrap md:flex-wrap items-stretch justify-center gap-2.5 md:gap-3 min-w-max md:min-w-0") +
-                              (question.imagesAreOptions
-                                ? " pt-3.5 pl-2.5 pr-1 sm:pt-4 sm:pl-3 md:pt-4 md:pl-3.5"
-                                : "")
+                              question.compactImageRow
+                                ? "flex flex-nowrap items-stretch justify-center gap-2 sm:gap-2.5 w-full min-w-0" +
+                                    (question.imagesAreOptions
+                                      ? " pt-3.5 pl-2.5 pr-1 sm:pt-4 sm:pl-3 md:pt-4 md:pl-3.5"
+                                      : "")
+                                : isThreeImageOptions
+                                  ? "grid grid-cols-2 md:grid-cols-3 w-full max-w-4xl mx-auto gap-2.5 md:gap-3 items-stretch justify-items-center pt-3.5 px-1 sm:pt-4 sm:px-2"
+                                  : "flex flex-nowrap md:flex-wrap items-stretch justify-center gap-2.5 md:gap-3 min-w-max md:min-w-0" +
+                                    (question.imagesAreOptions
+                                      ? " pt-3.5 pl-2.5 pr-1 sm:pt-4 sm:pl-3 md:pt-4 md:pl-3.5"
+                                      : "")
                             }
                           >
                             {question.images.map((src, i) => {
@@ -838,7 +910,9 @@ export default function QuestionScreen({
                                   answerChromeStyles(i, question, selected, selectedAnswer, answered);
                                 const imgH = question.compactImageRow
                                   ? "h-[92px] sm:h-[108px] md:h-[120px] w-auto max-w-[min(22vw,120px)] md:max-w-[min(20vw,140px)]"
-                                  : "h-[236px] sm:h-[252px] md:h-[300px] lg:h-[320px] w-auto max-w-[min(34vw,200px)] md:max-w-[min(30vw,280px)]";
+                                  : isThreeImageOptions
+                                    ? "h-[180px] sm:h-[200px] md:h-[220px] w-full max-w-[min(32vw,220px)] object-contain rounded"
+                                    : "h-[236px] sm:h-[252px] md:h-[300px] lg:h-[320px] w-auto max-w-[min(34vw,200px)] md:max-w-[min(30vw,280px)]";
                                 return (
                                   <motion.button
                                     key={`${src}-${i}`}
@@ -848,7 +922,11 @@ export default function QuestionScreen({
                                     transition={{ delay: 0.3 + i * 0.06, duration: 0.4, ease: EASE_OUT }}
                                     onClick={() => handleSelect(i)}
                                     disabled={answered || selected !== null || paused}
-                                    className={`relative group flex-shrink-0 border-0 bg-transparent p-0 appearance-none text-left ${
+                                    className={`relative group border-0 bg-transparent p-0 appearance-none text-left ${
+                                      isThreeImageOptions
+                                        ? "w-full max-w-[240px] justify-self-center"
+                                        : "flex-shrink-0"
+                                    } ${
                                       !answered && selected === null && !paused
                                         ? "cursor-pointer hover:-translate-y-0.5"
                                         : "cursor-not-allowed"
@@ -878,9 +956,14 @@ export default function QuestionScreen({
                                           className={`${imgH} object-contain rounded`}
                                           draggable={false}
                                         />
-                                        {question.imageCaptions?.[i] && (
+                                        {question.imageCaptions?.[i] &&
+                                          !isRedundantLetterCaption(question.imageCaptions[i], i) && (
                                           <span
-                                            className="font-mono text-[9px] md:text-[10px] uppercase tracking-[0.25em] font-bold px-1.5 py-0.5 rounded"
+                                            className={
+                                              isThreeImageOptions
+                                                ? "font-mono text-[9px] md:text-[10px] normal-case font-bold tracking-wide px-1.5 py-0.5 rounded"
+                                                : "font-mono text-[9px] md:text-[10px] uppercase tracking-[0.25em] font-bold px-1.5 py-0.5 rounded"
+                                            }
                                             style={{
                                               color: "#e7cf6a",
                                               background: "rgba(0,0,0,0.55)",
@@ -1087,8 +1170,145 @@ export default function QuestionScreen({
                     </motion.div>
                   )}
 
-                  {/* Options row — hidden when images are the answers (Q3). */}
-                  {!question.imagesAreOptions && (
+                  {/* Typed answer — Q1, Q3 (text) or Q5, Q7 (number) */}
+                  {question.textInput && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.34, duration: 0.45, ease: EASE_OUT }}
+                      className="relative w-full flex flex-col gap-3 sm:flex-row sm:items-stretch sm:justify-center sm:gap-4"
+                      data-tour-id="options-area"
+                    >
+                      <div
+                        className="relative flex-1 min-w-0 max-w-md mx-auto sm:mx-0 rounded-lg overflow-hidden p-[2px]"
+                        style={{
+                          background: METALLIC_RIM_GRADIENT,
+                          boxShadow: `0 0 18px ${GOLD_GLOW}, 0 10px 28px -12px rgba(0,0,0,0.7)`,
+                        }}
+                      >
+                        <input
+                          type="text"
+                          className="w-full min-h-[48px] md:min-h-[54px] rounded-[7px] border-0 bg-[rgba(6,4,2,0.92)] px-3.5 py-2.5 md:px-4 text-center text-xs md:text-sm font-bold tracking-[0.04em] outline-none"
+                          style={{
+                            color: GOLD_BRIGHT,
+                            boxShadow:
+                              "inset 0 1px 0 rgba(255,245,210,0.06), inset 0 -1px 0 rgba(0,0,0,0.55), inset 0 0 24px rgba(0,0,0,0.45)",
+                          }}
+                          placeholder="Type your answer here..."
+                          value={textInputValue}
+                          onChange={(e) => setTextInputValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleTextSubmit();
+                            }
+                          }}
+                          disabled={answered || paused || answerChecking}
+                          autoComplete="off"
+                        />
+                      </div>
+                      <motion.button
+                        type="button"
+                        onClick={handleTextSubmit}
+                        disabled={!textInputValue.trim() || answered || paused || answerChecking}
+                        whileHover={textInputValue.trim() && !answered && !paused && !answerChecking ? { scale: 1.02 } : undefined}
+                        whileTap={textInputValue.trim() && !answered && !paused && !answerChecking ? { scale: 0.97 } : undefined}
+                        className={`game-show-btn relative z-0 shrink-0 cursor-pointer rounded-xl px-8 py-3 text-center text-[12px] font-semibold uppercase tracking-[0.2em] min-h-[48px] md:min-h-[54px] ${
+                          !textInputValue.trim() || answered || paused || answerChecking ? "opacity-50 pointer-events-none" : ""
+                        } ${answerChecking ? "animate-pulse" : ""}`}
+                      >
+                        <span className="relative z-10">{answerChecking ? "Checking…" : "Submit"}</span>
+                      </motion.button>
+                    </motion.div>
+                  )}
+
+                  {question.numberInput && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.34, duration: 0.45, ease: EASE_OUT }}
+                      className="relative w-full flex flex-col gap-3 items-center"
+                      data-tour-id="options-area"
+                    >
+                      {question.image && (
+                        <div className="relative w-full flex justify-center">
+                          <div
+                            className="relative rounded-xl p-[2.5px] overflow-hidden"
+                            style={{
+                              background: METALLIC_RIM_GRADIENT,
+                              boxShadow:
+                                "0 0 24px -4px rgba(228,207,106,0.35), 0 10px 28px -14px rgba(0,0,0,0.7)",
+                            }}
+                          >
+                            <div
+                              className={`relative rounded-[10px] bg-black/70 flex items-center justify-center ${
+                                question.id === 7 ? "p-1.5 md:p-2" : "p-2 md:p-3"
+                              }`}
+                            >
+                              <img
+                                src={question.image}
+                                alt="question media"
+                                className={
+                                  question.id === 7
+                                    ? "max-h-48 md:max-h-56 w-auto object-contain rounded-md"
+                                    : "max-h-[180px] md:max-h-[220px] w-auto object-contain rounded-md"
+                                }
+                                draggable={false}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      <div className="flex w-full max-w-2xl flex-col gap-3 sm:flex-row sm:items-stretch sm:justify-center sm:gap-4">
+                      <div
+                        className="relative flex-1 min-w-0 max-w-xs mx-auto sm:mx-0 rounded-lg overflow-hidden p-[2px] flex justify-center"
+                        style={{
+                          background: METALLIC_RIM_GRADIENT,
+                          boxShadow: `0 0 18px ${GOLD_GLOW}, 0 10px 28px -12px rgba(0,0,0,0.7)`,
+                        }}
+                      >
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          className={`min-h-[48px] md:min-h-[54px] rounded-[7px] border-0 bg-[rgba(6,4,2,0.92)] px-3.5 py-2.5 text-center text-sm md:text-base font-bold tabular-nums outline-none ${
+                            (question.maxDigits ?? 1) >= 2 ? "w-28" : "w-20"
+                          }`}
+                          style={{
+                            color: GOLD_BRIGHT,
+                            boxShadow:
+                              "inset 0 1px 0 rgba(255,245,210,0.06), inset 0 -1px 0 rgba(0,0,0,0.55), inset 0 0 24px rgba(0,0,0,0.45)",
+                          }}
+                          value={numberInputValue}
+                          onChange={(e) => handleNumberChange(e.target.value, question.maxDigits ?? 2)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleNumberSubmit();
+                            }
+                          }}
+                          disabled={answered || paused || answerChecking}
+                          autoComplete="off"
+                        />
+                      </div>
+                      <motion.button
+                        type="button"
+                        onClick={handleNumberSubmit}
+                        disabled={!numberInputValue.trim() || answered || paused || answerChecking}
+                        whileHover={numberInputValue.trim() && !answered && !paused && !answerChecking ? { scale: 1.02 } : undefined}
+                        whileTap={numberInputValue.trim() && !answered && !paused && !answerChecking ? { scale: 0.97 } : undefined}
+                        className={`game-show-btn relative z-0 shrink-0 cursor-pointer rounded-xl px-8 py-3 text-center text-[12px] font-semibold uppercase tracking-[0.2em] min-h-[48px] md:min-h-[54px] ${
+                          !numberInputValue.trim() || answered || paused || answerChecking ? "opacity-50 pointer-events-none" : ""
+                        } ${answerChecking ? "animate-pulse" : ""}`}
+                      >
+                        <span className="relative z-10">{answerChecking ? "Checking…" : "Submit"}</span>
+                      </motion.button>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* Options row — hidden when images are the answers, or text/number input. */}
+                  {!question.imagesAreOptions && !question.textInput && !question.numberInput && question.options.length > 0 && (
                   <div
                     className={`${question.options.length === 3 ? "grid grid-cols-3" : "grid grid-cols-4"} gap-3 md:gap-4`}
                     data-tour-id="options-area"
@@ -1213,7 +1433,7 @@ export default function QuestionScreen({
                           {!question.acceptAny && (
                             <>
                               {" "}The answer was{" "}
-                              <span className="text-brass-bright font-semibold">{question.options[question.correctIndex]}</span>
+                              <span className="text-brass-bright font-semibold">{correctAnswerLabel(question)}</span>
                             </>
                           )}
                         </p>
@@ -1233,7 +1453,7 @@ export default function QuestionScreen({
                       <div className="rounded-lg border border-red-500/60 bg-red-950/70 backdrop-blur-sm px-4 py-2 text-center shadow-[0_0_20px_rgba(217,74,92,0.25)]">
                         <p className="text-red-200/95 text-xs md:text-sm font-medium">
                           Not quite. It was{" "}
-                          <span className="text-brass-bright font-semibold">{question.options[question.correctIndex]}</span>
+                          <span className="text-brass-bright font-semibold">{correctAnswerLabel(question)}</span>
                         </p>
                       </div>
                     )}

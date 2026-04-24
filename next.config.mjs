@@ -10,7 +10,7 @@ const nextConfig = {
       {
         source: "/teaser-video.mp4",
         destination:
-          "https://ecultify.com/wp-content/uploads/2026/04/1-Teaser-Final-Video.mp4",
+          "https://ecultify.com/wp-content/uploads/2026/04/1-Teaser-New-Script.aep_1.mp4",
       },
     ];
   },

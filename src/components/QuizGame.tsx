@@ -11,22 +11,9 @@ import HostSilhouette from "./HostSilhouette";
 import FadeWipe from "./FadeWipe";
 import { useVideoAutoplay } from "@/lib/useVideoAutoplay";
 
-const Q1_RX = "/questionrxns/question1";
-
-const QUESTION_INTRO_FILES = [
-  "1stquestion",
-  "2ndquestion",
-  "3rdquestion",
-  "4thquestion",
-  "5thquestion",
-  "6thquestion",
-  "7thquestion",
-  "8thquestion",
-] as const;
-
 const SFX_CORRECT = encodeURI("/sound/644963__craigscottuk__quiz-gameshow-correct-ping-14.mp3");
 const SFX_WRONG = encodeURI("/sound/131657__bertrof__game-sound-wrong.wav");
-/** Bed for the live countdown (clip is ~30s; looped so it covers the full 45s limit). */
+/** Bed for the live countdown (clip is ~30s; looped so it covers the full 30s limit). */
 const SFX_QUESTION_TIMER = encodeURI("/sound/ITV's _ The 1 club - 30 Second Timer.mp3");
 /** ~2s VO: plays once when **13s** remain (3s before the last-10s tick SFX). */
 const TIMER_VO_SRC = encodeURI("/sound/timerVO.mp3");
@@ -36,6 +23,48 @@ function playQuizSfx(kind: "correct" | "wrong", muted: boolean) {
   const a = new Audio(kind === "correct" ? SFX_CORRECT : SFX_WRONG);
   a.volume = kind === "correct" ? 0.72 : 0.55;
   void a.play().catch(() => {});
+}
+
+async function checkAnswerWithOpenAI(
+  userAnswer: string,
+  correctAnswer: string,
+  question: string
+): Promise<boolean> {
+  try {
+    const res = await fetch("/api/check-answer-ai", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userAnswer, correctAnswer, question }),
+    });
+    if (!res.ok) return true;
+    const data = await res.json();
+    return data.isCorrect === true;
+  } catch {
+    return true;
+  }
+}
+
+function questionIntroVideoSrc(questionIndex: number): string {
+  return `/questionscreenimages/question${questionIndex + 1}/q${questionIndex + 1}intro.mp4`;
+}
+
+function questionVoSrc(questionId: number): string {
+  return `/questionscreenimages/question${questionId}/q${questionId}VO.mp3`;
+}
+
+function correctReactionSrc(questionIndex: number): string {
+  return `/questionscreenimages/question${questionIndex + 1}/q${questionIndex + 1}correct.mp4`;
+}
+
+function pickWrongReactionUrl(questionIndex: number): string {
+  if (questionIndex === 7) {
+    return "/questionscreenimages/wrongrxns/1percent.mp4";
+  }
+  const templates = [
+    "/questionscreenimages/wrongrxns/qwrong1.mp4",
+    "/questionscreenimages/wrongrxns/qwrong2.mp4",
+  ];
+  return templates[Math.floor(Math.random() * templates.length)];
 }
 
 const TOUR_STEPS: TourStep[] = [
@@ -89,53 +118,6 @@ const TOUR_STEPS: TourStep[] = [
   },
 ];
 
-/**
- * Builds the question narration that plays ON the question screen
- * immediately after the intro video ends. Designed to feel like the
- * host is STILL talking — no "Sawaal number X" restarts, no formal
- * restart. Witty openers per question keep the game-show energy alive.
- */
-/** Pre-recorded VO in `public/sound/q{N}VO.mp3` (sync with QUESTIONS ids). */
-function questionVoSrc(id: number): string | null {
-  if (id >= 1 && id <= 8) return `/sound/q${id}VO.mp3`;
-  return null;
-}
-
-function buildQuestionNarration(q: Question): string {
-  const labels = ["A", "B", "C", "D"];
-  const optionsText = q.imagesAreOptions
-    ? "Tap the photograph you mean."
-    : q.options.map((opt, i) => `Option ${labels[i]}: ${opt}.`).join(" ");
-
-  // Per-question witty Hinglish opener — picks up the thread of the intro video.
-  const openers: Record<number, string> = {
-    1: "Toh pehla sawaal — zara dhyaan se dekho. Chaar animals hain screen par — Bat, Cricket, Cock, Duck.",
-    2: "Chaliye, ek picture puzzle. Ginna shuroo kijiye.",
-    3: "Ab zara ghor se dekhiye. Teen photographs — Gandhiji ki. Lekin ek mein kuchh gadbad hai.",
-    4: "Pattern recognition ka waqt. Shabdon ki line dhyaan se dekhiye — Hot, Hard, Small, Cold, Easy, aur phir ek question mark.",
-    5: "Chaar words. Chaar mein se teen ek pattern follow karte hain, ek nahin. Sochiye kaunsa.",
-    6: "Chaar vehicles screen par hain, alphabetical order mein. Unhe passenger capacity ke hisaab se kam-se-zyaada rearrange kijiye.",
-    7: "Kyaal se sochiye. Calendar logic. Satmohan ki lucky shirt kab aati hai pehan mein?",
-    8: "Aur… lo, aa gaya woh aakhri sawaal. Letters ko ulta padh ke dekhiye.",
-  };
-
-  const closers: Record<number, string> = {
-    1: "Aasaan lag raha hai? Jaldi kijiye.",
-    2: "Paanch second lagayenge ya das? Samay shuru.",
-    3: "Thoda ajeeb lagega, par jawaab aapki aankhon ke saamne hai.",
-    4: "Pattern dikha? Ab answer chuniye.",
-    5: "Simple hai. Par galat bhi ho sakta hai. Clock chal raha hai.",
-    6: "Dimaag ki map chalaaiye. Chaliye.",
-    7: "Pehla Friday kaunsa hai? Ginna shuru.",
-    8: "Dhyaan se. Bahut dhyaan se. Clock chalu.",
-  };
-
-  const opener = openers[q.id] ?? "Toh…";
-  const closer = closers[q.id] ?? "Aapka samay shuru hota hai, ab.";
-
-  return `${opener} ${q.question} ${optionsText} ${closer}`;
-}
-
 // ── Types ──
 export interface LabelGlyph {
   /** Letter label rendered on the tile ("A", "B", "C", "D") */
@@ -175,6 +157,19 @@ export interface Question {
   /** If true, ANY selected option is treated as correct. Used for subjective /
    *  trick questions (e.g. Q3 — "which Gandhi photo can't be real"). */
   acceptAny?: boolean;
+  /** If true, renders a text input instead of options. Answer validated via
+   *  OpenAI semantic check. */
+  textInput?: boolean;
+  /** If true, renders a number-only input constrained to maxDigits. Answer
+   *  validated as exact numeric match against correctNumber. */
+  numberInput?: boolean;
+  /** Maximum digits allowed in numberInput. */
+  maxDigits?: number;
+  /** Expected numeric answer when numberInput is true. */
+  correctNumber?: number;
+  /** Correct answer text sent to OpenAI for semantic matching when
+   *  textInput is true. */
+  correctAnswerText?: string;
 }
 
 export interface GameState {
@@ -184,6 +179,7 @@ export interface GameState {
   potPrize: number;
   stakePerPlayer: number;
   playerAnswers: (number | null)[];
+  playerAnswerTexts: (string | null)[];
   playerCorrect: boolean[];
   eliminatedThisRound: number[];
   phase: "question-intro" | "question" | "answered" | "elimination" | "final-result";
@@ -194,79 +190,89 @@ const QUESTIONS: Question[] = [
   {
     id: 1,
     percentage: 90,
-    // Q1 — four animal tiles above the question. User picks which tile(s)
-    // share their name with a sport. Correct text-option is "B" (Cricket).
-    question: "Which of these animals share their name with a sport?",
-    labelGlyphs: [
-      { letter: "A", caption: "Bat" },
-      { letter: "B", caption: "Cricket" },
-      { letter: "C", caption: "Cock" },
-      { letter: "D", caption: "Duck" },
-    ],
-    options: ["AB", "BC", "DA", "B"],
-    correctIndex: 3, // D — the lone "B", i.e. just Cricket
-    timeLimit: 45,
+    // Q1 — "Find the mistake" video question. The intro video IS the
+    // question — it shows "Can you find the mistake? 1 2 3 4 5 6 7 8 9"
+    // with the article 'the' written twice. User types what they spotted.
+    // Correct answer: the word "the" is doubled.
+    question: "Can you find the mistake in the video?",
+    image: "/questionscreenimages/question1/q1image.png",
+    textInput: true,
+    correctAnswerText: "The word 'the' appears twice / the article 'the' is doubled / 'the the' is written repeated",
+    options: [],
+    correctIndex: 0,
+    timeLimit: 30,
   },
   {
     id: 2,
     percentage: 80,
-    // Q2 — single group image (cards vs. glasses). User counts and picks.
-    question: "Count carefully — which are there more of in the picture?",
-    image: "/questionscreenimages/question2/question2group-ezremove.png",
-    options: ["Cards", "Glasses", "Both are equal"],
-    correctIndex: 0, // A — Cards
-    timeLimit: 45,
+    // Q2 — Which photo cannot be real? Three photo options: fake giraffe
+    // (answer), tiger, zebra. User clicks one image.
+    question: "Which of these photographs cannot be real?",
+    images: [
+      "/questionscreenimages/question2/q2fakegiraffe.png",
+      "/questionscreenimages/question2/q2tiger.png",
+      "/questionscreenimages/question2/q2zebra.png",
+    ],
+    imageCaptions: ["Giraffe", "Tiger", "Zebra"],
+    imagesAreOptions: true,
+    options: ["Photo 1", "Photo 2", "Photo 3"],
+    correctIndex: 0,
+    timeLimit: 30,
   },
   {
     id: 3,
     percentage: 70,
-    // Q3 — 3 Gandhi photos in a row, one is anachronistic (mobile phone).
-    // Subjective — any answer is accepted so we don't penalise observers.
-    question: "Which photograph of Gandhiji cannot be real?",
-    images: [
-      "/questionscreenimages/question3/gandhjiaccurate1-ezremove.png",
-      "/questionscreenimages/question3/gandhijiinaccurate-ezremove.png",
-      "/questionscreenimages/question3/gandhjiaccurate2-ezremove.png",
-    ],
-    imageCaptions: ["1", "2", "3"],
-    imagesAreOptions: true,
-    options: ["Photo 1", "Photo 2", "Photo 3"],
-    correctIndex: 1,
-    acceptAny: true,
-    timeLimit: 45,
+    // Q3 — Word play: Earth has Heart (anagram), Mars has ARMS (anagram).
+    // Question image shown above the text input. User types answer.
+    // OpenAI semantic check — accepts "ARMS", "arm", "arms", etc.
+    question: "If planet 'Earth' has a 'Heart', which body part does planet 'Mars' have?",
+    image: "/questionscreenimages/question3/q3.png",
+    textInput: true,
+    correctAnswerText: "ARMS (anagram of MARS — the letters of the word Mars rearranged spell Arms)",
+    options: [],
+    correctIndex: 0,
+    timeLimit: 30,
   },
   {
     id: 4,
     percentage: 60,
-    // Q4 — word-pair pattern. The sequence "Hot, Hard, Small, Cold, Easy, ?"
-    // renders as a dedicated chip row (wordSequence) between question and
-    // options. Only 3 options per the screenshot. Correct = A. Big.
-    question: "What replaces the question mark in this sequence?",
-    wordSequence: ["Hot", "Hard", "Small", "Cold", "Easy", "?"],
-    options: ["Big", "Fast", "Slow"],
-    correctIndex: 0, // A — Big
-    timeLimit: 45,
+    // Q4 — Biggest SQUARE out of three shapes. User clicks one image.
+    // Correct answer: index 0 (first image is the actual square).
+    question: "Which SQUARE has the biggest total area?",
+    images: [
+      "/questionscreenimages/question4/q4image1.png",
+      "/questionscreenimages/question4/q4image2.png",
+      "/questionscreenimages/question4/q4image3.png",
+    ],
+    imageCaptions: ["A", "B", "C"],
+    imagesAreOptions: true,
+    options: ["A", "B", "C"],
+    correctIndex: 0,
+    timeLimit: 30,
   },
   {
     id: 5,
     percentage: 50,
-    // Q5 — word puzzle. Remove 1st letter → 4-letter word. Remove new 1st
-    // letter → 3-letter word. STONE→TONE→ONE ✓, CHAIR→HAIR→AIR ✓,
-    // GRATE→RATE→ATE ✓, PINCH→INCH→NCH ✗. Odd one out = PINCH.
-    question:
-      "Remove the first letter to get a 4-letter word, then remove the new first letter to get a 3-letter word. Which word does NOT follow the pattern?",
-    options: ["STONE", "CHAIR", "GRATE", "PINCH"],
-    correctIndex: 3, // D — PINCH
-    timeLimit: 45,
+    // Q5 — Number grid puzzle. Image shows shapes with numbers 12, 30, 18, ?
+    // User types missing number (2-digit max). Correct answer: 16.
+    question: "Which number replaces the question mark?",
+    image: "/questionscreenimages/question5/q5image.png",
+    numberInput: true,
+    maxDigits: 2,
+    correctNumber: 16,
+    options: [],
+    correctIndex: 0,
+    timeLimit: 30,
   },
   {
     id: 6,
     percentage: 30,
-    // Q6 — transport ordering (autorickshaw, bus, cycle, local train).
-    // Four modes shown alphabetically; user rearranges by passenger count
-    // (low → high) and reports how many stay in the same position.
-    question:
-      "Four modes of transport are arranged below alphabetically. If you rearrange them from lowest to highest by the number of passengers they typically carry, how many will stay in the same place?",
+    // Q6 — Transport rearrangement (MOVED from previous Q7 slot).
+    // Four transport modes shown alphabetically. User counts how many stay
+    // in the same position when rearranged by passenger count low→high.
+    // Correct answer: index 0 ("1") — only Local train stays in the same
+    // position (low→high: Cycle, Autorickshaw, Bus, Local train = pos. 3,1,2,4).
+    question: "Four modes of transport are arranged below alphabetically. If you rearrange them from lowest to highest by the number of passengers they typically carry, how many will stay in the same place?",
     images: [
       "/questionscreenimages/question6/auto-ezremove.png",
       "/questionscreenimages/question6/bus-ezremove.png",
@@ -276,38 +282,36 @@ const QUESTIONS: Question[] = [
     imageCaptions: ["Autorickshaw", "Bus", "Cycle", "Local train"],
     compactImageRow: true,
     options: ["1", "2", "3"],
-    correctIndex: 1, // B — exactly 2 stay in place
-    timeLimit: 45,
+    correctIndex: 0,
+    timeLimit: 30,
   },
   {
     id: 7,
     percentage: 10,
-    // Q7 — Satmohan shirt / calendar logic puzzle.
-    question:
-      "Satmohan wears his lucky shirt on the first Friday of every month. If the first day of May is a Thursday, when does he next wear it?",
-    image: "/questionscreenimages/question7/shirt-ezremove.png",
-    options: [
-      "Thursday 1st May",
-      "Saturday 3rd May",
-      "Friday 2nd May",
-      "Monday 5th May",
-    ],
-    correctIndex: 2, // C — Friday 2nd May
-    timeLimit: 45,
+    // Q7 — Larry the Llama (NEW question in this slot).
+    // Larry always LIES. Claims: behind even door, door < 6, door is
+    // multiple of 3. All three are lies, so real door is: ODD, >= 6,
+    // NOT a multiple of 3. From 1-10, only door 7 fits all three constraints.
+    // User types a single digit. Correct answer: 7.
+    question: "Larry the llama ALWAYS lies. He's hiding behind one of 10 doors (1-10). Larry says: 'I'm behind an EVEN door, my door is SMALLER than 6, and my door is a MULTIPLE of 3.' Which door is Larry really behind?",
+    image: "/questionscreenimages/question7/q7image.png",
+    numberInput: true,
+    maxDigits: 1,
+    correctNumber: 7,
+    options: [],
+    correctIndex: 0,
+    timeLimit: 30,
   },
   {
     id: 8,
     percentage: 1,
-    // Q8 — TNECREPE is "ONE PERCENT" reversed, truncated to first 8 letters.
-    // Appending "NO" gives the full reversal: TNECREPENO → ONEPERCENT.
-    // wordPuzzle renders the letters in a large dedicated block so the
-    // reversed phrase reads at a glance.
-    question:
-      "TNECREPE is the beginning of a reversed phrase. Which two letters complete it?",
+    // Q8 — TNECREPE (unchanged content, only timer updated to 30s and
+    // asset paths rewired in Part 3 below).
+    question: "TNECREPE is the beginning of a reversed phrase. Which two letters complete it?",
     wordPuzzle: "TNECREPE _ _",
     options: ["RC", "AR", "NO", "TE"],
-    correctIndex: 2, // C — NO (completes ONE PERCENT reversed)
-    timeLimit: 45,
+    correctIndex: 2,
+    timeLimit: 30,
   },
 ];
 
@@ -390,6 +394,7 @@ export default function QuizGame({
     potPrize: 0,
     stakePerPlayer: 100000, // ₹1 lakh per player → 100 × 1L = ₹1Cr total
     playerAnswers: [],
+    playerAnswerTexts: [],
     playerCorrect: [],
     eliminatedThisRound: [],
     // Start in "question" so QuestionScreen mounts immediately and the
@@ -413,6 +418,8 @@ export default function QuizGame({
 
   // Reaction video overlay state
   const [reactionVideo, setReactionVideo] = useState<"correct" | "wrong" | "winner" | null>(null);
+  /** Picked when showing a wrong reaction; stable URL for the clip (Q1–Q7 random, Q8 fixed). */
+  const wrongReactionUrlRef = useRef<string | null>(null);
   const pendingEliminationRef = useRef<{ eliminated: number; addedToPot: number } | null>(null);
   const { narrate, narrateUrl, stop, muted } = useNarration();
 
@@ -436,6 +443,8 @@ export default function QuizGame({
   // "aapka samay shuru hota hai ab" before the clock starts ticking.
   // Default to TRUE so the timer never has a frame where paused=false on mount.
   const [narratingQuestion, setNarratingQuestion] = useState(true);
+  /** True while a text-answer is being checked via API (prevents timer bed overlap). */
+  const [answerValidationPending, setAnswerValidationPending] = useState(false);
 
   useEffect(() => {
     if (tourState !== "done") return;
@@ -449,9 +458,7 @@ export default function QuizGame({
     const delayId = window.setTimeout(() => {
       if (cancelled) return;
       const vo = questionVoSrc(q.id);
-      const done = vo
-        ? narrateUrl(`q-${q.id}-vo`, vo)
-        : narrate(`q-${q.id}`, buildQuestionNarration(q));
+      const done = narrateUrl(`q-${q.id}-vo`, vo);
       void done.then(() => {
         if (!cancelled) setNarratingQuestion(false);
       });
@@ -518,14 +525,6 @@ export default function QuizGame({
     }
   }, [gameState.phase, gameState.currentQuestion, tourState]);
 
-  /** Q1 intro is 10s; transition (fade/wipe) at 7s — do not wait for full clip. */
-  useEffect(() => {
-    if (gameState.phase !== "question-intro" || tourState !== "done") return;
-    if (gameState.currentQuestion !== 0) return;
-    const id = window.setTimeout(() => handleQuestionIntroEnd(), 7000);
-    return () => clearTimeout(id);
-  }, [gameState.phase, gameState.currentQuestion, tourState, handleQuestionIntroEnd]);
-
   // Narrate the ready-gate prompt once when it opens
   useEffect(() => {
     if (tourState === "ready-gate") {
@@ -541,10 +540,29 @@ export default function QuizGame({
   const currentQ = QUESTIONS[gameState.currentQuestion];
   const isLastQ = gameState.currentQuestion >= QUESTIONS.length - 1;
 
-  const handleAnswer = useCallback((selectedIndex: number) => {
+  const handleAnswer = useCallback(async (selectedIndex: number, typedAnswer?: string) => {
     const q = QUESTIONS[gameState.currentQuestion];
-    // acceptAny = subjective / trick question → any chosen answer counts as correct.
-    const isCorrect = q.acceptAny ? true : selectedIndex === q.correctIndex;
+    let isCorrect: boolean;
+
+    if (q.textInput) {
+      if (typedAnswer === undefined) isCorrect = false;
+      else isCorrect = await checkAnswerWithOpenAI(
+        typedAnswer,
+        q.correctAnswerText ?? "",
+        q.question
+      );
+    } else if (q.numberInput) {
+      if (typedAnswer === undefined) isCorrect = false;
+      else {
+        const typed = parseInt(typedAnswer.trim(), 10);
+        isCorrect = !Number.isNaN(typed) && typed === q.correctNumber;
+      }
+    } else if (q.acceptAny) {
+      isCorrect = true;
+    } else {
+      isCorrect = selectedIndex === q.correctIndex;
+    }
+
     const lastQ = gameState.currentQuestion >= QUESTIONS.length - 1;
     const eliminated = simulateEliminations(q.percentage, gameState.remainingPlayers, lastQ);
     const addedToPot = eliminated * gameState.stakePerPlayer;
@@ -553,6 +571,7 @@ export default function QuizGame({
       ...prev,
       phase: "answered",
       playerAnswers: [...prev.playerAnswers, selectedIndex],
+      playerAnswerTexts: [...prev.playerAnswerTexts, typedAnswer !== undefined ? typedAnswer : null],
       playerCorrect: [...prev.playerCorrect, isCorrect],
     }));
 
@@ -564,7 +583,14 @@ export default function QuizGame({
     const reaction: "winner" | "correct" | "wrong" =
       isCorrect && lastQ ? "winner" : isCorrect ? "correct" : "wrong";
     setTimeout(() => {
-      runWipeThen(() => setReactionVideo(reaction));
+      runWipeThen(() => {
+        if (reaction === "wrong") {
+          wrongReactionUrlRef.current = pickWrongReactionUrl(gameState.currentQuestion);
+        } else {
+          wrongReactionUrlRef.current = null;
+        }
+        setReactionVideo(reaction);
+      });
     }, 2000);
   }, [gameState.currentQuestion, gameState.remainingPlayers, gameState.stakePerPlayer, stop, runWipeThen, muted]);
 
@@ -578,6 +604,7 @@ export default function QuizGame({
       ...prev,
       phase: "answered",
       playerAnswers: [...prev.playerAnswers, null],
+      playerAnswerTexts: [...prev.playerAnswerTexts, null],
       playerCorrect: [...prev.playerCorrect, false],
     }));
 
@@ -587,11 +614,15 @@ export default function QuizGame({
     stop();
     pendingEliminationRef.current = { eliminated, addedToPot };
     setTimeout(() => {
-      runWipeThen(() => setReactionVideo("wrong"));
+      runWipeThen(() => {
+        wrongReactionUrlRef.current = pickWrongReactionUrl(gameState.currentQuestion);
+        setReactionVideo("wrong");
+      });
     }, 2000);
   }, [gameState.currentQuestion, gameState.remainingPlayers, gameState.stakePerPlayer, stop, runWipeThen, muted]);
 
   const handleReactionVideoEnd = useCallback(() => {
+    wrongReactionUrlRef.current = null;
     const pending = pendingEliminationRef.current;
     pendingEliminationRef.current = null;
     // Wipe from reaction video back to the question screen with elimination overlay
@@ -641,21 +672,11 @@ export default function QuizGame({
   const reactionVideoSrc =
     reactionVideo == null
       ? null
-      : (() => {
-          const qIdx = gameState.currentQuestion;
-          if (qIdx === 0) {
-            if (reactionVideo === "correct") return `${Q1_RX}/q1correctvid.mp4`;
-            if (reactionVideo === "wrong") return `${Q1_RX}/q1wrongvid.mp4`;
-          }
-          if (reactionVideo === "correct") return "/reaction-correct.mp4";
-          if (reactionVideo === "wrong") return "/reaction-wrong.mp4";
-          return "/reaction-winner.mp4";
-        })();
+      : (reactionVideo === "correct" || reactionVideo === "winner")
+        ? correctReactionSrc(gameState.currentQuestion)
+        : wrongReactionUrlRef.current;
 
-  const questionIntroVideoSrc =
-    gameState.currentQuestion === 0
-      ? `${Q1_RX}/q1introvid.mp4`
-      : `/questionvideos/${QUESTION_INTRO_FILES[gameState.currentQuestion]}.mp4`;
+  const introVideoSrc = questionIntroVideoSrc(gameState.currentQuestion);
 
   // Hide the floating mute button whenever a full-screen video overlay is on,
   // otherwise it stacks on top of the video's own "Skip ▸" button bottom-right.
@@ -684,12 +705,13 @@ export default function QuizGame({
    *  question screen (not intro video / elimination / answered), the host has
    *  finished narrating the question, and no full-screen video overlay is up.
    *  This is the window in which the ITV timer bed plays (looped) and the
-   *  background theme is paused. Question `timeLimit` is 45s. */
+   *  background theme is paused. Question `timeLimit` is 30s. */
   const questionTimerActive =
     tourState === "done" &&
     gameState.phase === "question" &&
     !narratingQuestion &&
-    !videoOverlayActive;
+    !videoOverlayActive &&
+    !answerValidationPending;
 
   // Surface this flag upward so GameFlow can suppress the theme music.
   useEffect(() => {
@@ -770,15 +792,15 @@ export default function QuizGame({
           >
             <video
               ref={introVideoRef}
-              key={questionIntroVideoSrc}
+              key={introVideoSrc}
               className="w-full h-full object-cover"
               autoPlay
               playsInline
               preload="auto"
               muted={muted}
-              onEnded={gameState.currentQuestion === 0 ? undefined : handleQuestionIntroEnd}
+              onEnded={handleQuestionIntroEnd}
               onError={handleQuestionIntroEnd}
-              src={questionIntroVideoSrc}
+              src={introVideoSrc}
             />
             <button
               onClick={handleQuestionIntroEnd}
@@ -962,6 +984,7 @@ export default function QuizGame({
             onAnswer={handleAnswer}
             onTimeUp={handleTimeUp}
             onTimerVoCue={playTimerVoCue}
+            onAnswerValidationPendingChange={setAnswerValidationPending}
             answered={gameState.phase === "answered" || gameState.phase === "elimination"}
             selectedAnswer={gameState.playerAnswers[gameState.currentQuestion] ?? null}
             isCorrect={gameState.playerCorrect[gameState.currentQuestion] ?? false}

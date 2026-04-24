@@ -3,7 +3,9 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence, useScroll, useMotionValueEvent } from "framer-motion";
-import UserDetailsModal from "./UserDetailsModal";
+import UserDetailsModal, { type QuizSet } from "./UserDetailsModal";
+import MuteButton from "./MuteButton";
+import { METALLIC_RIM_GRADIENT, PANEL_INNER_FILL } from "./QuestionScreen";
 import Instructions from "./Instructions";
 import QuizGame from "./QuizGame";
 import ReadyToPlayGate from "./ReadyToPlayGate";
@@ -18,9 +20,9 @@ const Logo3D = dynamic(() => import("./Logo3D"), { ssr: false });
 /** Studio backdrop for registration (details) + instructions — rendered blurred beneath the content. */
 const DETAILS_INSTRUCTIONS_BG = `/questionscreenimages/${encodeURIComponent("Gemini_Generated_Image_i8attui8attui8at-ezremove.png")}`;
 
-/** Teaser that plays after the Start Experience button. Originally hosted on
- *  ecultify.com; served through a Next.js rewrite (see next.config.mjs) so the
- *  browser treats it as same-origin and skips the cross-origin CORS check. */
+/** Teaser that plays after the scrolly canvas / Start Experience. File hosted on
+ *  ecultify.com; requested as `/teaser-video.mp4` and proxied in next.config.mjs so
+ *  playback is same-origin and avoids CORS on `<video>`. */
 const WELCOME_VIDEO_SRC = "/teaser-video.mp4";
 
 const DHAK_SRC = "/sound/dhak.wav";
@@ -48,11 +50,13 @@ type Phase =
   | "welcome-video"    // fullscreen welcome video plays
   | "post-video-gate"  // "Start the game" button — user gesture to unlock audio
   | "details"
+  | "coming-soon"
   | "instructions"
   | "playing";
 
 interface PlayerData {
   name: string;
+  quizSet: QuizSet;
 }
 
 // GPU-accelerated easing curves
@@ -313,12 +317,21 @@ export default function GameFlow() {
   const handleDetailsSubmit = useCallback(
     (data: PlayerData) => {
       setPlayer(data);
+      if (data.quizSet === "B") {
+        setPhase("coming-soon");
+        return;
+      }
       // Warm-cache instructions VO before Instructions mounts.
       void prefetchAudioUrl("/sound/howitworks1percentclub.mp3");
       void unlockAudio().then(() => setPhase("instructions"));
     },
     [unlockAudio, prefetchAudioUrl],
   );
+
+  const handleBackFromComingSoon = useCallback(() => {
+    setPlayer(null);
+    setPhase("details");
+  }, []);
 
   const handleBeginGame = useCallback(() => {
     setPhase("playing");
@@ -343,7 +356,7 @@ export default function GameFlow() {
    *     (muted until gesture, then audible). Pauses only during full-screen videos.
    *   - `details` + `instructions`: theme on; volume ducks while host narrates (`GameShowAudio` + `isSpeaking`).
    *   - `playing`: on for tour / intros; off during question-intro & reaction videos,
-   *     off while the 45s question timer is live (ITV timer MP3), and off from
+   *     off while the 30s question timer is live (ITV timer MP3), and off from
    *     answer lock-in through elimination (stinger + applause) until Next question. */
   const playBgm =
     (phase === "idle" && idleScrollThemeArmed) ||
@@ -352,6 +365,7 @@ export default function GameFlow() {
     phase === "logo-center" ||
     phase === "logo-fly-corner" ||
     phase === "details" ||
+    phase === "coming-soon" ||
     phase === "instructions" ||
     showPostVideoGate ||
     (phase === "playing" && !questionTimerActive && !eliminationSequenceActive);
@@ -371,7 +385,8 @@ export default function GameFlow() {
     const t = setTimeout(() => setVideoOverlayActive(false), 700);
     return () => clearTimeout(t);
   }, [phase, showWelcomeVideo]);
-  const showOverlay = phase === "details" || phase === "instructions" || phase === "playing";
+  const showOverlay =
+    phase === "details" || phase === "coming-soon" || phase === "instructions" || phase === "playing";
   const showLogo =
     phase === "ripple" ||
     phase === "logo-enter" ||
@@ -404,6 +419,7 @@ export default function GameFlow() {
       case "welcome-video":
       case "post-video-gate":
       case "details":
+      case "coming-soon":
       case "instructions":
       case "playing":
         return {
@@ -645,7 +661,7 @@ export default function GameFlow() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.4, ease: EASE_OUT }}
           >
-            {phase === "details" && (
+            {(phase === "details" || phase === "coming-soon") && (
               <>
                 {/* Blurred backdrop — registration only; instructions journey uses solid black in Instructions.tsx */}
                 <img
@@ -677,7 +693,7 @@ export default function GameFlow() {
               />
             )}
 
-            {phase !== "details" && phase !== "instructions" && (
+            {phase === "playing" && (
               <div className="absolute inset-0 z-[2]">
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(90vw,720px)] h-[min(90vw,720px)] rounded-full bg-brass/[0.12] blur-[100px]" />
                 <div
@@ -700,6 +716,49 @@ export default function GameFlow() {
                 className="relative z-10 w-full h-full flex items-center justify-center"
               >
                 <UserDetailsModal onSubmit={handleDetailsSubmit} />
+              </motion.div>
+            )}
+
+            {phase === "coming-soon" && (
+              <motion.div
+                key="coming-soon"
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.1, ease: EASE_OUT }}
+                className="relative z-10 w-full h-full flex items-center justify-center p-4"
+              >
+                <div className="w-full max-w-md mx-4 flex flex-col relative">
+                  <MuteButton />
+                  <div
+                    className="relative overflow-hidden rounded-2xl p-[2.5px] shadow-[0_36px_90px_-28px_rgba(0,0,0,0.72),0_0_28px_-4px_rgba(228,207,106,0.22)]"
+                    style={{ background: METALLIC_RIM_GRADIENT }}
+                  >
+                    <div
+                      className="relative overflow-hidden rounded-[13px] backdrop-blur-sm px-8 py-9 md:px-10 md:py-10 text-center"
+                      style={PANEL_INNER_FILL}
+                    >
+                      <p className="font-mono text-[10px] uppercase tracking-[0.45em] text-brass-dim/90 mb-3">
+                        Set B
+                      </p>
+                      <h2 className="font-display text-2xl md:text-3xl font-semibold text-foreground mb-2">
+                        Coming soon
+                      </h2>
+                      <p className="text-sm text-foreground/70 leading-relaxed mb-8 max-w-sm mx-auto">
+                        This set isn&apos;t available yet. Try Set A to play the current experience, or
+                        return to registration to choose again.
+                      </p>
+                      <motion.button
+                        type="button"
+                        onClick={handleBackFromComingSoon}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        className="game-show-btn relative z-0 w-full cursor-pointer rounded-xl py-4 text-center text-[13px] font-semibold uppercase tracking-[0.2em] text-[#14110a]"
+                      >
+                        <span className="relative z-10">Back to registration</span>
+                      </motion.button>
+                    </div>
+                  </div>
+                </div>
               </motion.div>
             )}
 
