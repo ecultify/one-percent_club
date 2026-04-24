@@ -388,18 +388,36 @@ function createDevChampionInitialState(): GameState {
 function simulateEliminations(
   percentage: number,
   remaining: number,
-  isLastQuestion: boolean
+  isLastQuestion: boolean,
+  playerGotItRight: boolean
 ): number {
+  // ── 1% (final) question only ────────────────────────────────────────────
+  // On the last round `remaining` is tiny — often just the player themselves.
+  // A blind crowd simulation (as used on earlier rounds) would always report
+  // ≥1 eliminated because the fail rate is 99%, which then contradicts the
+  // "Survived" chip when the player answered correctly.
+  // Here we simulate the CROWD only (other players), and add the player's
+  // personal fate separately so the displayed count always agrees with the
+  // Survived / Eliminated chip.
+  if (isLastQuestion) {
+    const others = Math.max(0, remaining - 1);
+    const failRate = (100 - percentage) / 100;
+    const jitter = 0.9 + Math.random() * 0.2;
+    let othersEliminated = Math.round(others * failRate * jitter);
+    othersEliminated = Math.min(othersEliminated, others);
+    return othersEliminated + (playerGotItRight ? 0 : 1);
+  }
+
+  // ── Q1 … Q7 (original crowd simulation, unchanged) ─────────────────────
   // What fraction gets it WRONG
   const failRate = (100 - percentage) / 100;
   // Small variance: ±10% of the fail rate
   const jitter = 0.9 + Math.random() * 0.2;
   let eliminated = Math.round(remaining * failRate * jitter);
 
-  // Clamp: at least 1 eliminated (if there are players), but always keep at least 1 survivor
-  // On the final question, allow eliminating down to 0 (for realism)
-  const minSurvivors = isLastQuestion ? 0 : 1;
-  eliminated = Math.min(eliminated, remaining - minSurvivors);
+  // Clamp: at least 1 eliminated (if there are players), but always keep
+  // at least 1 survivor on non-final rounds.
+  eliminated = Math.min(eliminated, remaining - 1);
   eliminated = Math.max(eliminated, remaining > 1 ? 1 : 0);
 
   return eliminated;
@@ -646,7 +664,7 @@ export default function QuizGame({
     }
 
     const lastQ = gameState.currentQuestion >= QUESTIONS.length - 1;
-    const eliminated = simulateEliminations(q.percentage, gameState.remainingPlayers, lastQ);
+    const eliminated = simulateEliminations(q.percentage, gameState.remainingPlayers, lastQ, isCorrect);
     const addedToPot = eliminated * gameState.stakePerPlayer;
 
     setGameState(prev => ({
@@ -681,7 +699,8 @@ export default function QuizGame({
   const handleTimeUp = useCallback(() => {
     const q = QUESTIONS[gameState.currentQuestion];
     const lastQ = gameState.currentQuestion >= QUESTIONS.length - 1;
-    const eliminated = simulateEliminations(q.percentage, gameState.remainingPlayers, lastQ);
+    // Time-up always counts as wrong → the player is eliminated this round.
+    const eliminated = simulateEliminations(q.percentage, gameState.remainingPlayers, lastQ, false);
     const addedToPot = eliminated * gameState.stakePerPlayer;
 
     setGameState(prev => ({
@@ -1477,4 +1496,3 @@ function FinalResult({
     </motion.div>
   );
 }
-
