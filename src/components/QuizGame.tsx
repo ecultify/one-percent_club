@@ -16,8 +16,22 @@ const SFX_WRONG = encodeURI("/sound/131657__bertrof__game-sound-wrong.wav");
 /** Bed for the live countdown (clip is ~30s; looped so it covers the full 30s limit). */
 const SFX_QUESTION_TIMER = encodeURI("/sound/ITV's _ The 1 club - 30 Second Timer.mp3");
 const SFX_APPLAUSE = encodeURI("/sound/appluase2.wav");
+const ENDING_VO_SRC = encodeURI("/questionscreenimages/endingVO.mp3");
 /** ~2s VO: plays once when **13s** remain (3s before the last-10s tick SFX). */
 const TIMER_VO_SRC = encodeURI("/sound/timerVO.mp3");
+
+function VideoOutroWipe({ active }: { active: boolean }) {
+  return (
+    <motion.div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 z-[5] bg-black"
+      initial={{ opacity: 0, scaleX: 0 }}
+      animate={active ? { opacity: 1, scaleX: 1 } : { opacity: 0, scaleX: 0 }}
+      transition={{ duration: 1, ease: [0.23, 1, 0.32, 1] }}
+      style={{ transformOrigin: "right" }}
+    />
+  );
+}
 
 function playQuizSfx(kind: "correct" | "wrong", muted: boolean) {
   if (muted) return;
@@ -50,6 +64,8 @@ function questionIntroVideoSrc(questionIndex: number): string {
 }
 
 function questionVoSrc(questionId: number): string {
+  if (questionId === 2) return `/questionscreenimages/question2/q2VOrevised.mp3`;
+  if (questionId === 4) return `/questionscreenimages/question4/q4VOrevised.mp3`;
   return `/questionscreenimages/question${questionId}/q${questionId}VO.mp3`;
 }
 
@@ -59,7 +75,7 @@ function correctReactionSrc(questionIndex: number): string {
 
 function pickWrongReactionUrl(questionIndex: number): string {
   if (questionIndex === 7) {
-    return "/questionscreenimages/wrongrxns/1percent.mp4";
+    return "/questionscreenimages/wrongrxns/1percentwrongmodified.mp4";
   }
   const templates = [
     "/questionscreenimages/wrongrxns/qwrong1.mp4",
@@ -482,6 +498,10 @@ export default function QuizGame({
   // was the root cause of "the next video doesn't play sometimes after reload".
   const introVideoRef = useRef<HTMLVideoElement | null>(null);
   const reactionVideoRef = useRef<HTMLVideoElement | null>(null);
+  const [introOutroActive, setIntroOutroActive] = useState(false);
+  const [reactionOutroActive, setReactionOutroActive] = useState(false);
+  const introOutroArmedRef = useRef(false);
+  const reactionOutroArmedRef = useRef(false);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -599,11 +619,19 @@ export default function QuizGame({
 
     if (q.textInput) {
       if (typedAnswer === undefined) isCorrect = false;
-      else isCorrect = await checkAnswerWithOpenAI(
-        typedAnswer,
-        q.correctAnswerText ?? "",
-        q.question
-      );
+      else {
+        const raw = typedAnswer.trim().toLowerCase();
+        // Q1: accept even a bare "the" (user spotted the duplicated article).
+        if (q.id === 1 && /\bthe\b/.test(raw)) {
+          isCorrect = true;
+        } else {
+          isCorrect = await checkAnswerWithOpenAI(
+            typedAnswer,
+            q.correctAnswerText ?? "",
+            q.question
+          );
+        }
+      }
     } else if (q.numberInput) {
       if (typedAnswer === undefined) isCorrect = false;
       else {
@@ -734,6 +762,16 @@ export default function QuizGame({
         : wrongReactionUrlRef.current;
 
   const introVideoSrc = questionIntroVideoSrc(gameState.currentQuestion);
+
+  // Reset the outro wipe whenever a new overlay mounts.
+  useEffect(() => {
+    setIntroOutroActive(false);
+    introOutroArmedRef.current = false;
+  }, [introVideoSrc, gameState.phase, tourState]);
+  useEffect(() => {
+    setReactionOutroActive(false);
+    reactionOutroArmedRef.current = false;
+  }, [reactionVideoSrc]);
 
   // Hide the floating mute button whenever a full-screen video overlay is on,
   // otherwise it stacks on top of the video's own "Skip ▸" button bottom-right.
@@ -921,10 +959,20 @@ export default function QuizGame({
               playsInline
               preload="auto"
               muted={muted}
+              onTimeUpdate={(e) => {
+                if (introOutroArmedRef.current) return;
+                const el = e.currentTarget;
+                if (!Number.isFinite(el.duration) || el.duration <= 0) return;
+                if (el.duration - el.currentTime <= 1.05) {
+                  introOutroArmedRef.current = true;
+                  setIntroOutroActive(true);
+                }
+              }}
               onEnded={handleQuestionIntroEnd}
               onError={handleQuestionIntroEnd}
               src={introVideoSrc}
             />
+            <VideoOutroWipe active={introOutroActive} />
             <button
               onClick={handleQuestionIntroEnd}
               className="absolute bottom-6 right-6 md:bottom-8 md:right-8 z-10 rounded-full bg-black/65 backdrop-blur-md border border-white/15 px-4 py-2 text-[10px] font-mono uppercase tracking-[0.25em] text-foreground/85 hover:text-foreground hover:border-brass/35 hover:bg-black/80 transition-colors"
@@ -954,10 +1002,20 @@ export default function QuizGame({
               playsInline
               preload="auto"
               muted={muted}
+              onTimeUpdate={(e) => {
+                if (reactionOutroArmedRef.current) return;
+                const el = e.currentTarget;
+                if (!Number.isFinite(el.duration) || el.duration <= 0) return;
+                if (el.duration - el.currentTime <= 1.05) {
+                  reactionOutroArmedRef.current = true;
+                  setReactionOutroActive(true);
+                }
+              }}
               onEnded={handleReactionVideoEnd}
               onError={handleReactionVideoEnd}
               src={reactionVideoSrc}
             />
+            <VideoOutroWipe active={reactionOutroActive} />
             {/* Skip button */}
             <button
               onClick={handleSkipReactionVideo}
@@ -1228,6 +1286,7 @@ function FinalResult({
 }) {
   const isWinner = correctCount === totalQuestions;
   const shareOfPot = isWinner ? Math.round(potPrize / Math.max(remainingPlayers, 1)) : 0;
+  const endingVoPlayedRef = useRef(false);
 
   useEffect(() => {
     if (!isWinner || muted) return;
@@ -1244,6 +1303,24 @@ function FinalResult({
       }
     };
   }, [isWinner, muted]);
+
+  useEffect(() => {
+    if (muted) return;
+    if (endingVoPlayedRef.current) return;
+    endingVoPlayedRef.current = true;
+    const a = new Audio(ENDING_VO_SRC);
+    a.volume = 0.85;
+    void a.play().catch(() => {});
+    return () => {
+      a.pause();
+      try {
+        a.currentTime = 0;
+        a.src = "";
+      } catch {
+        /* ignore */
+      }
+    };
+  }, [muted]);
 
   return (
     <motion.div

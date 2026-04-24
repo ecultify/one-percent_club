@@ -641,6 +641,7 @@ export default function Instructions({ playerName, onStart }: InstructionsProps)
   const mountRef = useRef(0);
   /** Full how-it-works MP3 has been started (or suppressed via chapter jump). */
   const howItWorksVoDoneRef = useRef(false);
+  const greetingVoDoneRef = useRef(false);
 
   const chapterLabels = useMemo(() => SCENES.map((s) => s.eyebrow), []);
 
@@ -684,14 +685,36 @@ export default function Instructions({ playerName, onStart }: InstructionsProps)
   );
 
   useEffect(() => {
+    let cancelled = false;
+    clearAllTimers();
+    setSceneIdx(0);
     mountRef.current = Date.now();
     howItWorksVoDoneRef.current = false;
-    scheduleFromScene(0);
+    greetingVoDoneRef.current = false;
+
+    // Gate the auto-timeline: do NOT advance to slide 2 until the greeting finishes
+    // (or is muted/blocked and resolves immediately).
+    const playGreetingThenStartTimeline = async () => {
+      try {
+        const src = `/api/greeting-tts?name=${encodeURIComponent(playerName)}`;
+        await narrateUrl("instructions-greeting", src);
+      } finally {
+        if (cancelled) return;
+        greetingVoDoneRef.current = true;
+        // Start the scene timing *after* the greeting completes so scene 1 doesn't arrive early.
+        mountRef.current = Date.now();
+        scheduleFromScene(0);
+      }
+    };
+
+    void playGreetingThenStartTimeline();
+
     return () => {
+      cancelled = true;
       stop();
       clearAllTimers();
     };
-  }, [stop, scheduleFromScene, clearAllTimers]);
+  }, [playerName, narrateUrl, stop, scheduleFromScene, clearAllTimers]);
 
   // Full how-it-works VO starts when the second slide (index 1) is shown on the auto timeline.
   useEffect(() => {
