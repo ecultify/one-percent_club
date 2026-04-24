@@ -230,7 +230,7 @@ const QUESTIONS: Question[] = [
     // question — it shows "Can you find the mistake? 1 2 3 4 5 6 7 8 9"
     // with the article 'the' written twice. User types what they spotted.
     // Correct answer: the word "the" is doubled.
-    question: "Can you find the mistake in the video?",
+    question: "What is the answer to this question?",
     image: "/questionscreenimages/question1/q1image.png",
     textInput: true,
     correctAnswerText: "The word 'the' appears twice / the article 'the' is doubled / 'the the' is written repeated",
