@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import QuestionScreen from "./QuestionScreen";
 import EliminationReveal from "./EliminationReveal";
@@ -15,6 +15,7 @@ const SFX_CORRECT = encodeURI("/sound/644963__craigscottuk__quiz-gameshow-correc
 const SFX_WRONG = encodeURI("/sound/131657__bertrof__game-sound-wrong.wav");
 /** Bed for the live countdown (clip is ~30s; looped so it covers the full 30s limit). */
 const SFX_QUESTION_TIMER = encodeURI("/sound/ITV's _ The 1 club - 30 Second Timer.mp3");
+const SFX_APPLAUSE = encodeURI("/sound/appluase2.wav");
 /** ~2s VO: plays once when **13s** remain (3s before the last-10s tick SFX). */
 const TIMER_VO_SRC = encodeURI("/sound/timerVO.mp3");
 
@@ -185,6 +186,24 @@ export interface GameState {
   phase: "question-intro" | "question" | "answered" | "elimination" | "final-result";
 }
 
+/** Rewind to the start of the previous round: intro for Q_{n-1}, with economy + answers reverted. */
+function rewindToPreviousRoundStart(prev: GameState): GameState {
+  const c = prev.currentQuestion;
+  if (c < 1) return prev;
+  const elimUndo = prev.eliminatedThisRound[c - 1] ?? 0;
+  return {
+    ...prev,
+    currentQuestion: c - 1,
+    phase: "question-intro",
+    playerAnswers: prev.playerAnswers.slice(0, c - 1),
+    playerAnswerTexts: prev.playerAnswerTexts.slice(0, c - 1),
+    playerCorrect: prev.playerCorrect.slice(0, c - 1),
+    eliminatedThisRound: prev.eliminatedThisRound.slice(0, c - 1),
+    remainingPlayers: prev.remainingPlayers + elimUndo,
+    potPrize: Math.max(0, prev.potPrize - elimUndo * prev.stakePerPlayer),
+  };
+}
+
 // ── Questions (client-provided, 1% Club India edit) ──
 const QUESTIONS: Question[] = [
   {
@@ -315,6 +334,23 @@ const QUESTIONS: Question[] = [
   },
 ];
 
+/** Dev-only: initial `GameState` for the champion final screen (all questions correct). */
+function createDevChampionInitialState(): GameState {
+  const n = QUESTIONS.length;
+  return {
+    currentQuestion: n - 1,
+    totalPlayers: 100,
+    remainingPlayers: 1,
+    potPrize: 100 * 100000,
+    stakePerPlayer: 100000,
+    playerAnswers: Array.from({ length: n }, () => 0),
+    playerAnswerTexts: Array.from({ length: n }, () => null),
+    playerCorrect: Array.from({ length: n }, () => true),
+    eliminatedThisRound: [],
+    phase: "final-result",
+  };
+}
+
 /**
  * Proper 1% Club elimination logic:
  * The percentage represents how many people CAN answer correctly.
@@ -378,16 +414,16 @@ interface QuizGameProps {
   onQuestionTimerActiveChange?: (active: boolean) => void;
   /** True from answer submitted through elimination (until Next question); pauses BGM. */
   onEliminationSequenceActiveChange?: (active: boolean) => void;
+  /** `next dev` only: `GameFlow` sets this to open directly on the perfect-score final result. */
+  devChampionPreview?: boolean;
+  /** Return to the instructions screen (used when the tour is dismissed or the first question is backed out of). */
+  onBackToMenu?: () => void;
+  /** Lets `GameFlow` wire the fixed Back control while `playing` is active. */
+  onRegisterBack?: (handler: (() => void) | null) => void;
 }
 
-export default function QuizGame({
-  playerName,
-  onGameEnd,
-  onVideoOverlayChange,
-  onQuestionTimerActiveChange,
-  onEliminationSequenceActiveChange,
-}: QuizGameProps) {
-  const [gameState, setGameState] = useState<GameState>({
+function getDefaultQuizGameState(): GameState {
+  return {
     currentQuestion: 0,
     totalPlayers: 100,
     remainingPlayers: 100,
@@ -402,7 +438,22 @@ export default function QuizGame({
     // After the tour finishes, handleConfirmReady switches phase to
     // "question-intro" to play the first intro video.
     phase: "question",
-  });
+  };
+}
+
+export default function QuizGame({
+  playerName,
+  onGameEnd,
+  onVideoOverlayChange,
+  onQuestionTimerActiveChange,
+  onEliminationSequenceActiveChange,
+  devChampionPreview = false,
+  onBackToMenu = () => {},
+  onRegisterBack,
+}: QuizGameProps) {
+  const [gameState, setGameState] = useState<GameState>(() =>
+    devChampionPreview ? createDevChampionInitialState() : getDefaultQuizGameState()
+  );
 
   // Right-to-left wipe state — flipped briefly between phase changes
   const [wipeActive, setWipeActive] = useState(false);
@@ -414,13 +465,15 @@ export default function QuizGame({
   //   "done"       = gameplay running
   const [tourState, setTourState] = useState<
     "prompt" | "playing" | "ready-gate" | "done"
-  >("prompt");
+  >(() => (devChampionPreview ? "done" : "prompt"));
 
   // Reaction video overlay state
   const [reactionVideo, setReactionVideo] = useState<"correct" | "wrong" | "winner" | null>(null);
   /** Picked when showing a wrong reaction; stable URL for the clip (Q1–Q7 random, Q8 fixed). */
   const wrongReactionUrlRef = useRef<string | null>(null);
   const pendingEliminationRef = useRef<{ eliminated: number; addedToPot: number } | null>(null);
+  /** Bumped from `handleQuizBack` to cancel the 2s answer→reaction / time-up chain. */
+  const postAnswerChainRef = useRef(0);
   const { narrate, narrateUrl, stop, muted } = useNarration();
 
   // Refs for the two full-screen video overlays. Used by useVideoAutoplay below
@@ -442,7 +495,7 @@ export default function QuizGame({
   // Timer stays PAUSED until narration finishes so players actually hear
   // "aapka samay shuru hota hai ab" before the clock starts ticking.
   // Default to TRUE so the timer never has a frame where paused=false on mount.
-  const [narratingQuestion, setNarratingQuestion] = useState(true);
+  const [narratingQuestion, setNarratingQuestion] = useState(() => !devChampionPreview);
   /** True while a text-answer is being checked via API (prevents timer bed overlap). */
   const [answerValidationPending, setAnswerValidationPending] = useState(false);
 
@@ -582,7 +635,9 @@ export default function QuizGame({
     pendingEliminationRef.current = { eliminated, addedToPot };
     const reaction: "winner" | "correct" | "wrong" =
       isCorrect && lastQ ? "winner" : isCorrect ? "correct" : "wrong";
+    const afterAnswerToken = postAnswerChainRef.current;
     setTimeout(() => {
+      if (postAnswerChainRef.current !== afterAnswerToken) return;
       runWipeThen(() => {
         if (reaction === "wrong") {
           wrongReactionUrlRef.current = pickWrongReactionUrl(gameState.currentQuestion);
@@ -613,7 +668,9 @@ export default function QuizGame({
     // Time up is always "wrong" reaction, same 2s + wipe flow
     stop();
     pendingEliminationRef.current = { eliminated, addedToPot };
+    const timeUpToken = postAnswerChainRef.current;
     setTimeout(() => {
+      if (postAnswerChainRef.current !== timeUpToken) return;
       runWipeThen(() => {
         wrongReactionUrlRef.current = pickWrongReactionUrl(gameState.currentQuestion);
         setReactionVideo("wrong");
@@ -755,6 +812,71 @@ export default function QuizGame({
     };
   }, [questionTimerActive, muted]);
 
+  const handleQuizBack = useCallback(() => {
+    stop();
+    postAnswerChainRef.current += 1;
+    setAnswerValidationPending(false);
+    if (reactionVideo) {
+      handleSkipReactionVideo();
+      return;
+    }
+    if (devChampionPreview) {
+      onBackToMenu();
+      return;
+    }
+    if (tourState === "ready-gate") {
+      setTourState("prompt");
+      return;
+    }
+    if (tourState === "prompt" || tourState === "playing") {
+      onBackToMenu();
+      return;
+    }
+    if (gameState.phase === "final-result") {
+      setGameState((prev) => ({ ...prev, phase: "elimination" }));
+      return;
+    }
+    if (gameState.phase === "elimination") {
+      setGameState((prev) => ({ ...prev, phase: "answered" }));
+      return;
+    }
+    if (gameState.phase === "answered") {
+      setGameState((prev) => {
+        const c = prev.currentQuestion;
+        return {
+          ...prev,
+          phase: "question",
+          playerAnswers: prev.playerAnswers.slice(0, c),
+          playerAnswerTexts: prev.playerAnswerTexts.slice(0, c),
+          playerCorrect: prev.playerCorrect.slice(0, c),
+        };
+      });
+      return;
+    }
+    if (gameState.phase === "question-intro" || gameState.phase === "question") {
+      if (gameState.currentQuestion === 0) {
+        onBackToMenu();
+        return;
+      }
+      setGameState((prev) => rewindToPreviousRoundStart(prev));
+      return;
+    }
+  }, [
+    stop,
+    reactionVideo,
+    devChampionPreview,
+    tourState,
+    gameState.phase,
+    gameState.currentQuestion,
+    onBackToMenu,
+    handleSkipReactionVideo,
+  ]);
+
+  useLayoutEffect(() => {
+    onRegisterBack?.(handleQuizBack);
+    return () => onRegisterBack?.(null);
+  }, [onRegisterBack, handleQuizBack]);
+
   if (gameState.phase === "final-result") {
     const correct = gameState.playerCorrect.filter(Boolean).length;
     const lastCorrectIndex = gameState.playerCorrect.lastIndexOf(true);
@@ -768,6 +890,7 @@ export default function QuizGame({
         potPrize={gameState.potPrize}
         remainingPlayers={gameState.remainingPlayers}
         reachedPercentage={reachedPercentage}
+        muted={muted}
       />
     );
   }
@@ -1013,6 +1136,78 @@ export default function QuizGame({
   );
 }
 
+const METALLIC_GOLD: string[] = [
+  "linear-gradient(135deg, #f5d76e 0%, #c4a535 32%, #8b6f2a 55%, #e8c547 78%, #a8892e 100%)",
+  "linear-gradient(90deg, #d4af37 0%, #f9e4a0 40%, #b8860b 100%)",
+  "linear-gradient(180deg, #ffeaa7 0%, #c9a227 45%, #6b5310 100%)",
+  "linear-gradient(45deg, #e8c547, #5c4a1a, #f0d78c, #9a7b2a)",
+];
+
+function WinnerMetallicConfetti() {
+  const pieces = useMemo(
+    () =>
+      Array.from({ length: 56 }, (_, i) => {
+        const s = (i * 17 + 3) % 1000;
+        return {
+          id: i,
+          left: (s * 0.1) % 100,
+          delay: (i * 0.11) % 2.2,
+          duration: 2.4 + (i % 8) * 0.22,
+          w: 2.5 + (i % 3) * 0.8,
+          h: 7 + (i % 6) * 1.2,
+          size: 3.5 + (i % 4) * 0.6,
+          isStrip: i % 3 !== 0,
+          rotate: 360 + (i % 5) * 140,
+          grad: METALLIC_GOLD[i % METALLIC_GOLD.length]!,
+          x0: ((i * 7) % 20) - 8,
+        };
+      }),
+    []
+  );
+
+  return (
+    <div
+      className="pointer-events-none fixed inset-0 z-[1] overflow-hidden"
+      aria-hidden
+    >
+      {pieces.map((p) => (
+        <motion.div
+          key={p.id}
+          className="absolute rounded-[2px] top-[-4%]"
+          style={{
+            left: `${p.left}%`,
+            width: p.isStrip ? p.w : p.size,
+            height: p.isStrip ? p.h : p.size,
+            background: p.grad,
+            boxShadow:
+              "0 0 8px rgba(245, 215, 110, 0.4), inset 0 1px 0 rgba(255,255,255,0.28)",
+            willChange: "transform",
+          }}
+          initial={{ y: "-6vh", x: 0, rotate: 0, opacity: 0 }}
+          animate={{
+            y: "112vh",
+            x: [0, p.x0, 0, -p.x0 * 0.6, 0],
+            rotate: p.rotate,
+            opacity: [0, 1, 1, 0.5, 0.15],
+          }}
+          transition={{
+            y: { duration: p.duration, delay: p.delay, repeat: Infinity, ease: "linear" },
+            x: { duration: p.duration, delay: p.delay, repeat: Infinity, ease: "easeInOut" },
+            rotate: { duration: p.duration, delay: p.delay, repeat: Infinity, ease: "linear" },
+            opacity: {
+              duration: p.duration,
+              delay: p.delay,
+              repeat: Infinity,
+              ease: "linear",
+              times: [0, 0.04, 0.65, 0.9, 1],
+            },
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 // ── Final Result Component ──
 function FinalResult({
   playerName,
@@ -1021,6 +1216,7 @@ function FinalResult({
   potPrize,
   remainingPlayers,
   reachedPercentage,
+  muted,
 }: {
   playerName: string;
   correctCount: number;
@@ -1028,19 +1224,37 @@ function FinalResult({
   potPrize: number;
   remainingPlayers: number;
   reachedPercentage: number;
+  muted: boolean;
 }) {
   const isWinner = correctCount === totalQuestions;
   const shareOfPot = isWinner ? Math.round(potPrize / Math.max(remainingPlayers, 1)) : 0;
+
+  useEffect(() => {
+    if (!isWinner || muted) return;
+    const a = new Audio(SFX_APPLAUSE);
+    a.volume = 0.5;
+    void a.play().catch(() => {});
+    return () => {
+      a.pause();
+      try {
+        a.currentTime = 0;
+        a.src = "";
+      } catch {
+        /* ignore */
+      }
+    };
+  }, [isWinner, muted]);
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.6 }}
-      className="min-h-[100dvh] w-full h-full flex flex-col items-center justify-center relative overflow-x-hidden overflow-y-auto py-10"
+      className="h-[100dvh] max-h-[100dvh] w-full flex flex-col items-center justify-center relative overflow-hidden px-2 py-4 sm:py-5"
     >
+      {isWinner && <WinnerMetallicConfetti />}
       {/* ━━ Atmospheric Background ━━ */}
-      <div className="absolute inset-0 pointer-events-none">
+      <div className="absolute inset-0 pointer-events-none z-0">
         {/* Winner: golden radiance / Loser: muted red */}
         <motion.div
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full"
@@ -1069,7 +1283,7 @@ function FinalResult({
         />
       </div>
 
-      <div className="relative max-w-md w-full mx-4">
+      <div className="relative z-10 max-w-md w-full mx-4">
         {/* Winner glow pulse */}
         {isWinner && (
           <motion.div

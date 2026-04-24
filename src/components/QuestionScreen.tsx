@@ -164,7 +164,7 @@ function PercentTimerDock({
 
   return (
     <div
-      className="pointer-events-none fixed bottom-4 left-3 z-30 md:bottom-6 md:left-6 select-none"
+      className="pointer-events-none fixed bottom-4 left-3 z-20 md:bottom-6 md:left-6 select-none"
       data-tour-id="timer"
       aria-hidden
     >
@@ -505,7 +505,8 @@ export default function QuestionScreen({
             Blurs the whole stage (HUD, journey, stage lights, question, options) so
             the elimination modal reads as a focused surface instead of "pasted on".
             z-[25] sits BELOW the after-round overlay (z-[60]) so the reveal paints
-            on top of the blur, not behind it. ━━ */}
+            on top of the blur, not behind it. The percent ring timer is z-20 so it
+            stays UNDER this layer (it was z-30 and sat above the blur). ━━ */}
       <AnimatePresence>
         {afterRoundOverlay && (
           <motion.div

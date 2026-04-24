@@ -10,6 +10,7 @@ import Instructions from "./Instructions";
 import QuizGame from "./QuizGame";
 import ReadyToPlayGate from "./ReadyToPlayGate";
 import GameShowAudio from "./GameShowAudio";
+import FlowBackButton from "./FlowBackButton";
 import { useNarration } from "./NarrationProvider";
 import { warmClubLogoGlbAsset } from "@/lib/warmClubLogoAsset";
 import { useVideoAutoplay } from "@/lib/useVideoAutoplay";
@@ -136,6 +137,10 @@ export default function GameFlow() {
   const prevScrollyFrameRef = useRef(0);
   const [phase, setPhase] = useState<Phase>("idle");
   const [player, setPlayer] = useState<PlayerData | null>(null);
+  /** `next dev` only: set by Ctrl+Shift+Y to mount QuizGame on the perfect-score end screen. */
+  const [devChampionPreview, setDevChampionPreview] = useState(false);
+  /** Remounts `QuizGame` after exiting to the instructions screen. */
+  const [quizSessionKey, setQuizSessionKey] = useState(0);
   const [showButton, setShowButton] = useState(false);
   const [rippleOrigin, setRippleOrigin] = useState({ x: 0, y: 0 });
   const [logoModelReady, setLogoModelReady] = useState(false);
@@ -157,6 +162,10 @@ export default function GameFlow() {
   // Refs for stale-closure-safe access in setTimeout chains
   const modelReadyRef = useRef(false);
   const pendingFlyToCorner = useRef(false);
+  /** Bumped to invalidate pending intro `setTimeout` chains when the user returns to the scrolly. */
+  const flowRunIdRef = useRef(0);
+  /** `QuizGame` registers how to go back a step in-quiz, or to the previous flow screen. */
+  const quizBackHandlerRef = useRef<(() => void) | null>(null);
 
   const positions = useLogoPositions();
   const { unlock: unlockAudio, prefetchAudioUrl } = useNarration();
@@ -238,12 +247,16 @@ export default function GameFlow() {
     prevScrollyFrameRef.current = f;
   }, [phase, scrollyFrameIndex]);
 
-  const flyToCorner = useCallback(() => {
+  const flyToCorner = useCallback((runId: number) => {
+    if (flowRunIdRef.current !== runId) return;
     setPhase("logo-fly-corner");
     // Wait for fly animation (1.4s) to finish, then go straight to the welcome video.
     // (The pre-video "dhak-dhak" stats intro has been removed — stats now live only
     // on the post-video ReadyToPlayGate to avoid repetition.)
-    setTimeout(() => setPhase("welcome-video"), 1500);
+    setTimeout(() => {
+      if (flowRunIdRef.current !== runId) return;
+      setPhase("welcome-video");
+    }, 1500);
   }, []);
 
   const handleVideoEnd = useCallback(() => {
@@ -260,12 +273,18 @@ export default function GameFlow() {
   // When model loads while we're at center, wait 3.5s to admire, then fly
   useEffect(() => {
     if (logoModelReady && pendingFlyToCorner.current) {
+      const runId = flowRunIdRef.current;
       pendingFlyToCorner.current = false;
-      setTimeout(() => flyToCorner(), 3500);
+      setTimeout(() => {
+        if (flowRunIdRef.current !== runId) return;
+        flyToCorner(runId);
+      }, 3500);
     }
   }, [logoModelReady, flyToCorner]);
 
   const handleStart = useCallback(() => {
+    const runId = ++flowRunIdRef.current;
+
     // Unlock audio now — this is our only guaranteed user gesture for autoplay
     unlockAudio();
     themeUnlockRef.current?.();
@@ -283,17 +302,23 @@ export default function GameFlow() {
     // After ripple has mostly filled, show logo at center (ripple animation is 4.5s).
     // 2.4s keeps the beat without waiting so long that the GLB feels "stuck" if preload lagged.
     setTimeout(() => {
+      if (flowRunIdRef.current !== runId) return;
       setPhase("logo-enter");
 
       // After scale-up animation (1.2s), mark as centered
       setTimeout(() => {
+        if (flowRunIdRef.current !== runId) return;
         setPhase("logo-center");
 
         // Check model readiness via ref
         setTimeout(() => {
+          if (flowRunIdRef.current !== runId) return;
           if (modelReadyRef.current) {
             // Model already ready: hold at center for 3.5s then fly to corner
-            setTimeout(() => flyToCorner(), 3500);
+            setTimeout(() => {
+              if (flowRunIdRef.current !== runId) return;
+              flyToCorner(runId);
+            }, 3500);
           } else {
             // Model still loading, will trigger via useEffect when ready.
             pendingFlyToCorner.current = true;
@@ -302,6 +327,7 @@ export default function GameFlow() {
             // don't leave the user stuck on the loading screen. After 8s at
             // logo-center we flip the flag ourselves so the flow advances.
             setTimeout(() => {
+              if (flowRunIdRef.current !== runId) return;
               if (!modelReadyRef.current && pendingFlyToCorner.current) {
                 console.warn("[GameFlow] 3D logo load timed out — advancing anyway");
                 pendingFlyToCorner.current = false;
@@ -336,6 +362,73 @@ export default function GameFlow() {
   const handleBeginGame = useCallback(() => {
     setPhase("playing");
   }, []);
+
+  const exitQuizToInstructions = useCallback(() => {
+    setDevChampionPreview(false);
+    setQuizSessionKey((k) => k + 1);
+    quizBackHandlerRef.current = null;
+    setPhase("instructions");
+  }, []);
+
+  const registerQuizBackHandler = useCallback((fn: (() => void) | null) => {
+    quizBackHandlerRef.current = fn;
+  }, []);
+
+  const resetIntroToIdle = useCallback(() => {
+    flowRunIdRef.current += 1;
+    pendingFlyToCorner.current = false;
+    setPhase("idle");
+  }, []);
+
+  const handleFlowBack = useCallback(() => {
+    switch (phase) {
+      case "ripple":
+      case "logo-enter":
+      case "logo-center":
+      case "logo-fly-corner":
+      case "welcome-video":
+        resetIntroToIdle();
+        break;
+      case "post-video-gate":
+        setPhase("welcome-video");
+        break;
+      case "details":
+        setPhase("post-video-gate");
+        break;
+      case "instructions":
+        setPhase("details");
+        break;
+      case "playing":
+        if (quizBackHandlerRef.current) quizBackHandlerRef.current();
+        else exitQuizToInstructions();
+        break;
+      default:
+        break;
+    }
+  }, [phase, resetIntroToIdle, exitQuizToInstructions]);
+
+  const showFlowBack = phase !== "idle" && phase !== "coming-soon";
+
+  // `next dev` only: from welcome / stats gate / scrolly (Enter visible), go straight
+  // to the champion end screen to preview confetti + applause.
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+    const eligible =
+      phase === "welcome-video" ||
+      phase === "post-video-gate" ||
+      (phase === "idle" && showButton);
+    if (!eligible) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.ctrlKey || !e.shiftKey || e.key.toLowerCase() !== "y") return;
+      e.preventDefault();
+      void unlockAudio();
+      setPlayer({ name: "Champion (preview)", quizSet: "A" });
+      setDevChampionPreview(true);
+      setPhase("playing");
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [phase, showButton, unlockAudio]);
 
   const handleLogoReady = useCallback(() => {
     setLogoModelReady(true);
@@ -786,7 +879,11 @@ export default function GameFlow() {
                 className="relative z-10 w-full h-full"
               >
                 <QuizGame
+                  key={quizSessionKey}
                   playerName={player?.name || "Player"}
+                  devChampionPreview={devChampionPreview}
+                  onBackToMenu={exitQuizToInstructions}
+                  onRegisterBack={registerQuizBackHandler}
                   onVideoOverlayChange={setVideoOverlayActive}
                   onQuestionTimerActiveChange={setQuestionTimerActive}
                   onEliminationSequenceActiveChange={setEliminationSequenceActive}
@@ -796,6 +893,8 @@ export default function GameFlow() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {showFlowBack && <FlowBackButton onClick={handleFlowBack} />}
 
       <GameShowAudio
         playBgm={playBgm}
