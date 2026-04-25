@@ -150,6 +150,10 @@ export default function GameFlow() {
   // fade — which was happening because the logo sits at z-[85] and the video
   // containers fade opacity 0↔1 at z-[95].
   const [videoOverlayActive, setVideoOverlayActive] = useState(false);
+  /** True ONLY during reaction videos (correct/wrong/winner) — not during
+   *  question-intro videos. Drives BGM suppression so AK question delivery
+   *  keeps the theme bed underneath, but reaction stings get a clean stage. */
+  const [reactionVideoActive, setReactionVideoActive] = useState(false);
   /** True while the question-screen countdown is actively ticking. Pauses the
    *  theme so the ITV timer bed (QuizGame) takes over. */
   const [questionTimerActive, setQuestionTimerActive] = useState(false);
@@ -462,7 +466,7 @@ export default function GameFlow() {
     phase === "instructions" ||
     showPostVideoGate ||
     (phase === "playing" && !questionTimerActive && !eliminationSequenceActive);
-  const bgmSuppressForVideo = showWelcomeVideo || videoOverlayActive;
+  const bgmSuppressForVideo = showWelcomeVideo || reactionVideoActive;
 
   // Welcome video is controlled entirely by phase, so sync it here. Quiz-phase
   // videos (question-intro, reaction) are reported via QuizGame's callback.
@@ -885,6 +889,7 @@ export default function GameFlow() {
                   onBackToMenu={exitQuizToInstructions}
                   onRegisterBack={registerQuizBackHandler}
                   onVideoOverlayChange={setVideoOverlayActive}
+                  onReactionVideoActiveChange={setReactionVideoActive}
                   onQuestionTimerActiveChange={setQuestionTimerActive}
                   onEliminationSequenceActiveChange={setEliminationSequenceActive}
                 />

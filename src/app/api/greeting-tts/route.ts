@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   const name = firstNameOf(req.nextUrl.searchParams.get("name") ?? "");
   // Keep it simple: avoid Unicode property escapes (TS target may be < ES2018).
   const safeName = name.replace(/[^a-zA-Z0-9'-]/g, "").slice(0, 26) || "friend";
-  const text = `Hi ${safeName}.`;
+  const text = `${safeName}, स्वागत है आपका!`;
 
   try {
     const buf = await getOrCreateTtsMp3(text, ELEVEN_VOICE_ID, async () => {
@@ -38,6 +38,7 @@ export async function GET(req: NextRequest) {
           body: JSON.stringify({
             text,
             model_id: TTS_MODEL_ID,
+            language_code: "hi",
             voice_settings: {
               // Tuned for name pronunciation consistency.
               // Requested: speed 0.88, stability 50%, similarity high, style 19%.

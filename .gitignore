@@ -30,3 +30,6 @@ Thumbs.db
 
 # TypeScript build info
 *.tsbuildinfo
+
+# Local audio backup before +6dB ffmpeg boost — safety only, do not commit
+public/questionscreenimages/_audio_backup_pre_boost/

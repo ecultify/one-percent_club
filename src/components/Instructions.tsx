@@ -242,7 +242,7 @@ const SCENES: Scene[] = [
             className="font-semibold text-[#f4dc7c] leading-none"
             style={{ fontSize: "clamp(1.4rem, 3vw, 2.4rem)" }}
           >
-            Har koi khel sakta hai
+            ka question har koi khel sakta hai
           </span>
           <span
             className="uppercase tracking-[0.34em] text-[#c9a94a]"
@@ -310,7 +310,7 @@ const SCENES: Scene[] = [
               textShadow: "0 0 22px rgba(255,90,58,0.45)",
             }}
           >
-            Welcome to the Club.
+            But only 1% people play the final question
           </span>
           <span
             className="uppercase tracking-[0.42em] text-[#ff8e6a]"
@@ -344,13 +344,13 @@ const SCENES: Scene[] = [
             className="font-semibold leading-[1.05] text-[#fff2c2]"
             style={{ fontSize: "clamp(1.6rem, 3.2vw, 2.6rem)" }}
           >
-            Har sawaal ka ek ghadi.
+            Har question pe milenge aapko sirf 30 sec.
           </span>
           <span
             className="uppercase tracking-[0.32em] text-[#c9a94a]"
             style={{ fontSize: "clamp(0.75rem, 0.9vw, 0.95rem)" }}
           >
-            Hesitation = wrong answer
+            Play smartly and logically
           </span>
         </motion.div>
       </div>
@@ -811,7 +811,7 @@ export default function Instructions({ playerName, onStart }: InstructionsProps)
               transition={{ type: "spring", stiffness: 380, damping: 22 }}
               className="game-show-btn relative z-0 cursor-pointer rounded-xl px-14 py-[18px] text-center text-[13px] font-semibold uppercase tracking-[0.26em] shadow-[0_0_0_1px_rgba(196,160,53,0.35),0_22px_56px_-12px_rgba(0,0,0,0.85),0_0_48px_-8px_rgba(228,207,106,0.25)] md:px-20 md:py-5 md:text-[14px]"
             >
-              <span className="relative z-10">Begin the challenge</span>
+              <span className="relative z-10">Start the Game</span>
             </motion.button>
           </motion.div>
         )}

@@ -17,7 +17,7 @@ const SFX_WRONG = encodeURI("/sound/131657__bertrof__game-sound-wrong.wav");
 const SFX_QUESTION_TIMER = encodeURI("/sound/ITV's _ The 1 club - 30 Second Timer.mp3");
 const SFX_APPLAUSE = encodeURI("/sound/appluase2.wav");
 const ENDING_VO_ALL_CORRECT = encodeURI("/questionscreenimages/endingvoallcorrect.mp3");
-const ENDING_VO_IF_EVEN_ONE_WRONG = encodeURI("/questionscreenimages/endingvoifevenonewrong.mp3");
+const ENDING_VO_IF_EVEN_ONE_WRONG = encodeURI("/questionscreenimages/endvoifevenonewrong.mp3");
 /** ~2s VO: plays once when **13s** remain (3s before the last-10s tick SFX). */
 const TIMER_VO_SRC = encodeURI("/sound/timerVO.mp3");
 
@@ -443,6 +443,10 @@ interface QuizGameProps {
    *  active, false when none are. Lets the parent hide the 3D logo so it
    *  can't peek through the video's fade-in/out transitions. */
   onVideoOverlayChange?: (active: boolean) => void;
+  /** Fires true ONLY while a reaction video (correct/wrong/winner) is playing,
+   *  NOT during question-intro videos. Lets the parent decide whether to pause
+   *  BGM: paused for reactions, kept on (lower) for AK question delivery. */
+  onReactionVideoActiveChange?: (active: boolean) => void;
   /** Fires true when the question-screen countdown is actively ticking (tour
    *  done, narration finished, not yet answered). Lets the parent pause the
    *  theme music so the ITV 30-second timer jingle takes the sonic stage. */
@@ -480,6 +484,7 @@ export default function QuizGame({
   playerName,
   onGameEnd,
   onVideoOverlayChange,
+  onReactionVideoActiveChange,
   onQuestionTimerActiveChange,
   onEliminationSequenceActiveChange,
   devChampionPreview = false,
@@ -816,6 +821,13 @@ export default function QuizGame({
     onVideoOverlayChange?.(videoOverlayActive);
   }, [videoOverlayActive, onVideoOverlayChange]);
 
+  // Reaction-video-only flag: BGM is paused for reactions, but kept playing
+  // (at normal volume) underneath the AK question-intro video.
+  const reactionVideoActive = !!reactionVideoSrc;
+  useEffect(() => {
+    onReactionVideoActiveChange?.(reactionVideoActive);
+  }, [reactionVideoActive, onReactionVideoActiveChange]);
+
   /** The question timer is "live" only when: tour is done, we're on a real
    *  question screen (not intro video / elimination / answered), the host has
    *  finished narrating the question, and no full-screen video overlay is up.
@@ -1083,7 +1095,7 @@ export default function QuizGame({
                   whileTap={{ scale: 0.97 }}
                   className="game-show-btn relative z-0 w-full cursor-pointer rounded-xl py-4 text-center text-[13px] font-semibold uppercase tracking-[0.2em]"
                 >
-                  <span className="relative z-10">Ready, start the tour</span>
+                  <span className="relative z-10">Read Instructions</span>
                 </motion.button>
                 <button
                   onClick={handleSkipTour}
