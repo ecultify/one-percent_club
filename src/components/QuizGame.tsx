@@ -4,12 +4,14 @@ import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } fr
 import { AnimatePresence, motion } from "framer-motion";
 import QuestionScreen from "./QuestionScreen";
 import EliminationReveal from "./EliminationReveal";
+import FinalStage3D from "./FinalStage3D";
 import MuteButton from "./MuteButton";
 import { useNarration } from "./NarrationProvider";
 import ProductTour, { TourStep } from "./ProductTour";
 import HostSilhouette from "./HostSilhouette";
 import FadeWipe from "./FadeWipe";
 import { useVideoAutoplay } from "@/lib/useVideoAutoplay";
+import { playWhoosh } from "@/lib/uiClickSound";
 
 const SFX_CORRECT = encodeURI("/sound/644963__craigscottuk__quiz-gameshow-correct-ping-14.mp3");
 const SFX_WRONG = encodeURI("/sound/131657__bertrof__game-sound-wrong.wav");
@@ -598,11 +600,13 @@ export default function QuizGame({
    */
   const runWipeThen = useCallback((change: () => void) => {
     setWipeActive(true);
+    // Whoosh SFX for the wipe — synth-generated, no asset overhead.
+    if (!muted) playWhoosh({ intensity: "normal" });
     // Wipe covers the screen in 500ms. Swap content at 420ms (while black).
     setTimeout(() => { change(); }, 420);
     // Clear the wipe (it slides out left) at 560ms total.
     setTimeout(() => { setWipeActive(false); }, 560);
-  }, []);
+  }, [muted]);
 
   /** Prevents double transition (Q1 timer + onEnded, or skip + timer). */
   const questionIntroDoneRef = useRef(false);
@@ -845,7 +849,9 @@ export default function QuizGame({
     onQuestionTimerActiveChange?.(questionTimerActive);
   }, [questionTimerActive, onQuestionTimerActiveChange]);
 
-  /** Suppress game-show BGM from post-answer through elimination until "Next question". */
+  /** Active during answered + elimination phases. GameShowAudio uses this
+   *  signal to keep BGM playing at lower volume + slower tempo instead of
+   *  fully muting (so the elimination scene still has a music bed). */
   const eliminationSequenceActive =
     gameState.phase === "answered" || gameState.phase === "elimination";
   useEffect(() => {
@@ -1360,151 +1366,22 @@ function FinalResult({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.6 }}
-      className="h-[100dvh] max-h-[100dvh] w-full flex flex-col items-center justify-center relative overflow-hidden px-2 py-4 sm:py-5"
+      className="fixed inset-0 w-screen h-[100dvh] overflow-hidden"
     >
-      {isWinner && <WinnerMetallicConfetti />}
-      {/* ━━ Atmospheric Background ━━ */}
-      <div className="absolute inset-0 pointer-events-none z-0">
-        {/* Winner: golden radiance / Loser: muted red */}
-        <motion.div
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full"
-          style={{
-            background: isWinner
-              ? "radial-gradient(circle, rgba(196,160,53,0.11) 0%, rgba(196,160,53,0.04) 42%, transparent 72%)"
-              : "radial-gradient(circle, rgba(217,74,92,0.07) 0%, transparent 60%)",
-          }}
-          initial={{ opacity: 0, scale: 0.5 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 1.5, ease: "easeOut" }}
-        />
-        {/* Top spotlight */}
-        <div
-          className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px]"
-          style={{
-            background: "radial-gradient(ellipse at 50% 0%, rgba(196,160,53,0.05) 0%, transparent 72%)",
-          }}
-        />
-        {/* Grain */}
-        <div
-          className="absolute inset-0 opacity-[0.015]"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E")`,
-          }}
-        />
-      </div>
-
-      <div className="relative z-10 max-w-md w-full mx-4">
-        {/* Winner glow pulse */}
-        {isWinner && (
-          <motion.div
-            className="absolute -inset-16 rounded-full blur-[80px]"
-            style={{ background: "radial-gradient(circle, rgba(196,160,53,0.14), transparent)" }}
-            animate={{ opacity: [0.4, 0.8, 0.4], scale: [1, 1.05, 1] }}
-            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-          />
-        )}
-
-        <div className="relative">
-          <div className="relative rounded-2xl border border-white/[0.07] bg-gradient-to-b from-surface-light/95 to-surface/95 p-7 md:p-8 overflow-hidden text-center shadow-[0_40px_100px_-24px_rgba(0,0,0,0.75)] backdrop-blur-sm">
-            <div className="absolute inset-0 opacity-[0.018] pointer-events-none mix-blend-overlay"
-              style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E")`,
-              }}
-            />
-            <div className={`absolute top-0 left-6 right-6 h-px bg-gradient-to-r from-transparent ${isWinner ? "via-brass-bright/50" : "via-brass/35"} to-transparent`} />
-
-            {/* ── Result Title ── */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.5, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              transition={{ delay: 0.2, duration: 0.7, ease: [0.23, 1, 0.32, 1] }}
-              className="relative"
-            >
-              <p className="font-mono text-[10px] uppercase tracking-[0.45em] text-brass-dim mb-4">Game over</p>
-
-              {isWinner ? (
-                <h2 className="font-display text-5xl md:text-6xl font-semibold tracking-[-0.03em] text-brass-bright">
-                  Champion
-                </h2>
-              ) : (
-                <h2 className="font-display text-5xl md:text-6xl font-semibold tracking-[-0.03em] text-foreground">
-                  Top {reachedPercentage}%
-                </h2>
-              )}
-
-              <p className="text-muted text-sm mt-2">{playerName}</p>
-            </motion.div>
-
-            {/* ── Stats Grid ── */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.6, duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-              className="relative mt-7 grid grid-cols-3 gap-2"
-            >
-              <div className="p-3 rounded-xl bg-black/20 border border-white/[0.06]">
-                <p className="font-mono text-xl font-bold text-brass tabular-nums">{correctCount}/{totalQuestions}</p>
-                <p className="font-mono text-[8px] text-muted uppercase tracking-[0.18em] mt-1">Correct</p>
-              </div>
-              <div className="p-3 rounded-xl bg-black/20 border border-white/[0.06]">
-                <p className="font-mono text-xl font-bold text-brass tabular-nums">{remainingPlayers}</p>
-                <p className="font-mono text-[8px] text-muted uppercase tracking-[0.18em] mt-1">Survived</p>
-              </div>
-              <div className="relative p-3 rounded-xl overflow-hidden border border-brass/15 bg-brass/[0.06]">
-                <div className="relative">
-                  <p className="font-mono text-xl font-bold text-brass-bright tabular-nums">{formatRupees(potPrize)}</p>
-                  <p className="font-mono text-[8px] text-brass-dim uppercase tracking-[0.18em] mt-1">In the pot</p>
-                </div>
-              </div>
-            </motion.div>
-
-            {/* ── Winner: Share of Pot ── */}
-            {isWinner && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.9, duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-                className="relative mt-5 p-4 rounded-xl border border-brass/20 bg-brass/[0.07]"
-              >
-                <p className="font-mono text-[10px] text-brass-dim uppercase tracking-[0.35em] mb-2">Your share</p>
-                <p className="font-display text-4xl font-semibold text-brass-bright tracking-[-0.02em]">{formatRupees(shareOfPot)}</p>
-              </motion.div>
-            )}
-
-            {/* ── Loser: Progress Message ── */}
-            {!isWinner && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.9, duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-                className="mt-5 p-4 rounded-xl bg-black/20 border border-white/[0.06]"
-              >
-                <p className="text-foreground/70 text-sm leading-relaxed">
-                  You reached the{" "}
-                  <span className="text-brass-bright font-semibold">
-                    {Number.isFinite(reachedPercentage) ? reachedPercentage : 0}%
-                  </span>{" "}
-                  bracket.
-                </p>
-                <p className="text-muted text-xs mt-2">Seven rounds separate the crowd from the club.</p>
-              </motion.div>
-            )}
-
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 1.15, duration: 0.5 }}
-              className="mt-8 pt-6 border-t border-white/[0.08]"
-            >
-              <p className="font-mono text-[9px] md:text-[10px] uppercase tracking-[0.22em] text-muted leading-relaxed text-center">
-                MAKE YOUR BRAND A PART OF THE 1% CLUB
-                <br />
-                <span className="text-foreground/55">COMING SOON | Aug 2026</span>
-              </p>
-            </motion.div>
-          </div>
-        </div>
-      </div>
+      {/* The end screen IS the 3D stage. Everything (journey info, brand
+          line, "1% Club" sign) is rendered onto the in-scene LED screens.
+          The redundant Champion card has been removed. */}
+      <FinalStage3D
+        journeyInfo={{
+          correctCount,
+          totalQuestions,
+          reachedPercentage,
+          potPrize,
+          shareOfPot: isWinner ? shareOfPot : undefined,
+          isWinner,
+        }}
+        playerName={playerName}
+      />
     </motion.div>
   );
 }

@@ -465,7 +465,9 @@ export default function GameFlow() {
     phase === "coming-soon" ||
     phase === "instructions" ||
     showPostVideoGate ||
-    (phase === "playing" && !questionTimerActive && !eliminationSequenceActive);
+    // BGM stays on during elimination too — GameShowAudio applies a slow-tempo
+    // duck via the bgmSlowMode prop instead of muting completely.
+    (phase === "playing" && !questionTimerActive);
   const bgmSuppressForVideo = showWelcomeVideo || reactionVideoActive;
 
   // Welcome video is controlled entirely by phase, so sync it here. Quiz-phase
@@ -904,6 +906,7 @@ export default function GameFlow() {
       <GameShowAudio
         playBgm={playBgm}
         suppressForVideo={bgmSuppressForVideo}
+        slowMode={eliminationSequenceActive}
         onThemeUnlockReady={handleThemeUnlockReady}
       />
     </>

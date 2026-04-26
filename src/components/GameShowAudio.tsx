@@ -11,6 +11,15 @@ const VOL_NORMAL = 0.42;
 const VO_DUCK_INTENT = 0.1;
 /** BGM when host TTS/VO is actually playing — duck a little more so dialogue stays clear. */
 const VO_DUCK_SPEAKING = 0.055;
+/** BGM during video clips (intros, reactions). Used to be silent (paused) — now we
+ *  keep a quiet bed so the room doesn't go dead between phases. The video's own
+ *  audio cuts through cleanly because this sits well below dialogue level. */
+const VOL_VIDEO_BED = 0.08;
+/** BGM during elimination sequence — slightly higher than video bed since
+ *  there's no dialogue to compete with, but still ducked from normal. */
+const VOL_SLOW_MODE = 0.13;
+/** Playback rate during elimination — slower tempo for tension. */
+const RATE_SLOW_MODE = 0.85;
 
 /**
  * One shared HTMLAudioElement for the game-show bed for the whole app lifetime.
@@ -37,6 +46,10 @@ type GameShowAudioProps = {
   playBgm: boolean;
   /** Pause theme entirely (welcome video, question intros, reaction clips, etc.). */
   suppressForVideo: boolean;
+  /** When true, BGM ducks to a quiet bed AND slows tempo via playbackRate.
+   *  Used during the elimination sequence so the music underscores the moment
+   *  without overpowering the elimination stinger / coin tinks. */
+  slowMode?: boolean;
   /**
    * Receives `unlockAudible` — used if the browser rejects *audible* autoplay on load.
    * (Some sessions still require any tap / key once — we try without that first.)
@@ -53,6 +66,7 @@ type GameShowAudioProps = {
 export default function GameShowAudio({
   playBgm,
   suppressForVideo,
+  slowMode = false,
   onThemeUnlockReady,
 }: GameShowAudioProps) {
   const { isSpeaking, hostVoiceDucksBgm } = useNarration();
@@ -173,7 +187,11 @@ export default function GameShowAudio({
     ref.current = el;
     if (!el) return;
 
-    const allow = playBgm && !suppressForVideo;
+    // Master gate: must have playBgm and NOT be in tab-background.
+    // We no longer fully suppress on `suppressForVideo` — instead we keep a
+    // quiet bed under the video so the room doesn't go dead, and so the
+    // soundtrack stays continuous between phases.
+    const allow = playBgm;
 
     if (allow && pendingGestureUnlockRef.current && !themeAudibleRef.current) {
       pendingGestureUnlockRef.current = false;
@@ -185,6 +203,7 @@ export default function GameShowAudio({
 
     if (!allow) {
       el.pause();
+      el.playbackRate = 1;
       return;
     }
 
@@ -206,17 +225,27 @@ export default function GameShowAudio({
     el.muted = false;
     const duck = hostVoiceDucksBgmRef.current;
     const speaking = isSpeakingRef.current;
-    el.volume = duck
-      ? speaking
-        ? VO_DUCK_SPEAKING
-        : VO_DUCK_INTENT
-      : VOL_NORMAL;
+    if (suppressForVideo) {
+      el.volume = VOL_VIDEO_BED;
+      el.playbackRate = 1;
+    } else if (slowMode) {
+      // Elimination sequence: ducked + slow tempo for tension.
+      el.volume = VOL_SLOW_MODE;
+      el.playbackRate = RATE_SLOW_MODE;
+    } else {
+      el.volume = duck
+        ? speaking
+          ? VO_DUCK_SPEAKING
+          : VO_DUCK_INTENT
+        : VOL_NORMAL;
+      el.playbackRate = 1;
+    }
 
     // Idempotent: avoid redundant play() storms when many listeners fire on focus/visibility.
     if (el.paused) {
       void el.play().catch(() => {});
     }
-  }, [playBgm, suppressForVideo, autoplaySettled, unlockAudible]);
+  }, [playBgm, suppressForVideo, slowMode, autoplaySettled, unlockAudible]);
 
   syncBgmRef.current = applyBgmState;
 
@@ -287,6 +316,7 @@ export default function GameShowAudio({
   }, [
     playBgm,
     suppressForVideo,
+    slowMode,
     isSpeaking,
     hostVoiceDucksBgm,
     playbackNonce,

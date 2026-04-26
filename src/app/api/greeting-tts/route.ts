@@ -22,7 +22,14 @@ export async function GET(req: NextRequest) {
   const name = firstNameOf(req.nextUrl.searchParams.get("name") ?? "");
   // Keep it simple: avoid Unicode property escapes (TS target may be < ES2018).
   const safeName = name.replace(/[^a-zA-Z0-9'-]/g, "").slice(0, 26) || "friend";
-  const text = `${safeName}, स्वागत है आपका!`;
+  // Just the greeting, nothing else. The welcome / "ab suniye" beats
+  // belong on the slides that follow, not in the name greeting.
+  const text = `Hello ${safeName}.`;
+  // `previous_text` primes the voice model BEFORE it reaches our greeting.
+  // Without it, ElevenLabs spends ~0.5s warming up its prosody and that
+  // warm-up bleeds into short outputs as gibberish. This context is never
+  // synthesized — it's just used to condition the voice.
+  const previousText = "Welcome to the show. The host steps up to the microphone.";
 
   try {
     const buf = await getOrCreateTtsMp3(text, ELEVEN_VOICE_ID, async () => {
@@ -38,14 +45,23 @@ export async function GET(req: NextRequest) {
           body: JSON.stringify({
             text,
             model_id: TTS_MODEL_ID,
-            language_code: "hi",
+            language_code: "en",
+            // Prime the voice with neutral context so warm-up gibberish
+            // doesn't leak into our short greeting. Per ElevenLabs docs,
+            // previous_text conditions prosody but is NOT synthesized.
+            previous_text: previousText,
+            // Auto text normalization handles names + edge cases properly.
+            apply_text_normalization: "auto",
             voice_settings: {
-              // Tuned for name pronunciation consistency.
-              // Requested: speed 0.88, stability 50%, similarity high, style 19%.
-              speed: 0.88,
-              stability: 0.5,
-              similarity_boost: 1.0,
-              style: 0.19,
+              // Tuned to minimize hallucinations on short text:
+              //  - stability HIGH = less randomness, less gibberish
+              //  - style 0       = no creative interpretation
+              //  - speed 1       = natural pace (slower = more drift)
+              //  - similarity high = stay locked to the voice
+              speed: 1.0,
+              stability: 0.7,
+              similarity_boost: 0.95,
+              style: 0.0,
               use_speaker_boost: true,
             },
           }),
@@ -64,7 +80,10 @@ export async function GET(req: NextRequest) {
       status: 200,
       headers: {
         "Content-Type": "audio/mpeg",
-        "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+        // Short cache so any future greeting-text change propagates within
+        // a minute. The server-side TTS cache (ttsServerCache) still
+        // shoulders the heavy lifting against ElevenLabs.
+        "Cache-Control": "public, max-age=60, must-revalidate",
       },
     });
   } catch (err) {

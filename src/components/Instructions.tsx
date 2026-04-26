@@ -56,7 +56,7 @@ const SCENES: Scene[] = [
     tone: "gold",
     eyebrow: "On the floor",
     recapNarration: (name) =>
-      `${firstNameOf(name)}, The 1% Club mein aapka swagat. Chaliye, game kaise khelna hai, woh sunte hain.`,
+      `Hello ${firstNameOf(name)}.`,
     render: (name) => (
       <div className="flex flex-col items-center text-center gap-5 md:gap-7">
         <motion.span
@@ -692,18 +692,24 @@ export default function Instructions({ playerName, onStart }: InstructionsProps)
     howItWorksVoDoneRef.current = false;
     greetingVoDoneRef.current = false;
 
-    // Gate the auto-timeline: do NOT advance to slide 2 until the greeting finishes
-    // (or is muted/blocked and resolves immediately).
+    // Gate the auto-timeline: the greeting ("Hello {name}") plays over the
+    // welcome slide. The instant it finishes, we jump straight to slide 2 —
+    // we don't dwell on the welcome scene.
     const playGreetingThenStartTimeline = async () => {
       try {
-        const src = `/api/greeting-tts?name=${encodeURIComponent(playerName)}`;
+        // `v` is a cache-bust token. Bump whenever the greeting text changes
+        // so the browser fetches a fresh MP3 instead of replaying the
+        // previous "swagat hai aapka" file from its cache.
+        const src = `/api/greeting-tts?name=${encodeURIComponent(playerName)}&v=3`;
         await narrateUrl("instructions-greeting", src);
       } finally {
         if (cancelled) return;
         greetingVoDoneRef.current = true;
-        // Start the scene timing *after* the greeting completes so scene 1 doesn't arrive early.
-        mountRef.current = Date.now();
-        scheduleFromScene(0);
+        // Skip the welcome dwell — anchor mountRef so SCENES[1].at lands now.
+        const NEXT = 1;
+        mountRef.current = Date.now() - SCENES[NEXT].at * 1000;
+        setSceneIdx(NEXT);
+        scheduleFromScene(NEXT);
       }
     };
 

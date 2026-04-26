@@ -146,13 +146,11 @@ const R_INNER_RIM = R_CHANNEL - CHANNEL_W / 2 - 0.5; // 31.5
 const CIRC_CHANNEL = 2 * Math.PI * R_CHANNEL;
 
 interface PercentTimerDockProps {
-  percentage: number;
   timeLeft: number;
   timeLimit: number;
 }
 
 function PercentTimerDock({
-  percentage,
   timeLeft,
   timeLimit,
 }: PercentTimerDockProps) {
@@ -164,7 +162,7 @@ function PercentTimerDock({
 
   return (
     <div
-      className="pointer-events-none fixed bottom-4 left-3 z-20 md:bottom-6 md:left-6 select-none"
+      className="pointer-events-none fixed bottom-4 left-3 z-20 md:bottom-6 md:left-6 select-none amb-spot-flicker"
       data-tour-id="timer"
       aria-hidden
     >
@@ -276,18 +274,30 @@ function PercentTimerDock({
           />
         </svg>
 
-        {/* Blur disc + percent artwork — sits inside the inner rim. Border removed
-            so the metallic inner rim is the dominant edge. */}
+        {/* Blur disc + live countdown — number followed by an inline "s".
+            The number uses the same metallic gold gradient as the journey
+            progress chip so the timer reads as part of the same UI language. */}
         <div
-          className="absolute left-1/2 top-1/2 flex h-[60%] w-[60%] -translate-x-1/2 -translate-y-1/2 items-center justify-center overflow-hidden rounded-full bg-black/55 shadow-[inset_0_0_32px_rgba(0,0,0,0.7)] backdrop-blur-md"
+          className="absolute left-1/2 top-1/2 flex h-[60%] w-[60%] -translate-x-1/2 -translate-y-1/2 items-center justify-center overflow-hidden rounded-full bg-black/65 shadow-[inset_0_0_32px_rgba(0,0,0,0.7)] backdrop-blur-md"
           style={{ WebkitBackdropFilter: "blur(16px)" }}
         >
-          <img
-            src={percentImageSrc(percentage)}
-            alt=""
-            className="relative z-[1] max-h-[82%] w-auto object-contain drop-shadow-[0_2px_10px_rgba(0,0,0,0.7)]"
-            draggable={false}
-          />
+          <span
+            className="font-display font-bold tabular-nums leading-none select-none flex items-baseline"
+            style={{
+              fontSize: "clamp(40px, 9vmin, 64px)",
+              backgroundImage:
+                "linear-gradient(180deg, #fff0c2 0%, #f9e89a 26%, #e4c55a 52%, #b28622 82%, #6d4e13 100%)",
+              WebkitBackgroundClip: "text",
+              backgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              color: "transparent",
+              filter:
+                "drop-shadow(0 2px 8px rgba(0,0,0,0.7)) drop-shadow(0 0 14px rgba(228,207,106,0.45))",
+            }}
+          >
+            {Math.max(0, Math.ceil(timeLeft))}
+            <span style={{ fontSize: "0.5em", marginLeft: "0.06em" }}>s</span>
+          </span>
         </div>
       </div>
     </div>
@@ -496,7 +506,6 @@ export default function QuestionScreen({
       />
 
       <PercentTimerDock
-        percentage={question.percentage}
         timeLeft={timeLeft}
         timeLimit={question.timeLimit}
       />
@@ -565,14 +574,17 @@ export default function QuestionScreen({
         )}
       </AnimatePresence>
 
-      {/* ━━ TOP HUD STRIP — floats above the frame, near the top of the viewport ━━ */}
-      <div className="absolute top-3 md:top-5 left-0 right-0 z-20 px-4 md:px-8">
+      {/* ━━ TOP HUD STRIP — floats above the frame, near the top of the viewport.
+            z-index bumped past the elim overlay (z-60) so the navbar pot-prize
+            stays visible during the elimination card — required for the
+            CoinTrailToNavbar handoff to land on a visible target. ━━ */}
+      <div className="absolute top-3 md:top-5 left-0 right-0 z-[70] px-4 md:px-8">
         <div className="max-w-[1200px] mx-auto flex items-center justify-between">
           <motion.div
             initial={{ opacity: 0, x: -12 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.1, duration: 0.4, ease: EASE_OUT }}
-            className="metallic-chip flex items-center gap-2.5 rounded-lg px-3 py-1.5"
+            className="metallic-chip amb-shine-host amb-glow-pulse flex items-center gap-2.5 rounded-lg px-3 py-1.5"
             data-tour-id="pot-prize"
           >
             <div
@@ -599,7 +611,8 @@ export default function QuestionScreen({
             initial={{ opacity: 0, x: 12 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.1, duration: 0.4, ease: EASE_OUT }}
-            className="metallic-chip flex items-center gap-2.5 rounded-lg px-3 py-1.5"
+            className="metallic-chip amb-shine-host amb-glow-pulse flex items-center gap-2.5 rounded-lg px-3 py-1.5"
+            style={{ ["--shine-delay" as string]: "3.5s" }}
           >
             <div className="relative z-[3] text-right">
               <p className="font-mono text-[9px] uppercase tracking-[0.28em] leading-none" style={{ color: "#2a1d05" }}>

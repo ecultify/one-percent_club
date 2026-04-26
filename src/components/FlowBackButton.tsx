@@ -13,22 +13,28 @@ interface FlowBackButtonProps {
  * (Mute / skip stay bottom-right; logo stays top-left or corner after fly-to-corner.)
  */
 export default function FlowBackButton({ onClick, className = "" }: FlowBackButtonProps) {
+  // The wrapper handles the centered fixed position via translate. The
+  // motion.button INSIDE only animates scale, so framer-motion's transform
+  // doesn't fight Tailwind's -translate-x-1/2 (which previously made the
+  // button jump to the right on hover).
   return (
-    <motion.button
-      type="button"
-      onClick={onClick}
-      whileHover={{ scale: 1.05 }}
-      whileTap={{ scale: 0.95 }}
-      className={
-        "fixed top-3 left-1/2 z-[100] -translate-x-1/2 flex h-9 w-9 items-center justify-center " +
-        "rounded-full border border-brass/35 bg-[#080508]/90 shadow-[0_4px_22px_rgba(0,0,0,0.55)] " +
-        "backdrop-blur-md pointer-events-auto transition-colors hover:border-brass/55 " +
-        "hover:bg-[#0c080c]/95 text-brass-bright/95 hover:text-brass-bright " +
-        className
-      }
-      aria-label="Go back"
-    >
-      <ChevronLeft className="size-5 -ml-0.5 shrink-0" strokeWidth={2.2} aria-hidden />
-    </motion.button>
+    <div className="fixed top-3 left-1/2 z-[100] -translate-x-1/2 pointer-events-none">
+      <motion.button
+        type="button"
+        onClick={onClick}
+        whileHover={{ scale: 1.08 }}
+        whileTap={{ scale: 0.94 }}
+        className={
+          "flex h-9 w-9 items-center justify-center " +
+          "rounded-full border border-brass/35 bg-[#080508]/90 shadow-[0_4px_22px_rgba(0,0,0,0.55)] " +
+          "backdrop-blur-md pointer-events-auto transition-colors hover:border-brass/55 " +
+          "hover:bg-[#0c080c]/95 text-brass-bright/95 hover:text-brass-bright " +
+          className
+        }
+        aria-label="Go back"
+      >
+        <ChevronLeft className="size-5 -ml-0.5 shrink-0" strokeWidth={2.2} aria-hidden />
+      </motion.button>
+    </div>
   );
 }

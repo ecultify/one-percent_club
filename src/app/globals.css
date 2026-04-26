@@ -2,6 +2,113 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Navbar pot-prize pulse ────────────────────────────────────
+ * Triggered by CoinTrailToNavbar at the moment the coin shower
+ * lands. Brief brightness + scale pop so the running pot total
+ * reads as "just got money". */
+@keyframes potPrizePulse {
+  0%   { transform: scale(1);    filter: brightness(1)    drop-shadow(0 0 0 rgba(255,210,103,0)); }
+  35%  { transform: scale(1.14); filter: brightness(1.55) drop-shadow(0 0 14px rgba(255,210,103,0.85)); }
+  70%  { transform: scale(1.04); filter: brightness(1.18) drop-shadow(0 0 8px rgba(255,210,103,0.45)); }
+  100% { transform: scale(1);    filter: brightness(1)    drop-shadow(0 0 0 rgba(255,210,103,0)); }
+}
+.pot-prize-pulse {
+  animation: potPrizePulse 0.72s cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: center center;
+}
+
+/* ── Microinteractions library ─────────────────────────────────
+ * Add these classes to any element to bring it to life. Each one
+ * is intentionally subtle — the goal is "always alive", not
+ * "Christmas tree". They compose: e.g. .breathe + .glow-pulse. */
+
+/* Gentle scale breathing — for hero elements (logo, big chips) */
+@keyframes ambBreathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.022); }
+}
+.amb-breathe { animation: ambBreathe 4.2s ease-in-out infinite; }
+
+/* Slow gold glow pulse — for prize tiles, currency chips */
+@keyframes ambGlowPulse {
+  0%, 100% { box-shadow: 0 0 0 rgba(228,207,106,0); filter: brightness(1); }
+  50%      { box-shadow: 0 0 22px rgba(228,207,106,0.32); filter: brightness(1.06); }
+}
+.amb-glow-pulse { animation: ambGlowPulse 3.6s ease-in-out infinite; }
+
+/* Diagonal shine sweep — runs once every ~7s across an element.
+ * Apply to .amb-shine-host (which must have position: relative + overflow: hidden);
+ * the ::after rides across. */
+@keyframes ambShineSweep {
+  0%   { transform: translateX(-120%) skewX(-18deg); opacity: 0; }
+  10%  { opacity: 1; }
+  60%  { opacity: 1; }
+  100% { transform: translateX(220%) skewX(-18deg); opacity: 0; }
+}
+.amb-shine-host { position: relative; overflow: hidden; isolation: isolate; }
+.amb-shine-host::after {
+  content: "";
+  position: absolute;
+  top: 0; bottom: 0;
+  left: 0;
+  width: 45%;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgba(255, 240, 180, 0) 40%,
+    rgba(255, 240, 180, 0.42) 50%,
+    rgba(255, 240, 180, 0) 60%,
+    transparent 100%
+  );
+  animation: ambShineSweep 7s ease-in-out infinite;
+  animation-delay: var(--shine-delay, 0s);
+  z-index: 2;
+}
+
+/* Hover lift — adds depth + shadow when cursor enters. Pair with
+ * `transition` already set on the element, or rely on the default
+ * we declare here. */
+.amb-hover-lift {
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1),
+              filter 220ms ease-out;
+  will-change: transform, box-shadow;
+}
+.amb-hover-lift:hover {
+  transform: translateY(-2px) scale(1.015);
+  box-shadow:
+    0 8px 28px rgba(0, 0, 0, 0.35),
+    0 0 22px rgba(228, 207, 106, 0.28);
+  filter: brightness(1.06);
+}
+.amb-hover-lift:active {
+  transform: translateY(0) scale(0.985);
+  transition-duration: 90ms;
+}
+
+/* Click burst — radial gold flash from the center on tap. Drop on
+ * any element with `.amb-tap-burst`; trigger by toggling the
+ * `.is-bursting` class for one cycle (or rely on :active for the
+ * lightweight version). */
+@keyframes ambTapBurst {
+  0%   { box-shadow: 0 0 0 0 rgba(228,207,106,0.6); }
+  100% { box-shadow: 0 0 0 16px rgba(228,207,106,0); }
+}
+.amb-tap-burst:active {
+  animation: ambTapBurst 0.5s ease-out;
+}
+
+/* Spotlight flicker — for "stage" elements like the navbar pot
+ * chip, the timer face. Almost imperceptible nudge to brightness. */
+@keyframes ambSpotFlicker {
+  0%, 100% { filter: brightness(1); }
+  43%      { filter: brightness(1.08); }
+  46%      { filter: brightness(0.96); }
+  50%      { filter: brightness(1.05); }
+}
+.amb-spot-flicker { animation: ambSpotFlicker 5.5s ease-in-out infinite; }
+
 @layer base {
   html, body {
     font-family: Arial, Helvetica, sans-serif;

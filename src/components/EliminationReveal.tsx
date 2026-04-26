@@ -1,9 +1,15 @@
 "use client";
 
-import { useState, useEffect, useMemo, type CSSProperties } from "react";
+import { useState, useEffect, useMemo, useRef, type CSSProperties } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { formatRupees } from "./QuizGame";
 import { useNarration } from "./NarrationProvider";
+import PotFill3D from "./PotFill3D";
+import CoinTrailToNavbar from "./CoinTrailToNavbar";
+
+// Stake per eliminated player (mirrors getDefaultQuizGameState in QuizGame.tsx).
+// Used to derive the per-round contribution and compute proportional fill levels.
+const STAKE_PER_PLAYER = 100000;
 
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
@@ -14,11 +20,13 @@ const ELIMINATION_DECISION_SRC = encodeURI("/sound/eliminationdecision.wav");
 const APPLAUSE_SRC = encodeURI("/sound/appluase2.wav");
 const APPLAUSE_FULL_VOL_MS = 5000;
 const APPLAUSE_FADE_MS = 4000;
-/** Grid-phase duration. Matches the length of ELIMINATION_DECISION_SRC so the
- *  red/blue siren animation lives exactly as long as the dramatic audio. */
-const GRID_PHASE_MS = 9000;
+/** Grid-phase duration — 3s window. The audio is seeked to play only the
+ *  LAST 3 seconds of the wav (the dramatic climax), not the first 3. */
+const GRID_PHASE_MS = 3000;
 /** After crosses + copy are visible, hold before showing the stats / applause card. */
-const POST_CROSS_HOLD_MS = 2000;
+const POST_CROSS_HOLD_MS = 500;
+/** Tail fade so the wav ending doesn't clip abruptly. */
+const ELIM_AUDIO_TAIL_FADE_MS = 250;
 
 interface EliminationRevealProps {
   questionNumber: number;
@@ -247,32 +255,78 @@ export default function EliminationReveal({
   /** Crosses on new eliminations only after eliminationdecision.wav fires `ended`. */
   const [eliminationAudioEnded, setEliminationAudioEnded] = useState(false);
 
-  // Grid phase: elimination SFX plays; crosses appear when the clip ends (or fallback).
+  // Grid phase: play the LAST 3 seconds of the elimination wav (its dramatic
+  // climax), not the calmer build at the start. Animation matches.
   useEffect(() => {
     if (!embedded || phase !== "grid") return;
     setEliminationAudioEnded(false);
 
     const a = new Audio(ELIMINATION_DECISION_SRC);
     a.loop = false;
-    a.volume = narrationMuted ? 0 : 0.7;
+    const peakVol = narrationMuted ? 0 : 0.7;
+    a.volume = peakVol;
+    a.preload = "auto";
 
     let closed = false;
+    let fadeRaf = 0;
     const settle = () => {
       if (closed) return;
       closed = true;
       window.clearTimeout(fallbackId);
+      cancelAnimationFrame(fadeRaf);
       setEliminationAudioEnded(true);
+      a.pause();
     };
 
-    const fallbackId = window.setTimeout(settle, GRID_PHASE_MS + 300);
+    // Hard cut at GRID_PHASE_MS — settle the visuals even if the seek
+    // didn't land exactly on `duration - GRID_PHASE_MS / 1000`.
+    const fallbackId = window.setTimeout(settle, GRID_PHASE_MS);
     a.addEventListener("ended", settle);
-    void a.play().catch(() => {
-      /* wait for fallback */
-    });
+
+    // Schedule a tail fade so the wav doesn't end abruptly.
+    const fadeStartMs = GRID_PHASE_MS - ELIM_AUDIO_TAIL_FADE_MS;
+    const fadeStart = performance.now() + fadeStartMs;
+    const fadeEnd = fadeStart + ELIM_AUDIO_TAIL_FADE_MS;
+    const tickFade = () => {
+      const now = performance.now();
+      if (now < fadeStart) {
+        fadeRaf = requestAnimationFrame(tickFade);
+        return;
+      }
+      const u = Math.min(1, (now - fadeStart) / ELIM_AUDIO_TAIL_FADE_MS);
+      a.volume = peakVol * (1 - u);
+      if (now < fadeEnd) {
+        fadeRaf = requestAnimationFrame(tickFade);
+      }
+    };
+    fadeRaf = requestAnimationFrame(tickFade);
+
+    // Seek to (duration - GRID_PHASE_MS) so we play only the climax tail.
+    const tailSeconds = GRID_PHASE_MS / 1000;
+    const startPlayback = () => {
+      const dur = a.duration;
+      if (isFinite(dur) && dur > tailSeconds) {
+        try { a.currentTime = Math.max(0, dur - tailSeconds); } catch { /* */ }
+      }
+      void a.play().catch(() => {
+        /* fall back to fallback timer for visual settle */
+      });
+    };
+    if (a.readyState >= 1 && isFinite(a.duration)) {
+      startPlayback();
+    } else {
+      const onMeta = () => {
+        a.removeEventListener("loadedmetadata", onMeta);
+        if (!closed) startPlayback();
+      };
+      a.addEventListener("loadedmetadata", onMeta);
+      a.load();
+    }
 
     return () => {
       closed = true;
       window.clearTimeout(fallbackId);
+      cancelAnimationFrame(fadeRaf);
       a.removeEventListener("ended", settle);
       a.pause();
       try {
@@ -355,6 +409,78 @@ export default function EliminationReveal({
   const animatedPot = useAnimatedCounter(potPrize, 1500, embeddedPotDelay);
   const animatedRemaining = useAnimatedCounter(remainingPlayers, 1200, embeddedRemainingDelay);
 
+  // ── 3D pot coin stack (cumulative across rounds) ───────────────
+  // The pot now shows actual coins stacking inside (glass vessel). Map the
+  // pot ratio to a visible coin count capped at MAX_VISIBLE_COINS so the
+  // stack reads dramatic at full pot but doesn't tank perf.
+  const MAX_VISIBLE_COINS = 80;
+  const addedThisRound = eliminated * STAKE_PER_PLAYER;
+  const previousPot = Math.max(0, potPrize - addedThisRound);
+  const maxPot = totalPlayers * STAKE_PER_PLAYER;
+  const previousCoinTotal = Math.round((previousPot / maxPot) * MAX_VISIBLE_COINS);
+  const totalAfter = Math.round((potPrize / maxPot) * MAX_VISIBLE_COINS);
+  const newCoinsThisRound = Math.max(0, totalAfter - previousCoinTotal);
+  // DOM coins flying from the pot up to the navbar pot-prize card.
+  const trailCoinCount = Math.min(20, Math.max(8, Math.floor(eliminated / 5) + 6));
+
+  const potWrapperRef = useRef<HTMLDivElement | null>(null);
+  const [trailTriggerKey, setTrailTriggerKey] = useState<number | null>(null);
+
+  // Fire the trail once the 3D fill is visually settled (after reveal-phase
+  // mount + 400ms delay + 1500ms duration ≈ 2s).
+  useEffect(() => {
+    if (!embedded || phase !== "reveal") return;
+    setTrailTriggerKey(null);
+    const fireAt = window.setTimeout(() => {
+      setTrailTriggerKey(questionNumber);
+    }, 2200);
+    return () => window.clearTimeout(fireAt);
+  }, [embedded, phase, questionNumber]);
+
+  const potFill3DBlock = (
+    <motion.div
+      ref={potWrapperRef}
+      initial={{ opacity: 0, y: 12, scale: 0.94 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ delay: 0.15, duration: 0.55, ease: EASE_OUT }}
+      className="relative rounded-2xl overflow-hidden border-2 border-brass/40 bg-black/55 shadow-[0_0_56px_-10px_rgba(228,207,106,0.5)] w-full min-h-[380px] md:min-h-[420px] flex"
+    >
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[radial-gradient(ellipse_80%_100%_at_50%_0%,rgba(255,220,140,0.32),transparent_70%)] z-[1]" />
+      {/* Canvas fills the entire panel; HUD strip sits over the bottom */}
+      <div className="absolute inset-0">
+        <PotFill3D
+          previousCoinTotal={previousCoinTotal}
+          newCoinsThisRound={newCoinsThisRound}
+          playKey={questionNumber}
+          durationMs={1500}
+          delayMs={400}
+          style={{ width: "100%", height: "100%" }}
+        />
+      </div>
+      <div className="absolute inset-x-0 bottom-0 px-4 py-3 bg-gradient-to-t from-black/90 via-black/50 to-transparent z-[1]">
+        <div className="flex items-end justify-between">
+          <div>
+            <p className="font-mono text-[8px] uppercase tracking-[0.24em] text-white/65 font-semibold">
+              Pot total
+            </p>
+            <p className="font-display text-2xl text-brass-bright tabular-nums leading-tight">
+              {formatRupees(animatedPot)}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="font-mono text-[8px] uppercase tracking-[0.24em] text-[var(--success)]/85 font-semibold">
+              This round
+            </p>
+            <p className="font-mono text-sm font-semibold text-[var(--success)] tabular-nums leading-tight">
+              + {formatRupees(addedThisRound)}
+            </p>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+
+
   // ───────── Reusable pieces ─────────
   const statusChip = playerGotItRight ? (
     <motion.div
@@ -431,34 +557,25 @@ export default function EliminationReveal({
     </motion.div>
   );
 
+  // Single full-width tile. The pot total is shown inside the pot card so we
+  // no longer need a redundant "In the pot" tile here.
   const statsBlock = (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.25, duration: 0.5, ease: EASE_OUT }}
-      className="grid grid-cols-2 gap-3"
+      className="relative p-4 rounded-xl overflow-hidden border-2 border-white/[0.2] bg-white/[0.04]"
     >
-      <div className="relative p-4 rounded-xl overflow-hidden border-2 border-white/[0.2] bg-white/[0.04]">
-        <div className="panel-sheen-wrap">
-          <div className="panel-sheen opacity-40" style={{ animationDuration: "3.6s" }} />
-        </div>
-        <div className="relative z-[1] text-center">
-          <p className="font-mono text-2xl md:text-3xl font-bold text-foreground tabular-nums">
-            {animatedRemaining}
-          </p>
-          <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-white/88 font-semibold mt-1">Still standing</p>
-        </div>
+      <div className="panel-sheen-wrap">
+        <div className="panel-sheen opacity-40" style={{ animationDuration: "3.6s" }} />
       </div>
-      <div className="relative p-4 rounded-xl overflow-hidden border-2 border-brass/50 bg-brass/[0.1] shadow-[0_0_24px_rgba(196,160,53,0.14)]">
-        <div className="panel-sheen-wrap">
-          <div className="panel-sheen opacity-55" style={{ animationDuration: "2.9s" }} />
-        </div>
-        <div className="relative z-[1] text-center">
-          <p className="font-mono text-2xl md:text-3xl font-bold text-brass-bright tabular-nums">
-            {formatRupees(animatedPot)}
-          </p>
-          <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-white/80 font-semibold mt-1">In the pot</p>
-        </div>
+      <div className="relative z-[1] flex items-center justify-center gap-4">
+        <p className="font-mono text-3xl md:text-4xl font-bold text-foreground tabular-nums leading-none">
+          {animatedRemaining}
+        </p>
+        <p className="font-mono text-[10px] uppercase tracking-[0.26em] text-white/88 font-semibold">
+          Still standing
+        </p>
       </div>
     </motion.div>
   );
@@ -667,12 +784,24 @@ export default function EliminationReveal({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.5, ease: EASE_OUT }}
-              className="w-full max-w-md mx-auto flex flex-col gap-4"
+              className="w-full max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-[1.05fr_1fr] gap-5 items-stretch"
             >
-              {headerRow}
-              {eliminatedCountBlock}
-              {statsBlock}
-              {continueButton}
+              {/* Left column: 3D pot — fills the full column height */}
+              <div className="flex">
+                {potFill3DBlock}
+              </div>
+              {/* Right column: header + eliminated count + stats + CTA */}
+              <div className="flex flex-col gap-3.5 justify-between">
+                {headerRow}
+                {eliminatedCountBlock}
+                {statsBlock}
+                {continueButton}
+              </div>
+              <CoinTrailToNavbar
+                triggerKey={trailTriggerKey}
+                sourceRef={potWrapperRef}
+                coinCount={trailCoinCount}
+              />
             </motion.div>
           )}
         </AnimatePresence>
