@@ -81,12 +81,23 @@ function questionVoSrc(questionId: number): string {
 }
 
 function correctReactionSrc(questionIndex: number): string {
+  // Q5 (questionIndex === 4) was rewritten as the QWERTY MCQ. The old
+  // `q5correct.mp4` no longer matches the new question, so we point at
+  // the freshly recorded reaction file `q5correctvid.mp4`.
+  if (questionIndex === 4) {
+    return "/questionscreenimages/question5/q5correctvid.mp4";
+  }
   return `/questionscreenimages/question${questionIndex + 1}/q${questionIndex + 1}correct.mp4`;
 }
 
 function pickWrongReactionUrl(questionIndex: number): string {
   if (questionIndex === 7) {
     return "/questionscreenimages/wrongrxns/1percentwrongmodified.mp4";
+  }
+  // Q5 has its own dedicated wrong-reaction file recorded against the
+  // QWERTY MCQ rewrite — bypass the generic shared wrongrxns pool.
+  if (questionIndex === 4) {
+    return "/questionscreenimages/question5/q5wrongvid.mp4";
   }
   const templates = [
     "/questionscreenimages/wrongrxns/qwrong1.mp4",
