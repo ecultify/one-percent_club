@@ -29,7 +29,7 @@ function EndPreviewInner() {
   const key = useMemo(() => `end-preview-${winner ? "win" : "lose"}-${reached}`, [winner, reached]);
 
   return (
-    <main className="relative min-h-screen w-full overflow-hidden bg-[#0a0908]">
+    <main className="relative min-h-screen w-full overflow-hidden bg-[#03020c]">
       <QuizGame
         key={key}
         playerName="Champion (preview)"
@@ -45,7 +45,7 @@ function EndPreviewInner() {
 
 export default function EndPreviewPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#0a0908]" />}>
+    <Suspense fallback={<div className="min-h-screen bg-[#03020c]" />}>
       <EndPreviewInner />
     </Suspense>
   );

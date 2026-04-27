@@ -32,7 +32,7 @@ import { playCoinTink, prewarmAudio } from "@/lib/uiClickSound";
 // stage. The scene is shipped as a local JSON export so it works without
 // the unicorn.studio CDN — passing projectId here would 404 because the
 // project was never published. jsonFilePath serves the offline JSON.
-const UNICORN_JSON_PATH = "/animations/intro_sequence_remix.json";
+const UNICORN_JSON_PATH = "/animations/end_tvscreen_animate.json";
 const UNICORN_SDK_URL =
   "https://cdn.jsdelivr.net/gh/hiunicornstudio/unicornstudio.js@v2.1.9/dist/unicornStudio.umd.js";
 const UnicornScene = dynamic(() => import("unicornstudio-react/next"), {
@@ -127,10 +127,14 @@ export default function FinalStage3D({ journeyInfo, playerName }: FinalStage3DPr
       c.width = 1024; c.height = 512;
       const cx = c.getContext("2d")!;
       const sky = cx.createLinearGradient(0, 0, 0, 512);
-      sky.addColorStop(0,    "#1a0e08");
-      sky.addColorStop(0.45, "#2a1810");
-      sky.addColorStop(0.55, "#180c06");
-      sky.addColorStop(1,    "#070310");
+      // Cool purple-blue ambient gradient (replaces legacy brown sky).
+      // Drives the PMREM HDR env, so reflections on coins/pots pick up
+      // a subtle purple cast at top fading to deep blue-black below —
+      // keeps gold pop, kills the brown read.
+      sky.addColorStop(0,    "#160a2a");
+      sky.addColorStop(0.45, "#0e1438");
+      sky.addColorStop(0.55, "#0a0820");
+      sky.addColorStop(1,    "#02020a");
       cx.fillStyle = sky;
       cx.fillRect(0, 0, 1024, 512);
 
@@ -826,12 +830,39 @@ export default function FinalStage3D({ journeyInfo, playerName }: FinalStage3DPr
     const coins: Coin[] = [];
 
     let shakeMagnitude = 0;
+    let firstImpactFired = false;
+    let initialAudioWindowEnd = 0; // performance.now() ms — bumped on first impact
     const onCoinImpact = (velocity: number, idx: number) => {
-      // Ration the tinks so a heavy frame doesn't fire 30 sounds at once
-      if (Math.random() < 0.18) {
+      // ── Audio gate ─────────────────────────────────────────
+      // The very first coin landing MUST make sound, otherwise the
+      // user perceives ~1+ seconds of silent rain (physics fall time
+      // alone is ~1s, and the legacy 18% random gate filters out the
+      // first 5-10 impacts statistically). We force-fire the first
+      // qualifying impact, then run a 2.5s "loud rain" window where
+      // the gate is bumped to 50% so the start of the drop reads as
+      // a confident downpour, then settle back to the 18% rhythm so
+      // it doesn't fight the music for the rest of the scene.
+      if (!firstImpactFired) {
+        firstImpactFired = true;
+        initialAudioWindowEnd = performance.now() + 2500;
         playCoinTink(((idx * 53) % 200) - 100);
+      } else {
+        const inInitialWindow = performance.now() < initialAudioWindowEnd;
+        const tinkProb = inInitialWindow ? 0.5 : 0.18;
+        if (Math.random() < tinkProb) {
+          playCoinTink(((idx * 53) % 200) - 100);
+        }
       }
-      shakeMagnitude = Math.min(shakeMagnitude + velocity * 0.0022, 0.05);
+      // ── Shake gate ─────────────────────────────────────────
+      // Only contribute to camera shake during the INITIAL spawn
+      // wave. Once all coins have spawned, the recycler keeps
+      // dropping fallen coins forever — but their impacts must NOT
+      // keep shaking the stage indefinitely (that's the bug where
+      // curtains/screens/stage shake until rain stops, which it
+      // never does). Existing shake decays out at 0.88/frame.
+      if (!initialSpawnDone) {
+        shakeMagnitude = Math.min(shakeMagnitude + velocity * 0.0022, 0.05);
+      }
     };
 
     const createCoin = (idx: number): Coin => {
@@ -875,8 +906,9 @@ export default function FinalStage3D({ journeyInfo, playerName }: FinalStage3DPr
     // Hybrid spawn: 70% of coins target a pot (tight ±0.32 spread, drop
     // straight in), 30% rain across the full stage with wide spread —
     // those bounce off the inlay and create the actual "raining down"
-    // visual the user wanted. Spawn height raised from 8-10 to 12-15
-    // so coins have longer flight time, reading as sheets of rain.
+    // visual the user wanted. Spawn height: y=8-10 (was 12-15, dropped
+    // to cut ~0.5s of dead-air silence before the first audible
+    // impact while still preserving the "sheets of rain" silhouette).
     const pickSpawnPoint = () => {
       const isPotShot = Math.random() < 0.7;
       if (isPotShot) {
@@ -884,14 +916,14 @@ export default function FinalStage3D({ journeyInfo, playerName }: FinalStage3DPr
         return {
           x: target.x + (Math.random() - 0.5) * 0.34,
           z: target.z + (Math.random() - 0.5) * 0.34,
-          y: 12 + Math.random() * 3,
+          y: 8 + Math.random() * 2,
         };
       }
       // Rain: wide spread across the entire stage area
       return {
         x: (Math.random() - 0.5) * (STAGE_W - 1.5),
         z: (Math.random() - 0.5) * (STAGE_D - 1.0) + 0.7,
-        y: 12 + Math.random() * 3,
+        y: 8 + Math.random() * 2,
       };
     };
 
@@ -1091,7 +1123,7 @@ export default function FinalStage3D({ journeyInfo, playerName }: FinalStage3DPr
       const player = playerRef.current;
 
       // Warm dark background (was cool blue-black)
-      ctx.fillStyle = "#0e0a05"; ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = "#0a0820"; ctx.fillRect(0, 0, w, h);
 
       // Header — just "Your Run", centered
       ctx.fillStyle = `rgb(${ACCENT_RGB})`;
@@ -1148,7 +1180,7 @@ export default function FinalStage3D({ journeyInfo, playerName }: FinalStage3DPr
     // across the room the way actual game-show signage does.
     const drawRight = (ctx: CanvasRenderingContext2D, w: number, h: number, t: number) => {
       const g = ctx.createLinearGradient(0, 0, 0, h);
-      g.addColorStop(0, "#160a02"); g.addColorStop(1, "#0a0501");
+      g.addColorStop(0, "#160a2a"); g.addColorStop(1, "#06061a");
       ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
 
       // Tiny eyebrow label
@@ -1464,7 +1496,7 @@ export default function FinalStage3D({ journeyInfo, playerName }: FinalStage3DPr
         // created the "empty black" feel the user flagged.
         background: [
           "radial-gradient(ellipse 60% 50% at 50% 28%, rgba(255,200,120,0.10) 0%, rgba(0,0,0,0) 55%)",
-          "radial-gradient(ellipse 130% 110% at 50% 50%, #1a0a04 0%, #100604 50%, #0a0403 80%, #060305 100%)",
+          "radial-gradient(ellipse 130% 110% at 50% 50%, #160a2a 0%, #0e0828 50%, #06061a 80%, #03020c 100%)",
         ].join(", "),
       }}
     >
@@ -1485,7 +1517,7 @@ export default function FinalStage3D({ journeyInfo, playerName }: FinalStage3DPr
           height: "min(40vh, 38vw)",
           aspectRatio: "16 / 9",
           padding: "8px",
-          background: "linear-gradient(180deg,#1a0d05 0%,#080402 100%)",
+          background: "linear-gradient(180deg,#160a2a 0%,#06061a 100%)",
           borderRadius: "10px",
           boxShadow: [
             // Outer warm halo only — no inset rim so nothing bleeds
@@ -1516,7 +1548,7 @@ export default function FinalStage3D({ journeyInfo, playerName }: FinalStage3DPr
               inset: 0,
               background: [
                 "radial-gradient(ellipse at 50% 30%, rgba(255,225,140,0.18) 0%, rgba(0,0,0,0) 55%)",
-                "linear-gradient(180deg,#0a0502 0%,#1a0d05 50%,#080402 100%)",
+                "linear-gradient(180deg,#0a0612 0%,#160a2a 50%,#06061a 100%)",
               ].join(", "),
               display: "flex",
               alignItems: "center",

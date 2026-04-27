@@ -8,7 +8,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useMotionValue, useSpring } from "framer-motion";
 import type { Question } from "./QuizGame";
 import { formatRupees } from "./QuizGame";
 import { useNarration } from "./NarrationProvider";
@@ -356,6 +356,44 @@ export default function QuestionScreen({
   const tickAudioRef = useRef<HTMLAudioElement | null>(null);
   const timerVoCueFiredRef = useRef(false);
   const { muted: narrationMuted } = useNarration();
+
+  // ── Cursor-driven 3D tilt on the question board ───────────────
+  // Adds depth without changing colors or visuals — the board lifts off
+  // the page and follows the cursor with a 1.5° max rotation on each
+  // axis. Springs smooth the values so it never feels jittery. The
+  // transform is applied via motion values to avoid React re-renders
+  // on every mousemove (60fps DOM reads/writes only).
+  const boardRef = useRef<HTMLDivElement>(null);
+  const tiltX = useMotionValue(0);
+  const tiltY = useMotionValue(0);
+  const springTiltX = useSpring(tiltX, { stiffness: 90, damping: 22, mass: 0.6 });
+  const springTiltY = useSpring(tiltY, { stiffness: 90, damping: 22, mass: 0.6 });
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      const el = boardRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const dx = (e.clientX - cx) / (vw / 2);
+      const dy = (e.clientY - cy) / (vh / 2);
+      tiltY.set(Math.max(-1, Math.min(1, dx)) * 1.5);
+      tiltX.set(Math.max(-1, Math.min(1, dy)) * -1.5);
+    };
+    const onLeave = () => {
+      tiltX.set(0);
+      tiltY.set(0);
+    };
+    window.addEventListener("mousemove", onMove, { passive: true });
+    window.addEventListener("mouseleave", onLeave);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseleave", onLeave);
+    };
+  }, [tiltX, tiltY]);
 
   useEffect(() => {
     timerVoCueFiredRef.current = false;
@@ -725,24 +763,42 @@ export default function QuestionScreen({
 
       {/* ━━ Centered content frame — pushed down to clear the 3D logo in the navbar ━━ */}
       <div className="relative z-10 w-full h-full flex items-center justify-center px-4 md:px-8 pt-28 md:pt-36 pb-16 md:pb-20">
-        <div className="relative w-full max-w-[920px]">
+        {/* Perspective container — required for the rotateX/rotateY on
+            the board below to actually produce a depth illusion. Without
+            perspective on a parent, 3D rotations collapse to a flat skew. */}
+        <div
+          className="relative w-full max-w-[920px]"
+          style={{ perspective: "1500px", perspectiveOrigin: "50% 50%" }}
+        >
 
 
           {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
               SCREEN FRAME — gold rim; interior matches registration modal
-              (dark bronze fill, not golden wash).
+              (dark bronze fill, not golden wash). Enhanced with multi-
+              layer drop-shadow elevation + cursor-driven 3D tilt for
+              perceived depth (no visual or color change — only z-axis).
               ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-          <div
+          <motion.div
+            ref={boardRef}
             className="relative w-full mx-auto rounded-[24px] p-[4px] md:p-[5px] overflow-hidden"
             style={{
               background: METALLIC_RIM_STRONG,
               boxShadow: [
                 "0 0 0 1px rgba(0,0,0,0.75)",
-                "0 0 28px 3px rgba(196,160,53,0.35)",
+                "0 1px 2px rgba(0,0,0,0.45)",
+                "0 4px 10px -2px rgba(0,0,0,0.55)",
+                "0 12px 28px -6px rgba(0,0,0,0.65)",
                 "0 28px 90px -22px rgba(0,0,0,0.78)",
+                "0 60px 140px -40px rgba(0,0,0,0.55)",
+                "0 0 28px 3px rgba(196,160,53,0.35)",
                 "inset 0 1px 0 rgba(255,245,210,0.55)",
+                "inset 0 -1px 0 rgba(0,0,0,0.55)",
               ].join(", "),
               minHeight: "min(46vh, 380px)",
+              rotateX: springTiltX,
+              rotateY: springTiltY,
+              transformStyle: "preserve-3d",
+              willChange: "transform",
             }}
           >
             <div
@@ -1477,7 +1533,7 @@ export default function QuestionScreen({
 
             </div>
             </div>
-          </div>
+          </motion.div>
         </div>
       </div>
     </motion.div>

@@ -52,7 +52,7 @@ export default function RootLayout({
             a cold fetch when they hit the end screen. */}
         <link
           rel="preload"
-          href="/animations/intro_sequence_remix.json"
+          href="/animations/end_tvscreen_animate.json"
           as="fetch"
           type="application/json"
           crossOrigin="anonymous"
