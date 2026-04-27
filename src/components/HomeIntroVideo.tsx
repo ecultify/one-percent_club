@@ -12,8 +12,16 @@ const DHAK_TIMES_S = [1, 3] as const;
 /** Game-show theme arms at this video timestamp (seconds). Mirrors the
  *  legacy theme-start point at story frame 117. */
 const THEME_CUE_S = 6;
+/** Lead time (seconds) before the video ends at which we tell GameFlow to
+ *  surface the Enter CTA. Picked so the button's existing fade-in finishes
+ *  right around the moment the video lands on its final frame. */
+const ENTER_CUE_LEAD_S = 2.0;
 /** Window-level event GameFlow listens for to arm + unlock the theme. */
 export const HOME_VIDEO_THEME_EVENT = "homevideo:theme-cue";
+/** Window-level event GameFlow listens for to fade the Enter button in
+ *  during the home intro video's tail (instead of revealing it on
+ *  audio-unlock the way it used to). */
+export const HOME_VIDEO_ENTER_EVENT = "homevideo:enter-cue";
 
 /**
  * HomeIntroVideo
@@ -43,9 +51,10 @@ export default function HomeIntroVideo() {
   /** Tracks which one-shot cues have already fired so seek-back / repeated
    *  timeupdate events can't re-trigger them. Indexes correspond to
    *  DHAK_TIMES_S; the last slot is the theme cue. */
-  const cuesFiredRef = useRef<{ dhak: boolean[]; theme: boolean }>({
+  const cuesFiredRef = useRef<{ dhak: boolean[]; theme: boolean; enter: boolean }>({
     dhak: DHAK_TIMES_S.map(() => false),
     theme: false,
+    enter: false,
   });
   const { audioUnlocked } = useNarration();
 
@@ -78,6 +87,38 @@ export default function HomeIntroVideo() {
       } catch {
         /* ignore — older browsers without CustomEvent constructor */
       }
+    }
+    // Enter cue: fire once when we're within ENTER_CUE_LEAD_S of the end.
+    // GameFlow uses this to fade the Enter CTA in during the video's tail
+    // so it's fully visible right around the time the video lands on its
+    // final frame (instead of popping in immediately on audio-unlock).
+    const dur = e.currentTarget.duration;
+    if (
+      !cuesFiredRef.current.enter &&
+      Number.isFinite(dur) &&
+      dur > 0 &&
+      dur - t <= ENTER_CUE_LEAD_S
+    ) {
+      cuesFiredRef.current.enter = true;
+      try {
+        window.dispatchEvent(new CustomEvent(HOME_VIDEO_ENTER_EVENT));
+      } catch {
+        /* ignore — older browsers without CustomEvent constructor */
+      }
+    }
+  };
+
+  /** If the video ends without the time-based enter cue having fired (rare:
+   *  e.g. a metadata stall makes `duration` Infinity until the very end),
+   *  fire the enter cue on `ended` as a safety net so the CTA is never
+   *  permanently hidden. */
+  const handleEnded = () => {
+    if (cuesFiredRef.current.enter) return;
+    cuesFiredRef.current.enter = true;
+    try {
+      window.dispatchEvent(new CustomEvent(HOME_VIDEO_ENTER_EVENT));
+    } catch {
+      /* ignore */
     }
   };
 
@@ -114,6 +155,7 @@ export default function HomeIntroVideo() {
         playsInline
         preload="auto"
         onTimeUpdate={handleTimeUpdate}
+        onEnded={handleEnded}
         className="absolute inset-0 h-full w-full object-cover"
         aria-hidden
       />

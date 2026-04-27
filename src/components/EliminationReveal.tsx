@@ -599,17 +599,8 @@ export default function EliminationReveal({
           showCrossAfterAudio={phase === "grid" ? eliminationAudioEnded : false}
         />
       </div>
-      {eliminationAudioEnded && (
-        <motion.p
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.32, ease: EASE_OUT }}
-          className="mt-4 text-center font-mono text-sm sm:text-base font-bold uppercase tracking-[0.22em] leading-snug"
-        >
-          <span className="text-[var(--danger)] tabular-nums font-semibold">{eliminated}</span>
-          <span className="text-white"> eliminated this round</span>
-        </motion.p>
-      )}
+      {/* Removed the duplicate "X eliminated this round" caption beneath
+          the grid — the big right-column headline already says it. */}
     </motion.div>
   );
 

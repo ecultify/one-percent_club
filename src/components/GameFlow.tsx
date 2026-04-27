@@ -221,23 +221,32 @@ export default function GameFlow() {
   }, [phase]);
 
   // Home page is no longer scroll-driven (the legacy ScrollyCanvas was
-  // replaced by HomeIntroVideo). The Enter button instead surfaces as
-  // soon as the user has unlocked audio via the AudioPrimingGate — which
-  // is the moment the home video starts playing — so the user can click
-  // through to the experience whenever they're ready.
+  // replaced by HomeIntroVideo). The Enter button now fades in during the
+  // home intro video's tail (the "homevideo:enter-cue" event fires ~2s
+  // before the video ends), so the CTA is fully visible right around the
+  // time the video lands on its final frame.
   //
-  // `useScroll` / `useMotionValueEvent` removed: there's nothing 500vh
-  // tall on the page anymore for them to track.
+  // We still pre-warm the 3D club-logo model the moment audio unlocks (so
+  // it's ready in memory by the time the user actually clicks Enter), but
+  // we no longer reveal the button on audio-unlock.
   useEffect(() => {
     if (phase !== "idle") return;
     if (!audioUnlocked) return;
-    setShowButton(true);
-    // Warm the 3D club-logo model in the background so it's ready by
-    // the time the user clicks Enter.
     void import("@/lib/logoModelPreload")
       .then((m) => m.preloadClubLogoModel())
       .catch(() => {});
   }, [phase, audioUnlocked]);
+
+  // Surface the Enter CTA when HomeIntroVideo signals it's near the end of
+  // the home video. Window-level event keeps the contract loose so we don't
+  // have to thread a callback through `app/page.tsx`.
+  useEffect(() => {
+    if (phase !== "idle") return;
+    const HOME_VIDEO_ENTER_EVENT = "homevideo:enter-cue";
+    const onCue = () => setShowButton(true);
+    window.addEventListener(HOME_VIDEO_ENTER_EVENT, onCue);
+    return () => window.removeEventListener(HOME_VIDEO_ENTER_EVENT, onCue);
+  }, [phase]);
 
   // Theme cue: HomeIntroVideo dispatches "homevideo:theme-cue" at the
   // 6-second mark of the home video. We mirror what the legacy
@@ -591,7 +600,9 @@ export default function GameFlow() {
             initial={{ opacity: 0, scale: 0.6 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
-            transition={{ duration: 0.4, ease: EASE_OUT }}
+            // Slower fade-in (was 0.4s) so the CTA surfaces in step with
+            // the tail of the home intro video instead of snapping in.
+            transition={{ duration: 1.4, ease: EASE_OUT }}
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.92 }}
             aria-label="Enter experience"

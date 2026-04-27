@@ -192,12 +192,7 @@ const SCENES: Scene[] = [
           >
             Sawaal
           </span>
-          <span
-            className="uppercase tracking-[0.42em] text-[#c9a94a]"
-            style={{ fontSize: "clamp(0.7rem, 0.9vw, 0.9rem)" }}
-          >
-            Ek ke baad ek
-          </span>
+          {/* Subtext "Ek ke baad ek" removed per client request. */}
         </motion.div>
       </div>
     ),
@@ -238,12 +233,7 @@ const SCENES: Scene[] = [
           >
             Har sawaal ka apna percentage.
           </span>
-          <span
-            className="uppercase tracking-[0.32em] text-[#c9a94a]"
-            style={{ fontSize: "clamp(0.75rem, 0.9vw, 0.95rem)" }}
-          >
-            Jitna chhota number, utna mushkil
-          </span>
+          {/* Subtext "Jitna chhota number, utna mushkil" removed per client request. */}
         </motion.div>
       </div>
     ),
@@ -297,12 +287,7 @@ const SCENES: Scene[] = [
           >
             ka question har koi khel sakta hai
           </span>
-          <span
-            className="uppercase tracking-[0.34em] text-[#c9a94a]"
-            style={{ fontSize: "clamp(0.7rem, 0.9vw, 0.9rem)" }}
-          >
-            100 out of 100 are in
-          </span>
+          {/* Subtext "100 out of 100 are in" removed per client request. */}
         </motion.div>
       </div>
     ),
@@ -365,12 +350,7 @@ const SCENES: Scene[] = [
           >
             But only 1% people play the final question
           </span>
-          <span
-            className="uppercase tracking-[0.42em] text-[#ff8e6a]"
-            style={{ fontSize: "clamp(0.7rem, 0.85vw, 0.85rem)" }}
-          >
-            Aakhri sawaal · 1% only
-          </span>
+          {/* Subtext "Aakhri sawaal · 1% only" removed per client request. */}
         </motion.div>
       </div>
     ),
@@ -399,12 +379,7 @@ const SCENES: Scene[] = [
           >
             Har question pe milenge aapko sirf 30 sec.
           </span>
-          <span
-            className="uppercase tracking-[0.32em] text-[#c9a94a]"
-            style={{ fontSize: "clamp(0.75rem, 0.9vw, 0.95rem)" }}
-          >
-            Play smartly and logically
-          </span>
+          {/* Subtext "Play smartly and logically" removed per client request. */}
         </motion.div>
       </div>
     ),
@@ -440,15 +415,7 @@ const SCENES: Scene[] = [
             <ZText3D>{word}</ZText3D>
           </motion.span>
         ))}
-        <motion.span
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.6, delay: 1.1, ease: EASE }}
-          className="mt-3 uppercase tracking-[0.4em] text-[#c9a94a]"
-          style={{ fontSize: "clamp(0.75rem, 0.9vw, 0.95rem)" }}
-        >
-          Koi lifeline nahi · Koi audience poll nahi
-        </motion.span>
+        {/* Subtext "Koi lifeline nahi · Koi audience poll nahi" removed per client request. */}
       </div>
     ),
   },

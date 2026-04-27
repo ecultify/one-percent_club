@@ -102,6 +102,12 @@ function correctReactionSrc(questionIndex: number): string {
   if (questionIndex === 4) {
     return "/questionscreenimages/question5/q5correctvid.mp4";
   }
+  // Q8 (the final question, questionIndex === 7) when answered correctly
+  // plays the dedicated "1% Club" winner reaction. Confetti is dropped
+  // from the top for the first 10s in QuizGame while this clip plays.
+  if (questionIndex === 7) {
+    return "/questionscreenimages/1percentfinalcorrect.mp4";
+  }
   return `/questionscreenimages/question${questionIndex + 1}/q${questionIndex + 1}correct.mp4`;
 }
 
@@ -553,6 +559,9 @@ export default function QuizGame({
 
   // Reaction video overlay state
   const [reactionVideo, setReactionVideo] = useState<"correct" | "wrong" | "winner" | null>(null);
+  /** True for the first 10 seconds of the Q8 winner reaction video — drops
+   *  metallic gold confetti from the top of the screen above the video. */
+  const [lastQuestionConfettiActive, setLastQuestionConfettiActive] = useState(false);
   /** Picked when showing a wrong reaction; stable URL for the clip (Q1–Q7 random, Q8 fixed). */
   const wrongReactionUrlRef = useRef<string | null>(null);
   const pendingEliminationRef = useRef<{ eliminated: number; addedToPot: number } | null>(null);
@@ -908,6 +917,25 @@ export default function QuizGame({
     }
   }, [gameState.phase]);
 
+  // Confetti drop on the Q8 winner reaction. Mounts the metallic confetti
+  // layer above the reaction video for the first 10 seconds of playback,
+  // then auto-stops. The layer is unmounted on cleanup so a back-out / quick
+  // skip can't leave confetti hanging on screen.
+  useEffect(() => {
+    if (reactionVideo !== "winner") {
+      setLastQuestionConfettiActive(false);
+      return;
+    }
+    setLastQuestionConfettiActive(true);
+    const t = window.setTimeout(() => {
+      setLastQuestionConfettiActive(false);
+    }, 10000);
+    return () => {
+      window.clearTimeout(t);
+      setLastQuestionConfettiActive(false);
+    };
+  }, [reactionVideo]);
+
   // Hide the floating mute button whenever a full-screen video overlay is on,
   // otherwise it stacks on top of the video's own "Skip ▸" button bottom-right.
   const videoOverlayActive =
@@ -1183,6 +1211,17 @@ export default function QuizGame({
         )}
       </AnimatePresence>
 
+      {/* ━━ Q8 winner confetti — drops from the top for the first 10s of the
+              "1percentfinalcorrect" reaction video. Layer sits at z-[96], one
+              level above the z-[95] reaction overlay so the gold strips are
+              visible against the video. Pointer-events-none so the Skip pill
+              underneath stays clickable. ━━ */}
+      {lastQuestionConfettiActive && (
+        <WinnerMetallicConfetti
+          className="pointer-events-none fixed inset-0 z-[96] overflow-hidden"
+        />
+      )}
+
       {/* ━━ Ending Video Overlay (plays once after the user clicks "See end screen") ━━ */}
       <AnimatePresence>
         {gameState.phase === "final-video" && (
@@ -1247,10 +1286,10 @@ export default function QuizGame({
             >
               <div className="absolute top-0 left-6 right-6 h-[2px] bg-gradient-to-r from-transparent via-brass-bright/70 to-transparent" />
               <p className="font-mono text-[10px] uppercase tracking-[0.45em] text-brass-dim mb-4">
-                Guided tour
+                Guided instructions
               </p>
               <h3 className="font-display text-2xl md:text-[1.75rem] font-semibold text-foreground mb-4 leading-tight">
-                Pehle, ek quick tour
+                Pehle, kuch quick instructions
               </h3>
               <p className="text-sm text-foreground/70 leading-relaxed mb-8">
                 Main aapko quickly dikha deta hoon ki yeh game kaise khelna hai. Click below to
@@ -1269,7 +1308,7 @@ export default function QuizGame({
                   onClick={handleSkipTour}
                   className="w-full cursor-pointer rounded-xl border border-brass/25 bg-black/40 py-3 text-center text-[11px] font-mono uppercase tracking-[0.28em] text-brass-dim hover:border-brass/50 hover:text-brass-bright hover:bg-black/60 transition-colors"
                 >
-                  Skip tour
+                  Skip instructions
                 </button>
               </div>
             </motion.div>
@@ -1315,7 +1354,7 @@ export default function QuizGame({
 
               <div className="relative">
                 <p className="font-mono text-[10px] uppercase tracking-[0.45em] text-brass-dim mb-5">
-                  Tour complete
+                  Instructions complete
                 </p>
                 <div className="mx-auto mb-6 h-px w-16 bg-gradient-to-r from-transparent via-brass/60 to-transparent" />
 
@@ -1344,7 +1383,7 @@ export default function QuizGame({
                     }}
                     className="w-full cursor-pointer rounded-xl border border-brass/25 bg-black/40 py-3 text-center text-[11px] font-mono uppercase tracking-[0.28em] text-brass-dim hover:border-brass/50 hover:text-brass-bright hover:bg-black/60 transition-colors"
                   >
-                    Replay tour
+                    Replay instructions
                   </button>
                 </div>
               </div>
@@ -1403,7 +1442,7 @@ const METALLIC_GOLD: string[] = [
   "linear-gradient(45deg, #e8c547, #5c4a1a, #f0d78c, #9a7b2a)",
 ];
 
-function WinnerMetallicConfetti() {
+function WinnerMetallicConfetti({ className }: { className?: string } = {}) {
   const pieces = useMemo(
     () =>
       Array.from({ length: 56 }, (_, i) => {
@@ -1427,7 +1466,10 @@ function WinnerMetallicConfetti() {
 
   return (
     <div
-      className="pointer-events-none fixed inset-0 z-[1] overflow-hidden"
+      className={
+        className ??
+        "pointer-events-none fixed inset-0 z-[1] overflow-hidden"
+      }
       aria-hidden
     >
       {pieces.map((p) => (

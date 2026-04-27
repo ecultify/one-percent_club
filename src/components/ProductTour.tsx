@@ -443,7 +443,7 @@ export default function ProductTour({ steps, onFinish, onSkip, fast = false }: P
                   onClick={handleSkip}
                   className="text-[10px] font-mono uppercase tracking-[0.22em] text-brass-dim hover:text-brass-bright transition-colors"
                 >
-                  Skip tour
+                  Skip instructions
                 </button>
                 <div className="flex items-center gap-2">
                   {stepIndex > 0 && (
