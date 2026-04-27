@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
-import { motion, AnimatePresence, useScroll, useMotionValueEvent } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import UserDetailsModal, { type QuizSet } from "./UserDetailsModal";
 import MuteButton from "./MuteButton";
 import { METALLIC_RIM_GRADIENT, PANEL_INNER_FILL } from "./QuestionScreen";
@@ -172,7 +172,7 @@ export default function GameFlow() {
   const quizBackHandlerRef = useRef<(() => void) | null>(null);
 
   const positions = useLogoPositions();
-  const { unlock: unlockAudio, prefetchAudioUrl } = useNarration();
+  const { unlock: unlockAudio, prefetchAudioUrl, audioUnlocked } = useNarration();
 
   const handleThemeUnlockReady = useCallback((unlockTheme: () => void) => {
     themeUnlockRef.current = unlockTheme;
@@ -216,20 +216,40 @@ export default function GameFlow() {
     };
   }, [phase]);
 
-  const { scrollYProgress } = useScroll();
-  // Theme unlock is NOT driven from scroll: browsers do not treat wheel/scroll as
-  // a user activation for audible media. Unlock happens on tap/click/key via GameShowAudio
-  // (and on Enter / ReadyToPlayGate via explicit handlers below).
-  useMotionValueEvent(scrollYProgress, "change", (v) => {
-    if (phase === "idle") {
-      setShowButton(v > 0.75);
-      if (v > 0.45) {
-        void import("@/lib/logoModelPreload")
-          .then((m) => m.preloadClubLogoModel())
-          .catch(() => {});
-      }
-    }
-  });
+  // Home page is no longer scroll-driven (the legacy ScrollyCanvas was
+  // replaced by HomeIntroVideo). The Enter button instead surfaces as
+  // soon as the user has unlocked audio via the AudioPrimingGate — which
+  // is the moment the home video starts playing — so the user can click
+  // through to the experience whenever they're ready.
+  //
+  // `useScroll` / `useMotionValueEvent` removed: there's nothing 500vh
+  // tall on the page anymore for them to track.
+  useEffect(() => {
+    if (phase !== "idle") return;
+    if (!audioUnlocked) return;
+    setShowButton(true);
+    // Warm the 3D club-logo model in the background so it's ready by
+    // the time the user clicks Enter.
+    void import("@/lib/logoModelPreload")
+      .then((m) => m.preloadClubLogoModel())
+      .catch(() => {});
+  }, [phase, audioUnlocked]);
+
+  // Theme cue: HomeIntroVideo dispatches "homevideo:theme-cue" at the
+  // 6-second mark of the home video. We mirror what the legacy
+  // scroll-frame trigger used to do — arm the idle theme + run the
+  // GameShowAudio unlock — so the bed kicks in mid-intro instead of
+  // waiting for the Enter click.
+  useEffect(() => {
+    if (phase !== "idle") return;
+    const HOME_VIDEO_THEME_EVENT = "homevideo:theme-cue";
+    const onCue = () => {
+      setIdleScrollThemeArmed(true);
+      themeUnlockRef.current?.();
+    };
+    window.addEventListener(HOME_VIDEO_THEME_EVENT, onCue);
+    return () => window.removeEventListener(HOME_VIDEO_THEME_EVENT, onCue);
+  }, [phase]);
 
   // Opening scroll: dhak on story frames 25 & 79; Twin Petes theme from frame 117 onward (idle only).
   useEffect(() => {

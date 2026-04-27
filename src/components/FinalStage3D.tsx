@@ -1233,23 +1233,23 @@ export default function FinalStage3D({ journeyInfo, playerName }: FinalStage3DPr
     // the real WebGL scene the user designed in Unicorn.
     const screens: Screen[] = [];
 
-    // Side TVs lowered from y=2.9 to y=2.4 so they sit clearly BELOW
-    // the cinema screen's lower edge in screen space (the cinema's
-    // "CLUB" wordmark was being chopped by these before). Pole heights
-    // adjusted to match, keeping them planted on the stage.
-    const left = makeScreen(3.2, 2.0, drawLeft);
-    left.group.position.set(-4.6, 2.4, -2.4);
+    // Side TVs scaled up ~30% (3.2×2.0 → 4.2×2.6) so the YOUR RUN /
+    // PARTNER WITH copy reads cleanly without leaning toward the screen.
+    // Positions nudged outward and up so the larger panels still clear
+    // the stage and don't crowd the cinema screen behind.
+    const left = makeScreen(4.2, 2.6, drawLeft);
+    left.group.position.set(-5.2, 2.7, -2.4);
     left.group.rotation.y = Math.PI / 9;
-    left.pole.scale.y = 0.7;
-    left.pole.position.set(-4.6, 0.95, -2.4);
+    left.pole.scale.y = 0.78;
+    left.pole.position.set(-5.2, 1.1, -2.4);
     scene.add(left.group, left.pole);
     screens.push(left);
 
-    const right = makeScreen(3.2, 2.0, drawRight);
-    right.group.position.set(4.6, 2.4, -2.4);
+    const right = makeScreen(4.2, 2.6, drawRight);
+    right.group.position.set(5.2, 2.7, -2.4);
     right.group.rotation.y = -Math.PI / 9;
-    right.pole.scale.y = 0.7;
-    right.pole.position.set(4.6, 0.95, -2.4);
+    right.pole.scale.y = 0.78;
+    right.pole.position.set(5.2, 1.1, -2.4);
     scene.add(right.group, right.pole);
     screens.push(right);
 
@@ -1511,10 +1511,14 @@ export default function FinalStage3D({ journeyInfo, playerName }: FinalStage3DPr
         aria-hidden
         className="absolute pointer-events-none"
         style={{
-          top: "2vh",
+          top: "1.5vh",
           left: "50%",
           transform: "translateX(-50%)",
-          height: "min(40vh, 38vw)",
+          // Cinema screen scaled up so the JSON animation reads at the
+          // intended size: was min(40vh, 38vw) — now min(56vh, 52vw).
+          // ~40% bigger by area; still aspect-locked to 16:9 so the
+          // unicorn scene composition isn't squashed.
+          height: "min(56vh, 52vw)",
           aspectRatio: "16 / 9",
           padding: "8px",
           background: "linear-gradient(180deg,#160a2a 0%,#06061a 100%)",
@@ -1522,8 +1526,9 @@ export default function FinalStage3D({ journeyInfo, playerName }: FinalStage3DPr
           boxShadow: [
             // Outer warm halo only — no inset rim so nothing bleeds
             // through the (now-opaque) curtains as a hard edge.
-            "0 0 90px 6px rgba(228,207,106,0.22)",
-            "0 40px 100px -20px rgba(0,0,0,0.85)",
+            // Halo radius bumped to match the larger screen footprint.
+            "0 0 120px 10px rgba(228,207,106,0.26)",
+            "0 50px 130px -25px rgba(0,0,0,0.9)",
           ].join(", "),
           zIndex: 0,
         }}

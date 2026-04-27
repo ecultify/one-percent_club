@@ -48,11 +48,21 @@ const POT_DAMPING = 7.5;
 const POT_IMPACT_KICK = 1.4;
 const POT_MAX_TILT = 0.085;
 
-// Coin stacking
-const COINS_PER_LAYER = 5;          // 1 center + 4 around
+// ── Coin stacking ────────────────────────────────────────────────
+// Previous version: 5 coins per layer (1 center + 4 around at r=0.3),
+// 80 max coins. That meant a 51L pot (≈51% of the 1cr max) showed only
+// ~41 coins ≈ 8 layers ≈ ~25% of the pot's inner height — visually
+// looked nearly empty even at half-money.
+//
+// Now: 9 coins per layer (1 centre + 3 inner ring at r=0.24 + 5 outer
+// ring at r=0.48) spread across the pot's belly properly, and 162 max
+// coins so 51% pot ratio → ~83 coins → ~9 layers → ≈half inner height
+// (the user's stated target).
+const COINS_PER_LAYER = 9;
 const LAYER_HEIGHT = 0.052;
-const STACK_RING_RADIUS = 0.3;
-const MAX_VISIBLE_COINS = 80;       // hard cap (also the pool size)
+const INNER_RING_RADIUS = 0.24;     // 3-coin ring
+const OUTER_RING_RADIUS = 0.48;     // 5-coin ring (close to belly wall)
+const MAX_VISIBLE_COINS = 162;      // 18 layers × 9 coins/layer
 
 /** Procedural gold environment cubemap.
  *  Even with a glass pot, this drives reflections + tints on the
@@ -105,8 +115,18 @@ function buildGoldEnvMap(): THREE.CubeTexture {
 }
 
 /** Deterministic per-coin slot position for index `i` (0-based) in the stack.
- *  Layered packing: each layer is one center coin + 4 ring coins, with a
- *  small per-coin jitter so the pile doesn't read as a perfect lattice. */
+ *
+ *  Each layer holds 9 coins arranged in three concentric tiers so the pile
+ *  fills the pot's belly width rather than stacking in a tight central
+ *  column:
+ *    - 1 centre coin (in-layer index 0)
+ *    - 3 coins on the inner ring (radius 0.24, in-layer indices 1–3)
+ *    - 5 coins on the outer ring (radius 0.48, in-layer indices 4–8)
+ *
+ *  Each layer rotates the rings by `layer * 0.42 rad` so coins from
+ *  successive layers slot between each other rather than stacking
+ *  perfectly aligned. A small per-coin jitter on top of all of that
+ *  prevents any visible lattice. */
 function getCoinSlot(i: number): {
   x: number; y: number; z: number;
   rotY: number; tiltX: number; tiltZ: number;
@@ -116,10 +136,21 @@ function getCoinSlot(i: number): {
 
   let x = 0;
   let z = 0;
-  if (inLayer > 0) {
-    const angle = ((inLayer - 1) / 4) * Math.PI * 2 + layer * 0.42;
-    x = Math.cos(angle) * STACK_RING_RADIUS;
-    z = Math.sin(angle) * STACK_RING_RADIUS;
+
+  if (inLayer === 0) {
+    // Centre coin — stays at (0, 0).
+  } else if (inLayer <= 3) {
+    // Inner ring: 3 coins, evenly spaced. Rotation per layer keeps
+    // successive layers from siting on top of each other.
+    const angle = ((inLayer - 1) / 3) * Math.PI * 2 + layer * 0.31;
+    x = Math.cos(angle) * INNER_RING_RADIUS;
+    z = Math.sin(angle) * INNER_RING_RADIUS;
+  } else {
+    // Outer ring: 5 coins. Different per-layer rotation phase so the
+    // inner and outer rings don't drift in lockstep.
+    const angle = ((inLayer - 4) / 5) * Math.PI * 2 + layer * 0.42;
+    x = Math.cos(angle) * OUTER_RING_RADIUS;
+    z = Math.sin(angle) * OUTER_RING_RADIUS;
   }
 
   // Deterministic pseudo-random jitter for natural variation.
@@ -130,8 +161,8 @@ function getCoinSlot(i: number): {
   const seedE = Math.sin(i * 13.5) * 43758.5453;
   const r = (s: number) => (s - Math.floor(s)) - 0.5;
 
-  x += r(seedA) * 0.06;
-  z += r(seedB) * 0.06;
+  x += r(seedA) * 0.05;
+  z += r(seedB) * 0.05;
   const tiltX = r(seedC) * 0.4;
   const tiltZ = r(seedD) * 0.4;
   const rotY = (r(seedE) + 0.5) * Math.PI * 2;

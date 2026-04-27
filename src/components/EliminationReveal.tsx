@@ -440,7 +440,11 @@ export default function EliminationReveal({
   // The pot now shows actual coins stacking inside (glass vessel). Map the
   // pot ratio to a visible coin count capped at MAX_VISIBLE_COINS so the
   // stack reads dramatic at full pot but doesn't tank perf.
-  const MAX_VISIBLE_COINS = 80;
+  // Bumped 80 → 162 to match the new PotFill3D pool (9 coins/layer × 18
+  // layers). With this scale a 51L pot ≈ 51% × 162 ≈ 83 coins ≈ 9 layers
+  // of fill, which lands at roughly half the pot's inner height — the
+  // user's stated "51L = pot half full" target.
+  const MAX_VISIBLE_COINS = 162;
   const addedThisRound = eliminated * STAKE_PER_PLAYER;
   const previousPot = Math.max(0, potPrize - addedThisRound);
   const maxPot = totalPlayers * STAKE_PER_PLAYER;
