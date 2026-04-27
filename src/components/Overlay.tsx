@@ -1,446 +1,240 @@
 "use client";
 
-import { motion, useScroll, useTransform } from "framer-motion";
+import { AnimatePresence, motion, useScroll, useTransform } from "framer-motion";
+import { useNarration } from "./NarrationProvider";
 
-export default function Overlay() {
-  return (
-    <div className="pointer-events-none absolute top-0 left-0 z-10 h-[500vh] w-full">
-      {/* Hero — first screen copy only (scroll sections for "test your knowledge" / "stakes" removed) */}
-      <div className="sticky top-0 h-screen flex flex-col items-center justify-center px-6">
-        <TextSection start={0} end={0.15} />
-      </div>
-    </div>
-  );
-}
-
-/* ────────────────────────────────────────────────────────────────────────────
-   VOLUMETRIC 3D BRASS TYPE — ztext-style layered clones, static tilt,
-   metallic shine sweep on the front face.
-   ────────────────────────────────────────────────────────────────────────────
-   DEPTH
-   -----
-   18 cloned <span> layers stacked via translateZ() inside a preserve-3d
-   parent. Back layers ramp from deep bronze/brass to muted brass; front
-   face has the final colour treatment.
-
-   FACE VARIANTS
-   -------------
-   - "brass" : front face uses the polished brass gradient (for CLUB and
-     any word that should feel like a solid gold casting).
-   - "button" : front face uses the same golden metallic fill as the hero
-     CTA buttons (lighter top → deep amber bottom), with brass extrusion.
-   - "white" : front face is warm ivory with a brass text-stroke, side
-     walls ramp in brass only (not bronze). Matches the TV-show treatment
-     of THE / 1 / % — ivory face with a golden bevel pouring down the
-     letter walls.
-
-   TILT (the "we can see it's 3D" move)
-   ------------------------------------
-   Static `rotateX(-10deg)` with `transform-origin: 50% 100%` so the text
-   pivots from its bottom edge. Top leans back into the screen, revealing
-   the top face of the extruded volume. No pointer interaction.
-
-   SHINE (the "it's metal, not paint" move)
-   ----------------------------------------
-   A diagonal bright-band gradient sits at translateZ(+0.6px) — i.e. just
-   in front of the front face. The band is masked to the text shape via
-   background-clip, blended with screen, and its background-position is
-   animated on a 5.5s loop so the specular highlight sweeps across the
-   letters like light raking over polished metal.
-   ──────────────────────────────────────────────────────────────────────── */
-
-const DEPTH_LAYERS = 20;
-const LAYER_STEP = 1.6;
-
-// Same 8-stop polished brass used on .metallic-chip, A/B/C/D badges, etc.
-const BRASS_GRADIENT = `linear-gradient(180deg,
+/** Same 8-stop polished brass used elsewhere (.metallic-chip, hero CTAs) — re-used for the
+ *  bottom progress bar so the fill matches the rest of the site's gold language. */
+const BRASS_GRADIENT = `linear-gradient(90deg,
   #6d4e13 0%,
-  #9c7819 7%,
-  #c99d2e 18%,
-  #e8c458 30%,
-  #f7e092 42%,
-  #fff4bf 50%,
-  #f4dc7c 58%,
-  #d9b446 70%,
-  #9c7819 86%,
+  #9c7819 8%,
+  #c99d2e 22%,
+  #e8c458 36%,
+  #f7e092 46%,
+  #fff4bf 52%,
+  #f4dc7c 60%,
+  #d9b446 72%,
+  #9c7819 88%,
   #5c3e0d 100%
 )`;
 
-/** Hero CTA / primary buttons — same fill as the "Scroll down" control in this overlay. */
-const HERO_BUTTON_METALLIC = `linear-gradient(180deg,
-  #fff6d2 0%,
-  #f0d56e 18%,
-  #d4a82a 45%,
-  #a67a18 72%,
-  #6b4a0c 100%
-)`;
-
-/** Side-wall colour at depth t (0 = deepest, 1 = just behind front). */
-function rampBronze(t: number) {
-  // Dark bronze at the back, warming to mid brass near the front.
-  const l = 6 + (26 - 6) * t;
-  return `hsl(38, 64%, ${l}%)`;
-}
-
-function rampBrassSide(t: number) {
-  // Stays golden throughout — back is muted mustard, front is bright brass.
-  // Used for the ivory-faced characters so the side walls glow gold.
-  const l = 16 + (52 - 16) * t;
-  return `hsl(42, 74%, ${l}%)`;
-}
-
-type FaceVariant = "brass" | "white" | "button";
-
-function Volumetric3DText({
-  children,
-  className,
-  style,
-  face = "brass",
-}: {
-  children: string;
-  className?: string;
-  style?: React.CSSProperties;
-  face?: FaceVariant;
-}) {
-  const sideRamp = face === "white" ? rampBrassSide : rampBronze;
-
+export default function Overlay() {
   return (
-    <span
-      className="relative inline-block"
-      style={{
-        perspective: "900px",
-        perspectiveOrigin: "50% 65%",
-        ...style,
-      }}
-    >
-      <span
-        className="relative inline-block"
-        style={{
-          transformStyle: "preserve-3d",
-          // Static tilt — top leans back, revealing the top face of the
-          // extruded volume. Pivot anchored at the bottom edge.
-          transform: "rotateX(-10deg)",
-          transformOrigin: "50% 100%",
-        }}
-      >
-        {/* ─── DEPTH LAYERS (0 = deepest, last = front face) ─── */}
-        {Array.from({ length: DEPTH_LAYERS }).map((_, i) => {
-          const isFront = i === DEPTH_LAYERS - 1;
-          const z = (i - DEPTH_LAYERS + 1) * LAYER_STEP;
-          const t = i / (DEPTH_LAYERS - 1);
+    <>
+      {/* 500vh scroll-driven hero column. The sticky child stays glued to the
+          viewport while the user scrolls through the scrolly canvas underneath. */}
+      <div className="pointer-events-none absolute top-0 left-0 z-10 h-[500vh] w-full">
+        <div className="sticky top-0 h-screen w-full overflow-hidden">
+          <ScrollDownGlassButton />
+        </div>
+      </div>
 
-          const spanStyle: React.CSSProperties = {
-            transform: `translateZ(${z}px)`,
-            whiteSpace: "nowrap",
-          };
-
-          if (isFront) {
-            if (face === "white") {
-              // IVORY FRONT — warm white face, thin brass text-stroke to
-              // create the visible bevel rim seen in the TV-show logo.
-              spanStyle.color = "#fbf3d8";
-              spanStyle.WebkitTextStroke = "2.5px #a6801f";
-              spanStyle.filter = [
-                "drop-shadow(0 0 36px rgba(228, 174, 68, 0.4))",
-                "drop-shadow(0 20px 32px rgba(0, 0, 0, 0.6))",
-                "drop-shadow(0 1px 0 rgba(20, 10, 0, 0.85))",
-              ].join(" ");
-            } else {
-              // BRASS or BUTTON — gradient-filled face + warm halo + floor shadow.
-              spanStyle.background =
-                face === "button" ? HERO_BUTTON_METALLIC : BRASS_GRADIENT;
-              spanStyle.WebkitBackgroundClip = "text";
-              spanStyle.backgroundClip = "text";
-              spanStyle.WebkitTextFillColor = "transparent";
-              spanStyle.color = "transparent";
-              spanStyle.filter = [
-                "drop-shadow(0 0 42px rgba(228, 174, 68, 0.45))",
-                "drop-shadow(0 22px 36px rgba(0, 0, 0, 0.6))",
-                "drop-shadow(0 1px 0 rgba(20, 10, 0, 0.9))",
-              ].join(" ");
-            }
-          } else {
-            // SIDE-WALL LAYER — solid ramp colour.
-            spanStyle.position = "absolute";
-            spanStyle.inset = 0;
-            spanStyle.color = sideRamp(t);
-            // Slight blur on the deepest layers fakes atmospheric depth.
-            if (t < 0.3) spanStyle.filter = "blur(0.4px)";
-          }
-
-          return (
-            <span
-              key={i}
-              aria-hidden="true"
-              className={className}
-              style={spanStyle}
-            >
-              {children}
-            </span>
-          );
-        })}
-
-        {/* ─── METALLIC SHINE SWEEP ──────────────────────────────────
-            Sits at translateZ(+0.6px) — just in front of the front face
-            so it layers ON the polished brass/ivory. The diagonal bright
-            band scrolls across via background-position animation, masked
-            to the text shape via background-clip. Blended with screen so
-            it adds light to the face below, never dims it. */}
-        <span
-          aria-hidden="true"
-          className={`${className ?? ""} overlay-shine-sweep pointer-events-none`}
-          style={{
-            position: "absolute",
-            inset: 0,
-            transform: "translateZ(0.6px)",
-            whiteSpace: "nowrap",
-            background:
-              "linear-gradient(115deg, transparent 0%, transparent 36%, rgba(255, 250, 220, 0.95) 48%, rgba(255, 255, 255, 0.75) 50%, rgba(255, 250, 220, 0.95) 52%, transparent 64%, transparent 100%)",
-            backgroundSize: "250% 100%",
-            backgroundRepeat: "no-repeat",
-            WebkitBackgroundClip: "text",
-            backgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            color: "transparent",
-            mixBlendMode: "screen",
-          }}
-        >
-          {children}
-        </span>
-      </span>
-    </span>
+      {/* Page-level scroll progress indicator — fixed to the very bottom edge,
+          full bleed, no margin. Lives outside the absolutely-positioned column
+          so it stays anchored to the viewport regardless of overlay layering. */}
+      <ScrollProgressBar />
+    </>
   );
 }
 
-/* ────────────────────────────────────────────────────────────────────────────
-   ONE-PERCENT-CLUB LOGO
-   ────────────────────────────────────────────────────────────────────────────
-   Replicates the TV-show mark layout:
+/* ────────────────────────────────────────────────────────────────────────── */
 
-       ┌─────┬─────┐
-       │     │ THE │
-       │  1  │     │
-       │     │  %  │
-       └─────┴─────┘
-       ┌───────────┐
-       │   CLUB    │
-       └───────────┘
+/**
+ * Liquid-glass "Scroll down" pill, intentionally NON-clickable (per spec).
+ *
+ * Behaviour change (per latest spec):
+ *  - Stays visible through the WHOLE scrolly section (previously faded out
+ *    after ~12% of scroll). Only fades right at the end of the scroll, when
+ *    the user is about to land on the final frame and the GameFlow "Enter"
+ *    button takes over.
+ *  - Doubles as a progress indicator: a brass-gradient fill grows
+ *    left-to-right inside the pill as scrollYProgress climbs from 0 → 1,
+ *    so by the last frame the pill is solid gold.
+ *
+ * Anchored low in the viewport. The breath / chevron animations are kept
+ * because they sell "alive" while the user reads.
+ */
+function ScrollDownGlassButton() {
+  const { scrollYProgress } = useScroll();
+  // Hold at full opacity through the whole scroll. Only fade in the very
+  // last 5% so the handoff to the GameFlow Enter button feels clean.
+  const opacity = useTransform(scrollYProgress, [0, 0.95, 1], [1, 1, 0]);
+  // Tiny lift only at the very end — same end-of-scroll exit motion.
+  const y = useTransform(scrollYProgress, [0, 0.95, 1], [0, 0, -16]);
+  // Position + opacity for the leading-edge specular highlight on the brass
+  // fill. Hoisted out of the JSX to keep useTransform calls at the top of
+  // the component (rules-of-hooks friendly).
+  const highlightLeft = useTransform(scrollYProgress, (v) => `${v * 100 - 7}%`);
+  const highlightOpacity = useTransform(
+    scrollYProgress,
+    [0, 0.04, 0.96, 1],
+    [0, 1, 1, 0],
+  );
 
-   - The "1" is the dominant form, taking the full height of the top row.
-   - "THE" sits top-right, smaller. "%" sits bottom-right of the same column,
-     slightly larger than "THE", together filling the height of the "1".
-   - "CLUB" drops below; its line is slightly smaller than the top band so the
-     "1" block stays primary. The top row and CLUB sit in a column flex with
-     stretch so both rows share the same width (the wider of the two).
-   - All glyphs use the hero CTA "button" metallic face so the mark matches
-     the Scroll down / primary gold controls.
-   ──────────────────────────────────────────────────────────────────────── */
-
-function OnePercentClubLogo() {
   return (
+    // Static wrapper handles horizontal centering. We can't combine
+    // Tailwind's `-translate-x-1/2` with framer-motion's `y` motion value on
+    // the same element — the runtime transform set by framer overwrites the
+    // class-based transform, knocking the button to the right of center.
     <div
-      aria-label="The 1% Club"
-      role="img"
-      className="inline-grid w-max max-w-full grid-cols-1 place-items-stretch self-center leading-none select-none"
-      // Sizes cascade from --logo-scale. Tuned so the whole mark comfortably
-      // fills a 1024px hero at desktop while scaling down to mobile.
-      style={{
-        ["--logo-scale" as string]: "clamp(4rem, 18vw, 13.5rem)",
-      }}
+      className="pointer-events-none fixed bottom-[14vh] left-0 right-0 z-[12] flex justify-center"
+      aria-hidden
     >
-      {/* ─── TOP ROW: 1 + (THE / %) stack — w-full so width matches CLUB row ── */}
-      <div
-        className="flex w-full min-w-0 items-stretch justify-center"
-        style={{ gap: "calc(var(--logo-scale) * 0.06)" }}
-      >
-        {/* The "1" — hero glyph, full row height; radial bloom reads as the light source */}
-        <div className="relative inline-flex shrink-0 items-center self-stretch">
-          <div
-            className="pointer-events-none absolute left-1/2 top-[46%] -z-10 -translate-x-1/2 -translate-y-1/2"
-            style={{
-              width: "calc(var(--logo-scale) * 0.52)",
-              height: "calc(var(--logo-scale) * 0.88)",
-              background:
-                "radial-gradient(ellipse 50% 48% at 50% 50%, rgba(255,255,255,0.92) 0%, rgba(255,235,200,0.45) 28%, rgba(255,200,120,0.2) 48%, transparent 72%)",
-              filter: "blur(calc(var(--logo-scale) * 0.11))",
-              mixBlendMode: "screen",
-            }}
-            aria-hidden
-          />
-          <Volumetric3DText
-            face="button"
-            className="font-display font-black tracking-[-0.05em]"
-            style={{ fontSize: "var(--logo-scale)", lineHeight: 0.82 }}
-          >
-            1
-          </Volumetric3DText>
-        </div>
-
-        {/* Right column: THE stacked on % */}
-        <div
-          className="flex flex-col items-start justify-between"
-          // Tight vertical rhythm so the two stack inside the "1"'s cap height.
-          style={{ paddingTop: "calc(var(--logo-scale) * 0.02)" }}
-        >
-          <Volumetric3DText
-            face="button"
-            className="font-display font-black tracking-[-0.02em]"
-            style={{
-              fontSize: "calc(var(--logo-scale) * 0.34)",
-              lineHeight: 0.88,
-            }}
-          >
-            THE
-          </Volumetric3DText>
-          <Volumetric3DText
-            face="button"
-            className="font-display font-black tracking-[-0.03em]"
-            style={{
-              fontSize: "calc(var(--logo-scale) * 0.58)",
-              lineHeight: 0.85,
-              marginTop: "calc(var(--logo-scale) * -0.02)",
-            }}
-          >
-            %
-          </Volumetric3DText>
-        </div>
-      </div>
-
-      {/* ─── BOTTOM ROW: CLUB — same metallic, slightly smaller, centered in shared width */}
-      <div
-        className="flex w-full justify-center"
-        style={{ marginTop: "calc(var(--logo-scale) * 0.04)" }}
-      >
-        <Volumetric3DText
-          face="button"
-          className="font-display font-black tracking-[-0.02em]"
+      <motion.div style={{ opacity, y }}>
+        <motion.div
+          // Idle breath — slow scale + glow pulse so the pill feels alive
+          // without distracting from the scrolly canvas behind it.
+          animate={{ scale: [1, 1.025, 1] }}
+          transition={{ duration: 2.6, ease: "easeInOut", repeat: Infinity }}
+          // `relative` + `overflow-hidden` so the brass fill child is
+          // clipped to the rounded-full silhouette of the pill.
+          className="relative flex items-center gap-3 overflow-hidden rounded-full px-7 py-4 font-mono text-[10px] font-semibold uppercase tracking-[0.36em] text-white/95 sm:px-8 sm:py-[18px] sm:text-[11px]"
           style={{
-            fontSize: "calc(var(--logo-scale) * 0.52)",
-            lineHeight: 0.9,
+            background:
+              "linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.10) 100%)",
+            backdropFilter: "blur(22px) saturate(1.55)",
+            WebkitBackdropFilter: "blur(22px) saturate(1.55)",
+            border: "1px solid rgba(255,255,255,0.28)",
+            boxShadow: [
+              "inset 0 1px 0 rgba(255,255,255,0.42)",
+              "inset 0 -1px 0 rgba(0,0,0,0.28)",
+              "0 14px 32px -10px rgba(0,0,0,0.55)",
+              "0 0 0 1px rgba(255,255,255,0.05)",
+            ].join(", "),
           }}
         >
-          CLUB
-        </Volumetric3DText>
-      </div>
+          {/* Brass-metallic fill that tracks scroll progress. Anchored to the
+              left edge via origin-left + scaleX, so the gold paints across
+              the pill from 0% (empty / pure glass) to 100% (solid gold) as
+              the user scrolls through the entire 500vh column. Sits behind
+              the text + chevron at z-0 so they remain on top. */}
+          <motion.div
+            aria-hidden
+            className="absolute inset-0 origin-left"
+            style={{
+              scaleX: scrollYProgress,
+              background: BRASS_GRADIENT,
+              boxShadow:
+                "inset 0 1px 0 rgba(255,250,220,0.85), inset 0 -1px 0 rgba(40,22,0,0.45)",
+            }}
+          />
+          {/* Soft inner highlight on the leading edge of the fill so the
+              transition between gold and glass reads as a wet specular
+              edge rather than a hard cut. */}
+          <motion.div
+            aria-hidden
+            className="absolute inset-y-0 w-[14%]"
+            style={{
+              left: highlightLeft,
+              background:
+                "linear-gradient(90deg, transparent 0%, rgba(255,255,240,0.7) 50%, transparent 100%)",
+              mixBlendMode: "screen",
+              opacity: highlightOpacity,
+            }}
+          />
+          <span
+            className="relative z-10"
+            style={{
+              // Strong shadow keeps the white text readable against both the
+              // dark glass (early scroll) and the bright gold (late scroll).
+              textShadow:
+                "0 0 2px rgba(0,0,0,0.95), 0 1px 2px rgba(0,0,0,0.55), 0 0 14px rgba(0,0,0,0.4)",
+            }}
+          >
+            Scroll down
+          </span>
+          <motion.span
+            aria-hidden
+            className="relative z-10 flex items-center justify-center"
+            animate={{ y: [0, 4, 0] }}
+            transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
+            style={{
+              filter:
+                "drop-shadow(0 0 2px rgba(0,0,0,0.9)) drop-shadow(0 1px 2px rgba(0,0,0,0.6))",
+            }}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M12 5v14M5 13l7 7 7-7" />
+            </svg>
+          </motion.span>
+        </motion.div>
+      </motion.div>
     </div>
   );
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */
 
-function TextSection({
-  start,
-  end,
-}: {
-  start: number;
-  end: number;
-}) {
+/**
+ * Edge-to-edge progress bar pinned to the bottom of the viewport. Width tracks
+ * page scrollYProgress, fill is the same brass gradient used across the site's
+ * primary controls so the indicator reads as part of the same visual system.
+ *
+ * pointer-events-none so it never intercepts clicks meant for content below.
+ */
+function ScrollProgressBar() {
   const { scrollYProgress } = useScroll();
-  const opacity = useTransform(scrollYProgress, [start, end], [1, 0]);
-  const y = useTransform(scrollYProgress, [start, end], [0, -48]);
-  const blurPx = useTransform(scrollYProgress, [start, end], [0, 10]);
-  const filter = useTransform(blurPx, (b) => `blur(${b}px)`);
-
-  const legibleEyebrow = {
-    color: "#fff8e8",
-    letterSpacing: "0.42em",
-    textShadow: [
-      "0 0 2px rgba(0,0,0,1)",
-      "0 2px 12px rgba(0,0,0,0.95)",
-      "0 0 28px rgba(228, 190, 90, 0.65)",
-      "0 1px 0 rgba(0,0,0,0.9)",
-    ].join(", "),
-  } as const;
-
-  const legibleTagline = {
-    color: "#fff4d4",
-    textShadow: [
-      "0 0 2px rgba(0,0,0,1)",
-      "0 2px 14px rgba(0,0,0,0.92)",
-      "0 0 36px rgba(255, 190, 80, 0.4)",
-    ].join(", "),
-  } as const;
+  // Hide the bar the moment the user clicks "Continue with sound" on the
+  // AudioPrimingGate. `audioUnlocked` flips inside NarrationProvider.unlock(),
+  // so any future entry path that calls unlock() will trigger the same hide.
+  const { audioUnlocked } = useNarration();
 
   return (
-    <motion.div
-      style={{ opacity, y, filter }}
-      className="text-center pointer-events-auto max-w-5xl px-4"
-    >
-      <p
-        className="font-mono text-[11px] font-bold uppercase sm:text-xs md:text-[13px] mb-6 md:mb-8"
-        style={legibleEyebrow}
-      >
-        Invitation only
-      </p>
-
-      <div
-        className="mx-auto mb-6 h-[2px] w-24 rounded-full sm:mb-8 sm:w-28 md:mb-10"
-        style={{
-          background:
-            "linear-gradient(90deg, transparent 0%, rgba(255,230,160,0.35) 15%, #ffe8a0 50%, rgba(255,230,160,0.35) 85%, transparent 100%)",
-          boxShadow:
-            "0 0 14px rgba(255, 220, 140, 0.85), 0 0 2px rgba(0,0,0,0.9)",
-        }}
-        aria-hidden
-      />
-
-      <OnePercentClubLogo />
-
-      <p
-        className="mt-7 max-w-xl mx-auto text-[13px] font-bold uppercase leading-snug tracking-[0.14em] text-balance sm:mt-9 sm:text-[15px] sm:tracking-[0.16em] md:mt-10 md:text-lg md:tracking-[0.18em]"
-        style={legibleTagline}
-      >
-        Do you have what it takes?
-      </p>
-
-      <motion.button
-        type="button"
-        onClick={() =>
-          window.scrollBy({
-            top: Math.max(140, window.innerHeight * 0.22),
-            behavior: "smooth",
-          })
-        }
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.35, duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-        className="mt-6 sm:mt-7 md:mt-8 mx-auto flex flex-col items-center gap-1.5 rounded-full px-4 py-2.5 sm:px-5 sm:py-3 cursor-pointer touch-manipulation"
-        style={{
-          background: HERO_BUTTON_METALLIC,
-          boxShadow:
-            "0 10px 28px -10px rgba(0,0,0,0.75), 0 0 0 1px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,252,230,0.9), inset 0 -2px 6px rgba(40,22,0,0.35)",
-        }}
-        aria-label="Scroll down to continue"
-      >
-        <span
-          className="font-mono text-[9px] font-bold uppercase tracking-[0.28em] sm:text-[10px] sm:tracking-[0.32em]"
+    <AnimatePresence>
+      {!audioUnlocked && (
+        <motion.div
+          key="scroll-progress-bar"
+          initial={{ opacity: 1 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
+          className="pointer-events-none fixed inset-x-0 bottom-0 z-[150] h-[5px]"
+          aria-hidden
           style={{
-            color: "#2a1a04",
-            textShadow: "0 1px 0 rgba(255,250,220,0.65)",
+            background: "rgba(0,0,0,0.55)",
+            boxShadow: "0 -1px 0 rgba(0,0,0,0.6)",
           }}
         >
-          Scroll down
-        </span>
-        <motion.span
-          aria-hidden
-          className="flex items-center justify-center"
-          animate={{ y: [0, 4, 0] }}
-          transition={{ duration: 1.35, repeat: Infinity, ease: "easeInOut" }}
-        >
-          <svg
-            width="22"
-            height="22"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#0a0a0a"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+          <motion.div
+            className="relative h-full origin-left overflow-hidden"
+            style={{
+              scaleX: scrollYProgress,
+              background: BRASS_GRADIENT,
+              boxShadow:
+                "0 0 12px rgba(228, 174, 68, 0.55), 0 0 22px rgba(228, 174, 68, 0.35), inset 0 1px 0 rgba(255,250,220,0.85), inset 0 -1px 0 rgba(40,22,0,0.45)",
+            }}
           >
-            <path d="M12 5v14M5 13l7 7 7-7" />
-          </svg>
-        </motion.span>
-      </motion.button>
-    </motion.div>
+            {/* Moving specular highlight — a thin bright band that slides
+                across the filled portion of the bar on a slow loop, so the
+                gold reads as polished metal rather than painted-on. */}
+            <motion.div
+              aria-hidden
+              className="pointer-events-none absolute inset-y-0 w-[40%]"
+              style={{
+                background:
+                  "linear-gradient(90deg, transparent 0%, rgba(255,255,240,0.55) 45%, rgba(255,255,255,0.85) 50%, rgba(255,255,240,0.55) 55%, transparent 100%)",
+                mixBlendMode: "screen",
+              }}
+              animate={{ x: ["-50%", "260%"] }}
+              transition={{
+                duration: 3.6,
+                ease: "easeInOut",
+                repeat: Infinity,
+                repeatDelay: 1.4,
+              }}
+            />
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

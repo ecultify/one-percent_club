@@ -29,6 +29,12 @@ interface NarrationContextValue {
    * and the initial `pause()` before `play()`.
    */
   hostVoiceDucksBgm: boolean;
+  /**
+   * Reactive mirror of `unlockedRef` — flips true once the user has completed the
+   * "Continue with sound" gesture. Components that need to react to that gate
+   * (e.g. hiding the homepage scroll progress bar after entry) should read this.
+   */
+  audioUnlocked: boolean;
 }
 
 const NarrationContext = createContext<NarrationContextValue | null>(null);
@@ -92,6 +98,7 @@ export function NarrationProvider({ children }: { children: ReactNode }) {
   const [muted, setMuted] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [hostVoiceDucksBgm, setHostVoiceDucksBgm] = useState(false);
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const unlockedRef = useRef(false);
@@ -164,6 +171,7 @@ export function NarrationProvider({ children }: { children: ReactNode }) {
       } catch {}
       a.volume = prevVolume || 1;
       unlockedRef.current = true;
+      setAudioUnlocked(true);
     };
     return new Promise<void>((resolve) => {
       const done = () => {
@@ -174,6 +182,7 @@ export function NarrationProvider({ children }: { children: ReactNode }) {
         p.then(done).catch(() => {
           a.volume = prevVolume || 1;
           unlockedRef.current = true;
+          setAudioUnlocked(true);
           resolve();
         });
       } else {
@@ -370,6 +379,7 @@ export function NarrationProvider({ children }: { children: ReactNode }) {
       prefetchAudioUrl,
       isSpeaking,
       hostVoiceDucksBgm,
+      audioUnlocked,
     }),
     [
       muted,
@@ -382,6 +392,7 @@ export function NarrationProvider({ children }: { children: ReactNode }) {
       prefetchAudioUrl,
       isSpeaking,
       hostVoiceDucksBgm,
+      audioUnlocked,
     ],
   );
 

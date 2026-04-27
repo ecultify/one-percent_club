@@ -57,57 +57,95 @@ export default function CoinTrailToNavbar({
 
   useEffect(() => {
     if (triggerKey == null) return;
-    const src = sourceRef.current;
-    const tgt = document.querySelector<HTMLElement>(targetSelector);
-    if (!src || !tgt) return;
-
-    const sRect = src.getBoundingClientRect();
-    const tRect = tgt.getBoundingClientRect();
-
-    setPath({
-      // Source is the upper-third of the pot canvas, near the rim.
-      sx: sRect.left + sRect.width * 0.5,
-      sy: sRect.top + sRect.height * 0.42,
-      tx: tRect.left + tRect.width * 0.5,
-      ty: tRect.top + tRect.height * 0.5,
-      key: triggerKey,
-    });
+    let cancelled = false;
+    let rafId = 0;
+    const timers: number[] = [];
 
     const usedCoinCount = Math.min(20, Math.max(4, coinCount));
     const lastCoinArrivalMs =
       COIN_BASE_DURATION_MS + (usedCoinCount - 1) * COIN_STAGGER_MS;
 
-    // Pulse the navbar a beat before the last coin lands so the brightness
-    // overlaps with the coin shower instead of trailing behind it.
-    const pulseAt = Math.max(lastCoinArrivalMs - 220, 200);
-    const pulseTimer = window.setTimeout(() => {
-      tgt.classList.add("pot-prize-pulse");
-      window.setTimeout(() => tgt.classList.remove("pot-prize-pulse"), 720);
-    }, pulseAt);
+    // Wait one frame so any layout / animation that just settled has been
+    // measured by the browser before we read getBoundingClientRect. Without
+    // this, measuring on the same tick as a layout change occasionally gave
+    // stale rects (source at 0,0) and the coins flew from the top-left.
+    rafId = requestAnimationFrame(() => {
+      if (cancelled) return;
+      const src = sourceRef.current;
+      const tgt = document.querySelector<HTMLElement>(targetSelector);
+      if (!src || !tgt) {
+        if (process.env.NODE_ENV !== "production") {
+          // eslint-disable-next-line no-console
+          console.warn("[CoinTrailToNavbar] missing endpoints", {
+            haveSource: !!src,
+            haveTarget: !!tgt,
+            targetSelector,
+          });
+        }
+        return;
+      }
 
-    // Audio: schedule a "tink" for each coin's arrival. Slight detune
-    // per coin so the shower has musical variation instead of monotone.
-    const tinkTimers: number[] = [];
-    for (let i = 0; i < usedCoinCount; i++) {
-      const arriveAt = COIN_BASE_DURATION_MS + i * COIN_STAGGER_MS;
-      const detune = (i * 53) % 200 - 100;
-      tinkTimers.push(
+      const sRect = src.getBoundingClientRect();
+      const tRect = tgt.getBoundingClientRect();
+
+      // Sanity-check: if either rect has zero dimensions we're measuring
+      // before layout — bail out so the coin shower doesn't fire from
+      // nowhere to nowhere.
+      if (sRect.width === 0 || tRect.width === 0) return;
+
+      setPath({
+        // Source = centre of the "+ ₹X this round" tile so coins emerge
+        // from the chip itself rather than its corner.
+        sx: sRect.left + sRect.width * 0.5,
+        sy: sRect.top + sRect.height * 0.5,
+        tx: tRect.left + tRect.width * 0.5,
+        ty: tRect.top + tRect.height * 0.5,
+        key: triggerKey,
+      });
+
+      // Pulse the navbar a beat before the last coin lands so the
+      // brightness overlaps with the coin shower instead of trailing
+      // behind it.
+      const pulseAt = Math.max(lastCoinArrivalMs - 220, 200);
+      timers.push(
         window.setTimeout(() => {
-          playCoinTink(detune);
-        }, arriveAt),
+          tgt.classList.add("pot-prize-pulse");
+          timers.push(
+            window.setTimeout(() => tgt.classList.remove("pot-prize-pulse"), 720),
+          );
+        }, pulseAt),
       );
-    }
 
-    const completeTimer = window.setTimeout(() => {
-      onComplete?.();
-      setPath(null);
-    }, lastCoinArrivalMs + 250);
+      // Audio: schedule a "tink" for each coin's arrival. Slight detune
+      // per coin so the shower has musical variation instead of monotone.
+      for (let i = 0; i < usedCoinCount; i++) {
+        const arriveAt = COIN_BASE_DURATION_MS + i * COIN_STAGGER_MS;
+        const detune = (i * 53) % 200 - 100;
+        timers.push(
+          window.setTimeout(() => {
+            playCoinTink(detune);
+          }, arriveAt),
+        );
+      }
+
+      // Wipe the path once the last coin has arrived + a small grace period.
+      timers.push(
+        window.setTimeout(() => {
+          onComplete?.();
+          setPath(null);
+        }, lastCoinArrivalMs + 250),
+      );
+    });
 
     return () => {
-      window.clearTimeout(pulseTimer);
-      window.clearTimeout(completeTimer);
-      tinkTimers.forEach((id) => window.clearTimeout(id));
-      tgt.classList.remove("pot-prize-pulse");
+      cancelled = true;
+      cancelAnimationFrame(rafId);
+      timers.forEach((id) => window.clearTimeout(id));
+      // Best-effort: clear the pulse class if it was applied. We re-resolve
+      // the target by selector so we don't depend on a closed-over `tgt`
+      // that might have been re-mounted in the meantime.
+      const tgt2 = document.querySelector<HTMLElement>(targetSelector);
+      tgt2?.classList.remove("pot-prize-pulse");
     };
   }, [triggerKey, sourceRef, targetSelector, coinCount, onComplete]);
 

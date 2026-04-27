@@ -45,6 +45,290 @@ interface QuestionScreenProps {
 
 const OPTION_LABELS = ["A", "B", "C", "D"];
 
+/**
+ * Drifting brass sparkle field across the stage. Adds ambient motion so the
+ * question screen feels like a live broadcast rather than a static panel.
+ *
+ * Each particle is a CSS-only div animated with framer-motion — no canvas,
+ * no JS-per-frame work after mount. Particle positions and timings are
+ * deterministic so React doesn't re-render the array on prop changes.
+ *
+ * pointer-events-none + low opacity, so it never competes with the
+ * question or option tiles for attention.
+ */
+const SPARKLE_COUNT = 28;
+const SPARKLE_SEEDS = Array.from({ length: SPARKLE_COUNT }, (_, i) => {
+  // Cheap deterministic pseudo-random so we don't re-roll on rerender.
+  const r = (n: number) => {
+    const x = Math.sin((i + 1) * n) * 43758.5453;
+    return x - Math.floor(x);
+  };
+  return {
+    x: r(11.3) * 100,            // % across the viewport
+    yStart: 12 + r(17.7) * 76,   // % vertical baseline
+    drift: 30 + r(23.1) * 70,    // vertical drift distance in px
+    size: 1.5 + r(31.9) * 2.5,   // px diameter
+    duration: 4 + r(41.3) * 5,   // seconds per cycle
+    delay: r(53.7) * 5,          // seconds offset
+    hue: r(67.7) > 0.7 ? "#fff4cf" : "#e6c45a", // mostly brass, a few hot whites
+  };
+});
+
+function AmbientSparkles() {
+  return (
+    <div className="pointer-events-none absolute inset-0 z-[2] overflow-hidden" aria-hidden>
+      {SPARKLE_SEEDS.map((s, i) => (
+        <motion.span
+          key={i}
+          className="absolute rounded-full"
+          style={{
+            left: `${s.x}%`,
+            top: `${s.yStart}%`,
+            width: s.size,
+            height: s.size,
+            background: s.hue,
+            boxShadow: `0 0 ${s.size * 4}px ${s.size * 0.6}px ${s.hue}`,
+            mixBlendMode: "screen",
+          }}
+          initial={{ opacity: 0, y: 0 }}
+          animate={{
+            opacity: [0, 0.85, 0.6, 0],
+            y: [0, -s.drift],
+          }}
+          transition={{
+            duration: s.duration,
+            delay: s.delay,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * StageSpotlightBeams
+ * ─────────────────────────────────────────────────────────────────
+ * Three angled spotlight cones swinging across the stage from above —
+ * the visual equivalent of a TV game show rig sweeping the audience.
+ * Each beam is a single CSS gradient inside a wide `<div>` rotated to
+ * the right angle, with `mix-blend-mode: screen` so it adds light
+ * without dimming. Animation oscillates `rotate` ± a few degrees so
+ * the beams sway slowly. Cheap — no per-frame JS, just CSS transforms.
+ */
+function StageSpotlightBeams() {
+  const beams = [
+    { x: 22, hue: "rgba(255, 200, 110, 0.22)", duration: 7.4, delay: 0, swing: 6 },
+    { x: 50, hue: "rgba(255, 240, 180, 0.18)", duration: 9.2, delay: 1.3, swing: 4 },
+    { x: 78, hue: "rgba(180, 130, 255, 0.18)", duration: 8.1, delay: 2.6, swing: 7 },
+  ];
+  return (
+    <div className="pointer-events-none absolute inset-0 z-[2] overflow-hidden" aria-hidden>
+      {beams.map((b, i) => (
+        <motion.div
+          key={i}
+          className="absolute origin-top"
+          style={{
+            top: "-10%",
+            left: `${b.x}%`,
+            width: 360,
+            height: "140vh",
+            marginLeft: -180,
+            background: `linear-gradient(180deg, ${b.hue} 0%, ${b.hue.replace(/[\d.]+\)$/, "0.05)")} 60%, transparent 100%)`,
+            filter: "blur(28px)",
+            mixBlendMode: "screen",
+          }}
+          animate={{
+            rotate: [-b.swing, b.swing, -b.swing],
+            opacity: [0.7, 1, 0.7],
+          }}
+          transition={{
+            duration: b.duration,
+            delay: b.delay,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * RotatingHaloRing
+ * ─────────────────────────────────────────────────────────────────
+ * A massive conic-gradient ring rotating slowly behind the question
+ * frame. Reads as a "live" backdrop without competing with the UI.
+ * One element, one CSS animation — extremely cheap.
+ */
+function RotatingHaloRing() {
+  return (
+    <motion.div
+      aria-hidden
+      className="pointer-events-none absolute left-1/2 top-1/2 z-[1] -translate-x-1/2 -translate-y-1/2"
+      style={{
+        width: "min(120vh, 1100px)",
+        height: "min(120vh, 1100px)",
+        background:
+          "conic-gradient(from 0deg, rgba(245,180,80,0.18), rgba(140,80,210,0.14), rgba(255,90,120,0.18), rgba(80,160,255,0.16), rgba(245,180,80,0.18))",
+        filter: "blur(60px)",
+        mixBlendMode: "screen",
+        opacity: 0.55,
+      }}
+      animate={{ rotate: [0, 360] }}
+      transition={{ duration: 38, ease: "linear", repeat: Infinity }}
+    />
+  );
+}
+
+/**
+ * StrobeFlashes
+ * ─────────────────────────────────────────────────────────────────
+ * Periodic camera-flash bursts simulating photographers + paparazzi
+ * around the stage. Each burst is a single full-screen white flash
+ * that fades over ~150 ms. Random per-burst position + colour so the
+ * stage feels lived-in, never repetitive.
+ */
+function StrobeFlashes() {
+  const [flashes, setFlashes] = useState<
+    Array<{ id: number; x: number; y: number; hue: string }>
+  >([]);
+  const idRef = useRef(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fire = () => {
+      if (cancelled) return;
+      const id = idRef.current++;
+      const x = Math.random() * 100;
+      const y = 5 + Math.random() * 40; // upper half — feels like rig lights
+      const hue =
+        Math.random() < 0.7
+          ? "rgba(255,255,250,0.85)"
+          : Math.random() < 0.5
+            ? "rgba(180,130,255,0.7)"
+            : "rgba(255,160,90,0.8)";
+      setFlashes((prev) => [...prev, { id, x, y, hue }]);
+      window.setTimeout(() => {
+        setFlashes((prev) => prev.filter((f) => f.id !== id));
+      }, 240);
+      // Next flash in 1.4–3.6 s
+      window.setTimeout(fire, 1400 + Math.random() * 2200);
+    };
+    const initial = window.setTimeout(fire, 1200);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(initial);
+    };
+  }, []);
+
+  return (
+    <div
+      className="pointer-events-none absolute inset-0 z-[2] overflow-hidden"
+      aria-hidden
+    >
+      {flashes.map((f) => (
+        <motion.div
+          key={f.id}
+          className="absolute rounded-full"
+          style={{
+            left: `${f.x}%`,
+            top: `${f.y}%`,
+            width: 280,
+            height: 280,
+            marginLeft: -140,
+            marginTop: -140,
+            background: `radial-gradient(circle, ${f.hue} 0%, transparent 65%)`,
+            mixBlendMode: "screen",
+            filter: "blur(10px)",
+          }}
+          initial={{ opacity: 0, scale: 0.4 }}
+          animate={{ opacity: [0, 1, 0], scale: [0.4, 1.1, 1.3] }}
+          transition={{ duration: 0.24, ease: "easeOut" }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * LaserSweeps
+ * ─────────────────────────────────────────────────────────────────
+ * Two thin neon laser beams traveling horizontally across the stage on
+ * staggered loops. Mimics arena concert / TV-show laser rigs. Single
+ * gradient div per beam, animating only `x` — extremely cheap.
+ */
+function LaserSweeps() {
+  return (
+    <div
+      className="pointer-events-none absolute inset-0 z-[2] overflow-hidden"
+      aria-hidden
+    >
+      <motion.div
+        className="absolute h-[2px]"
+        style={{
+          top: "32%",
+          left: 0,
+          width: "100%",
+          background:
+            "linear-gradient(90deg, transparent 0%, transparent 30%, rgba(120,220,255,0.85) 50%, transparent 70%, transparent 100%)",
+          filter: "blur(1.5px) drop-shadow(0 0 8px rgba(120,220,255,0.7))",
+          mixBlendMode: "screen",
+        }}
+        animate={{ x: ["-100%", "100%"] }}
+        transition={{ duration: 5.2, ease: "easeInOut", repeat: Infinity, repeatDelay: 2.8 }}
+      />
+      <motion.div
+        className="absolute h-[2px]"
+        style={{
+          top: "68%",
+          left: 0,
+          width: "100%",
+          background:
+            "linear-gradient(90deg, transparent 0%, transparent 30%, rgba(255,120,200,0.8) 50%, transparent 70%, transparent 100%)",
+          filter: "blur(1.5px) drop-shadow(0 0 8px rgba(255,120,200,0.6))",
+          mixBlendMode: "screen",
+        }}
+        animate={{ x: ["100%", "-100%"] }}
+        transition={{ duration: 6.5, ease: "easeInOut", repeat: Infinity, repeatDelay: 1.9, delay: 2.4 }}
+      />
+    </div>
+  );
+}
+
+/**
+ * AuroraHueWash
+ * ─────────────────────────────────────────────────────────────────
+ * Slow-moving radial gradient that cycles between brass / violet /
+ * crimson tints across the bottom half of the stage. Sits at very low
+ * opacity so it reads as ambient color shift rather than a UI element.
+ * Single element animating only `background-position` + `filter: hue-rotate`
+ * — no layout, no DOM churn.
+ */
+function AuroraHueWash() {
+  return (
+    <motion.div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 z-[1]"
+      style={{
+        background:
+          "radial-gradient(ellipse 100% 60% at 30% 80%, rgba(245,180,80,0.18) 0%, transparent 60%), radial-gradient(ellipse 90% 55% at 75% 75%, rgba(140,80,210,0.14) 0%, transparent 65%), radial-gradient(ellipse 70% 50% at 50% 100%, rgba(220,90,120,0.12) 0%, transparent 60%)",
+        mixBlendMode: "screen",
+      }}
+      animate={{
+        filter: [
+          "hue-rotate(0deg) saturate(1.05)",
+          "hue-rotate(20deg) saturate(1.15)",
+          "hue-rotate(-12deg) saturate(1.05)",
+          "hue-rotate(0deg) saturate(1.05)",
+        ],
+      }}
+      transition={{ duration: 10, ease: "easeInOut", repeat: Infinity }}
+    />
+  );
+}
+
 /** Skip bottom caption when it only repeats the corner letter (e.g. Q4 "A"/"B"/"C"). */
 function isRedundantLetterCaption(caption: string, optionIndex: number): boolean {
   const label = OPTION_LABELS[optionIndex];
@@ -542,6 +826,28 @@ export default function QuestionScreen({
           mixBlendMode: "screen",
         }}
       />
+
+      {/* Warm spotlight wash + ambient sparkles + sweeping stage beams +
+          aurora hue wash — the layered "live broadcast" treatment. All are
+          pointer-events-none, sit between the BG video and the HUD/content,
+          and use mix-blend: screen so they only ADD light to the scene. */}
+      <motion.div
+        aria-hidden
+        className="absolute inset-0 pointer-events-none z-[1]"
+        style={{
+          background:
+            "radial-gradient(ellipse 80% 70% at 50% 55%, rgba(255,210,120,0.22) 0%, rgba(255,170,60,0.1) 35%, transparent 70%)",
+          mixBlendMode: "screen",
+        }}
+        animate={{ opacity: [0.55, 1, 0.55] }}
+        transition={{ duration: 4.8, ease: "easeInOut", repeat: Infinity }}
+      />
+      <AuroraHueWash />
+      <RotatingHaloRing />
+      <StageSpotlightBeams />
+      <LaserSweeps />
+      <StrobeFlashes />
+      <AmbientSparkles />
 
       <PercentTimerDock
         timeLeft={timeLeft}

@@ -67,8 +67,16 @@ function questionIntroVideoSrc(questionIndex: number): string {
 }
 
 function questionVoSrc(questionId: number): string {
+  // Q1 VO replaced with the corrected take that lines up with the new
+  // intro-video pacing (q1VOcorrect.mp3). Old file q1VO.mp3 is retained on
+  // disk for reference but no longer referenced from the runtime.
+  if (questionId === 1) return `/questionscreenimages/question1/q1VOcorrect.mp3`;
   if (questionId === 2) return `/questionscreenimages/question2/q2VOrevised.mp3`;
   if (questionId === 4) return `/questionscreenimages/question4/q4VOrevised.mp3`;
+  // Q5 was rewritten as a QWERTY pattern MCQ, so the original q5VO.mp3
+  // (which narrated the old number-grid puzzle) no longer matches. Use the
+  // new take recorded against the rewritten question.
+  if (questionId === 5) return `/questionscreenimages/question5/q5VOnew.mp3`;
   return `/questionscreenimages/question${questionId}/q${questionId}VO.mp3`;
 }
 
@@ -291,15 +299,13 @@ const QUESTIONS: Question[] = [
   {
     id: 5,
     percentage: 50,
-    // Q5 — Number grid puzzle. Image shows shapes with numbers 12, 30, 18, ?
-    // User types missing number (2-digit max). Correct answer: 16.
-    question: "Which number replaces the question mark?",
-    image: "/questionscreenimages/question5/q5image.png",
-    numberInput: true,
-    maxDigits: 2,
-    correctNumber: 16,
-    options: [],
-    correctIndex: 0,
+    // Q5 — Pattern recognition. The pattern Q W E R T Y U is the top row
+    // of a QWERTY keyboard. The next three keys after U are I, O, P, so
+    // 3 positions after U is P. Correct answer: index 2 ("P").
+    question:
+      "Q, W, E, R, T, Y, U — Which letter comes 3 positions after U in this pattern?",
+    options: ["I", "O", "P", "L"],
+    correctIndex: 2,
     timeLimit: 30,
   },
   {
@@ -590,7 +596,11 @@ export default function QuizGame({
   const handleConfirmReady = useCallback(() => {
     stop();
     setTourState("done");
-    // Ensure we begin with the first question's intro video
+    // Note: `questionIntroDoneRef` starts as false (from useRef(false)) on
+    // first entry, so no explicit reset is needed here. The useEffect below
+    // also resets it when phase becomes "question-intro" as a safety net.
+    // The real race only matters on subsequent transitions (Q1→Q2, Q2→Q3, …)
+    // and is handled inside `handleContinue`.
     setGameState(prev => ({ ...prev, phase: "question-intro" }));
   }, [stop]);
 
@@ -625,6 +635,34 @@ export default function QuizGame({
       questionIntroDoneRef.current = false;
     }
   }, [gameState.phase, gameState.currentQuestion, tourState]);
+
+  /**
+   * Watchdog for the question-intro video.
+   *
+   * If the <video> element silently fails to progress — autoplay rejected
+   * during the heavy phase-transition tick, codec rejection that doesn't fire
+   * `error`, CDN stall, etc. — neither `onEnded` nor `onError` will fire and
+   * the screen sits on a black overlay forever. Production intro clips run
+   * roughly 5–15s, so a 30s ceiling is generous for a healthy playback while
+   * still bailing the user out of a stuck transition (the symptom Abhinav saw
+   * on Q2 after the elimination screen).
+   *
+   * Cleanup runs whenever phase / question / tour-state changes, so a normal
+   * onEnded → handleQuestionIntroEnd → phase="question" path tears the timer
+   * down before it ever fires.
+   */
+  useEffect(() => {
+    if (gameState.phase !== "question-intro" || tourState !== "done") return;
+    const watchdogId = window.setTimeout(() => {
+      if (questionIntroDoneRef.current) return;
+      console.warn(
+        `[intro-video] watchdog fired for Q${gameState.currentQuestion + 1} — ` +
+          "no onEnded/onError within 30s; forcing transition to question.",
+      );
+      handleQuestionIntroEnd();
+    }, 30_000);
+    return () => window.clearTimeout(watchdogId);
+  }, [gameState.phase, gameState.currentQuestion, tourState, handleQuestionIntroEnd]);
 
   // Narrate the ready-gate prompt once when it opens
   useEffect(() => {
@@ -767,6 +805,15 @@ export default function QuizGame({
       const correct = gameState.playerCorrect.filter(Boolean).length;
       onGameEnd?.({ correct, total: QUESTIONS.length, potPrize: gameState.potPrize });
     } else {
+      // Reset the "intro already finished" guard SYNCHRONOUSLY before the wipe
+      // commits the new phase. The useEffect-based reset (further below) runs
+      // after commit, which races with synchronous error events on the new
+      // <video> element (e.g. cached 404 / unsupported codec) — those events
+      // would call handleQuestionIntroEnd, see the guard still set to `true`
+      // from the previous question, early-return, and leave the screen stuck
+      // on a black intro overlay. Resetting here means any post-mount event
+      // can drive the next transition.
+      questionIntroDoneRef.current = false;
       // Wipe to next question's intro video
       runWipeThen(() => {
         setGameState(prev => ({

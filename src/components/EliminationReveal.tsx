@@ -6,6 +6,7 @@ import { formatRupees } from "./QuizGame";
 import { useNarration } from "./NarrationProvider";
 import PotFill3D from "./PotFill3D";
 import CoinTrailToNavbar from "./CoinTrailToNavbar";
+import { ZText3DDanger } from "./MetallicText3D";
 
 // Stake per eliminated player (mirrors getDefaultQuizGameState in QuizGame.tsx).
 // Used to derive the per-round contribution and compute proportional fill levels.
@@ -25,6 +26,10 @@ const APPLAUSE_FADE_MS = 4000;
 const GRID_PHASE_MS = 3000;
 /** After crosses + copy are visible, hold before showing the stats / applause card. */
 const POST_CROSS_HOLD_MS = 500;
+/** "count" phase duration: grid sits left, the big "X eliminated this round" headline
+ *  beats on the right, then we transition into the pot reveal. ~1.8s lets the
+ *  number land, breathe, and pull the eye before the pot scene takes over. */
+const COUNT_PHASE_MS = 1800;
 /** Tail fade so the wav ending doesn't clip abruptly. */
 const ELIM_AUDIO_TAIL_FADE_MS = 250;
 
@@ -248,10 +253,15 @@ export default function EliminationReveal({
   const { muted: narrationMuted } = useNarration();
 
   // Sequential reveal for embedded mode:
-  //   "grid"   = ONLY the player grid is visible, centered. Players get crossed out.
-  //   "reveal" = Grid is GONE. Details (header + eliminated count + stats + continue) appear centered, solo.
-  // NO side-by-side. The user should feel the grid completely finish, disappear, and THEN details arrive.
-  const [phase, setPhase] = useState<"grid" | "reveal">(embedded ? "grid" : "reveal");
+  //   "grid"   = grid centered, players cross out under the eliminationdecision
+  //              audio climax.
+  //   "count"  = grid slides LEFT, a big "X eliminated this round" headline
+  //              pops in on the RIGHT. Holds ~COUNT_PHASE_MS so the number
+  //              lands before the pot scene takes over.
+  //   "reveal" = grid + count are GONE; pot fill scene + stats + continue button.
+  // The grid element is keyed identically across "grid" and "count" so framer
+  // animates its slide from center to left rather than unmount/remount.
+  const [phase, setPhase] = useState<"grid" | "count" | "reveal">(embedded ? "grid" : "reveal");
   /** Crosses on new eliminations only after eliminationdecision.wav fires `ended`. */
   const [eliminationAudioEnded, setEliminationAudioEnded] = useState(false);
 
@@ -385,20 +395,37 @@ export default function EliminationReveal({
     };
   }, [embedded, phase, narrationMuted]);
 
+  // grid → count: triggered once the crosses have all landed (which itself
+  // is gated on eliminationAudioEnded, set when the wav finishes / fallback
+  // fires). The grid then slides left and the headline fades in on the right.
   useEffect(() => {
     if (!embedded || phase !== "grid" || !eliminationAudioEnded) return;
     const maxStaggerSec = Math.min(Math.max(0, eliminated - 1) * 0.055, 0.72);
     const crossResolveMs = Math.round((maxStaggerSec + 0.22 + 0.45) * 1000);
     const t = window.setTimeout(
-      () => setPhase("reveal"),
+      () => setPhase("count"),
       Math.max(crossResolveMs, 500) + POST_CROSS_HOLD_MS,
     );
     return () => clearTimeout(t);
   }, [embedded, phase, eliminationAudioEnded, eliminated]);
 
+  // count → reveal: hold long enough for the "X eliminated this round" beat
+  // to land, then advance to the pot-fill reveal scene.
   useEffect(() => {
-    if (!embedded || phase !== "grid") return;
-    const safety = window.setTimeout(() => setPhase("reveal"), GRID_PHASE_MS + 10000);
+    if (!embedded || phase !== "count") return;
+    const t = window.setTimeout(() => setPhase("reveal"), COUNT_PHASE_MS);
+    return () => clearTimeout(t);
+  }, [embedded, phase]);
+
+  // Safety net: if either of the gated transitions never fires (audio
+  // failure, callback drop, etc.), force the user through to "reveal" so
+  // they never get stuck on the grid screen.
+  useEffect(() => {
+    if (!embedded || phase === "reveal") return;
+    const safety = window.setTimeout(
+      () => setPhase("reveal"),
+      GRID_PHASE_MS + COUNT_PHASE_MS + 10_000,
+    );
     return () => clearTimeout(safety);
   }, [embedded, phase]);
 
@@ -424,6 +451,10 @@ export default function EliminationReveal({
   const trailCoinCount = Math.min(20, Math.max(8, Math.floor(eliminated / 5) + 6));
 
   const potWrapperRef = useRef<HTMLDivElement | null>(null);
+  // Source ref for the coin trail. Used to be the 3D pot card; now points
+  // at the "+ ₹X this round" delta tile so the animation visually reads as
+  // "the round's contribution flying up to the navbar pot total".
+  const addedBlockRef = useRef<HTMLDivElement | null>(null);
   const [trailTriggerKey, setTrailTriggerKey] = useState<number | null>(null);
 
   // Fire the trail once the 3D fill is visually settled (after reveal-phase
@@ -446,7 +477,10 @@ export default function EliminationReveal({
       className="relative rounded-2xl overflow-hidden border-2 border-brass/40 bg-black/55 shadow-[0_0_56px_-10px_rgba(228,207,106,0.5)] w-full min-h-[380px] md:min-h-[420px] flex"
     >
       <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[radial-gradient(ellipse_80%_100%_at_50%_0%,rgba(255,220,140,0.32),transparent_70%)] z-[1]" />
-      {/* Canvas fills the entire panel; HUD strip sits over the bottom */}
+      {/* Canvas fills the entire panel; HUD strip removed (per spec) so the
+          3D pot reads unobstructed. Pot total stays visible in the always-on
+          navbar HUD ("POT ₹X") at the top of the page, so we don't lose the
+          information — just the duplicate inside this card. */}
       <div className="absolute inset-0">
         <PotFill3D
           previousCoinTotal={previousCoinTotal}
@@ -456,26 +490,6 @@ export default function EliminationReveal({
           delayMs={400}
           style={{ width: "100%", height: "100%" }}
         />
-      </div>
-      <div className="absolute inset-x-0 bottom-0 px-4 py-3 bg-gradient-to-t from-black/90 via-black/50 to-transparent z-[1]">
-        <div className="flex items-end justify-between">
-          <div>
-            <p className="font-mono text-[8px] uppercase tracking-[0.24em] text-white/65 font-semibold">
-              Pot total
-            </p>
-            <p className="font-display text-2xl text-brass-bright tabular-nums leading-tight">
-              {formatRupees(animatedPot)}
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="font-mono text-[8px] uppercase tracking-[0.24em] text-[var(--success)]/85 font-semibold">
-              This round
-            </p>
-            <p className="font-mono text-sm font-semibold text-[var(--success)] tabular-nums leading-tight">
-              + {formatRupees(addedThisRound)}
-            </p>
-          </div>
-        </div>
       </div>
     </motion.div>
   );
@@ -614,6 +628,43 @@ export default function EliminationReveal({
         </div>
       </div>
       {statusChip}
+    </motion.div>
+  );
+
+  // Per-round delta tile — large, brass-rim, primary visual element on the
+  // right column. The coin-trail animation fires from this block (not the
+  // pot anymore) so the user sees "this round's contribution" physically
+  // travel up to the navbar pot total.
+  const addedThisRoundBlock = (
+    <motion.div
+      ref={addedBlockRef}
+      initial={{ opacity: 0, y: 10, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ delay: 0.18, duration: 0.55, ease: EASE_OUT }}
+      className="relative overflow-hidden rounded-xl border-2 border-brass/55 bg-gradient-to-b from-brass/[0.18] to-brass/[0.04] p-4 shadow-[0_0_28px_-6px_rgba(228,207,106,0.55)]"
+    >
+      {/* Slow brass shine sweep across the tile to keep it alive while the
+          coin trail prepares. */}
+      <div className="panel-sheen-wrap">
+        <div className="panel-sheen opacity-60" style={{ animationDuration: "3.2s" }} />
+      </div>
+      <div className="relative z-[1] flex items-center justify-between gap-3">
+        <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.28em] text-brass-bright/95">
+          This round
+        </p>
+        <motion.p
+          initial={{ scale: 0.6, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.42, type: "spring", bounce: 0.4, duration: 0.6 }}
+          className="font-display text-2xl md:text-[28px] font-bold text-brass-bright tabular-nums leading-none"
+          style={{
+            textShadow:
+              "0 0 18px rgba(228,207,106,0.55), 0 2px 0 rgba(0,0,0,0.55)",
+          }}
+        >
+          + {formatRupees(addedThisRound)}
+        </motion.p>
+      </div>
     </motion.div>
   );
 
@@ -770,12 +821,85 @@ export default function EliminationReveal({
         className="w-full h-full flex items-center justify-center p-4 md:p-6"
       >
         <AnimatePresence mode="wait">
-          {phase === "grid" ? (
+          {/* Phases "grid" and "count" share a single key so the grid
+              panel doesn't unmount between them. Layout is a two-column
+              row: grid on the LEFT, dramatic 3D shimmery "X eliminated
+              this round" headline on the RIGHT during the count phase. */}
+          {(phase === "grid" || phase === "count") ? (
             <motion.div
-              key="grid-phase"
-              className="flex items-center justify-center"
+              key="grid-and-count-phase"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.4, ease: EASE_OUT }}
+              className="w-full max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-[auto_1fr] gap-8 md:gap-12 items-center"
             >
-              {gridPanelLarge}
+              {/* Grid column — left. During grid phase it spans both
+                  columns and centres itself; during count it snaps to
+                  just the left column so the right column has room for
+                  the big number. The `layout` prop on motion.div smooths
+                  the transition into a slide instead of a hard reposition. */}
+              <motion.div
+                layout
+                transition={{ duration: 0.6, ease: EASE_OUT }}
+                className={`flex items-center ${
+                  phase === "grid"
+                    ? "md:col-span-2 justify-center"
+                    : "justify-center md:justify-end"
+                }`}
+              >
+                {gridPanelLarge}
+              </motion.div>
+
+              {/* Big eliminated headline — RIGHT column. Only mounts during
+                  the count phase. Number is rendered with ZText3DDanger so
+                  it gets the full 3D extrusion + moving shine sweep that
+                  the brass 3D headings on Instructions use. */}
+              <AnimatePresence>
+                {phase === "count" && (
+                  <motion.div
+                    key="big-eliminated"
+                    initial={{ opacity: 0, x: 36 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -16 }}
+                    transition={{ duration: 0.55, ease: EASE_OUT }}
+                    className="flex flex-col items-center md:items-start text-center md:text-left"
+                  >
+                    {/* Spring-bounce wrapper so the number lands like a
+                        slam. ZText3DDanger inside provides the 3D depth +
+                        side-wall ramp + moving specular highlight. */}
+                    <motion.div
+                      initial={{ scale: 0.45, opacity: 0, filter: "blur(14px)" }}
+                      animate={{ scale: 1, opacity: 1, filter: "blur(0px)" }}
+                      transition={{
+                        type: "spring",
+                        bounce: 0.42,
+                        duration: 0.7,
+                        delay: 0.1,
+                      }}
+                      className="font-display font-bold leading-[0.82] tabular-nums"
+                      style={{
+                        fontSize: "clamp(7rem, 18vw, 13rem)",
+                      }}
+                    >
+                      <ZText3DDanger>{String(eliminated)}</ZText3DDanger>
+                    </motion.div>
+                    <motion.span
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.4, delay: 0.5, ease: EASE_OUT }}
+                      className="mt-3 font-mono uppercase tracking-[0.32em] text-white/95 font-semibold"
+                      style={{
+                        fontSize: "clamp(0.78rem, 1.2vw, 1.05rem)",
+                        textShadow:
+                          "0 1px 0 rgba(0,0,0,0.7), 0 0 18px rgba(232,72,85,0.45), 0 0 36px rgba(232,72,85,0.25)",
+                      }}
+                    >
+                      Eliminated this round
+                    </motion.span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           ) : (
             <motion.div
@@ -790,16 +914,22 @@ export default function EliminationReveal({
               <div className="flex">
                 {potFill3DBlock}
               </div>
-              {/* Right column: header + eliminated count + stats + CTA */}
+              {/* Right column: header + per-round delta + stats + CTA. The
+                  delta tile is the new primary right-column element and the
+                  source point for the coin trail to the navbar. */}
               <div className="flex flex-col gap-3.5 justify-between">
                 {headerRow}
-                {eliminatedCountBlock}
+                {addedThisRoundBlock}
                 {statsBlock}
                 {continueButton}
               </div>
               <CoinTrailToNavbar
                 triggerKey={trailTriggerKey}
-                sourceRef={potWrapperRef}
+                // Coins now arc from the "+ ₹X this round" delta tile up to
+                // the navbar pot, so the visual reads as the round's
+                // contribution being deposited rather than coins generally
+                // leaving the pot.
+                sourceRef={addedBlockRef}
                 coinCount={trailCoinCount}
               />
             </motion.div>

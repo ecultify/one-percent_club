@@ -44,19 +44,28 @@ function StatTile({ src, caption, delay = 0 }: StatTileProps) {
           className="relative flex h-full w-full min-h-0 flex-col overflow-hidden rounded-[13px]"
           style={PANEL_INNER_FILL}
         >
-          <div className="flex min-h-0 flex-1 items-center justify-center px-0.5 pt-1 sm:px-1 sm:pt-1.5 md:px-1.5 md:pt-2">
+          {/* Image room — zero padding so the glyph fills the tile edge to
+              edge. The image is also visually upscaled past 1× so non-square
+              sources still dominate the frame. The caption sits below as a
+              compact strip so it doesn't steal vertical room. */}
+          <div className="flex min-h-0 flex-1 items-center justify-center">
             <motion.img
               src={src}
               alt=""
               draggable={false}
-              className="h-full w-auto max-h-[98%] max-w-[98%] object-contain object-center"
-              initial={{ scale: 1.06, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
+              className="h-full w-auto max-h-[92%] max-w-[92%] object-contain object-center"
+              // Larger overshoot + larger resting scale so the glyph fills
+              // most of the tile. Was 1.06 → 1; now 1.3 → 1.22.
+              initial={{ scale: 1.3, opacity: 0 }}
+              animate={{ scale: 1.22, opacity: 1 }}
               transition={{ duration: 0.55, delay: delay + 0.12, ease: EASE_EXPO }}
+              style={{ transformOrigin: "center" }}
             />
           </div>
+          {/* Caption strip — kept compact so it doesn't claw back the space
+              the image just took. */}
           <span
-            className="shrink-0 px-1.5 pb-2.5 pt-0.5 text-center text-[10px] font-bold uppercase leading-tight tracking-[0.14em] text-white/95 sm:px-2 sm:pb-3 sm:text-[11px] sm:tracking-[0.12em] md:text-xs md:pb-3.5 lg:text-[13px]"
+            className="shrink-0 px-1.5 pb-1.5 pt-0 text-center text-[10px] font-bold uppercase leading-tight tracking-[0.14em] text-white/95 sm:px-2 sm:pb-2 sm:text-[11px] sm:tracking-[0.12em] md:text-xs md:pb-2.5 lg:text-[13px]"
             style={{
               ...arial,
               textShadow: "0 1px 2px rgba(0,0,0,0.85)",

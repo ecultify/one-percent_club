@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNarration } from "./NarrationProvider";
 import MuteButton from "./MuteButton";
+import { ZText3D } from "./MetallicText3D";
 
 interface InstructionsProps {
   playerName: string;
@@ -18,6 +19,79 @@ const BRASS_TEXT =
 
 const BRASS_TEXT_STRONG =
   "linear-gradient(180deg, #fff5d2 0%, #f9e89a 12%, #e6c45a 38%, #a6801f 70%, #543708 100%)";
+
+/** Diagonal bright band used as the moving "specular highlight" on metal text.
+ *  Same shape as the sweep used in `Overlay.Volumetric3DText`, so the metallic
+ *  language reads as one system across the site. */
+const SHINE_GRADIENT =
+  "linear-gradient(115deg, transparent 0%, transparent 36%, rgba(255,250,220,0.95) 48%, rgba(255,255,255,0.85) 50%, rgba(255,250,220,0.95) 52%, transparent 64%, transparent 100%)";
+
+/**
+ * ShimmerText
+ * ─────────────────────────────────────────────────────────────────
+ * Wraps any text in the same shimmery gold-metallic paint we use on the
+ * primary buttons (HERO_BUTTON_METALLIC). Two stacked layers:
+ *   1) the gradient-clipped glyphs, which give the body the gold ramp
+ *   2) a sibling layer that re-renders the same text with a moving diagonal
+ *      bright band, masked to the glyph shape via background-clip: text and
+ *      blended with `screen` so it adds light to the face without dimming it.
+ * The sweep is driven by the existing `.overlay-shine-sweep` keyframe in
+ * globals.css, so the cadence matches the rest of the site.
+ *
+ * Pass `as` to render a different element (e.g. h1, span). Pass through any
+ * styles / classes you'd normally put on the text node.
+ */
+function ShimmerText({
+  children,
+  className = "",
+  style = {},
+  gradient = BRASS_TEXT_STRONG,
+  as: Tag = "span",
+}: {
+  children: React.ReactNode;
+  className?: string;
+  style?: React.CSSProperties;
+  gradient?: string;
+  as?: keyof React.JSX.IntrinsicElements;
+}) {
+  // Cast keeps TS happy while letting the caller pick a tag freely.
+  const Element = Tag as React.ElementType;
+  return (
+    <Element className={`relative inline-block ${className}`} style={style}>
+      <span
+        style={{
+          background: gradient,
+          WebkitBackgroundClip: "text",
+          backgroundClip: "text",
+          WebkitTextFillColor: "transparent",
+          color: "transparent",
+        }}
+      >
+        {children}
+      </span>
+      <span
+        aria-hidden
+        className="overlay-shine-sweep pointer-events-none absolute inset-0"
+        style={{
+          background: SHINE_GRADIENT,
+          backgroundSize: "250% 100%",
+          backgroundRepeat: "no-repeat",
+          WebkitBackgroundClip: "text",
+          backgroundClip: "text",
+          WebkitTextFillColor: "transparent",
+          color: "transparent",
+          mixBlendMode: "screen",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {children}
+      </span>
+    </Element>
+  );
+}
+
+// ZText3D moved to ./MetallicText3D so the elimination screen and any
+// other surface can use the same 3D shimmer treatment.
 
 function firstNameOf(fullName: string): string {
   return fullName.trim().split(/\s+/)[0] || "friend";
@@ -74,14 +148,10 @@ const SCENES: Scene[] = [
           className="font-black leading-[0.95] tracking-[-0.03em]"
           style={{
             fontSize: "clamp(3.2rem, 9vw, 7.5rem)",
-            background: BRASS_TEXT_STRONG,
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text",
             filter: "drop-shadow(0 0 40px rgba(228,196,90,0.35))",
           }}
         >
-          {firstNameOf(name)}.
+          <ZText3D>{`${firstNameOf(name)}.`}</ZText3D>
         </motion.h1>
       </div>
     ),
@@ -104,15 +174,11 @@ const SCENES: Scene[] = [
           className="font-black tabular-nums leading-[0.82]"
           style={{
             fontSize: "clamp(10rem, 32vw, 26rem)",
-            background: BRASS_TEXT_STRONG,
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text",
             filter:
               "drop-shadow(0 18px 40px rgba(0,0,0,0.6)) drop-shadow(0 0 60px rgba(228,196,90,0.35))",
           }}
         >
-          8
+          <ZText3D>8</ZText3D>
         </motion.span>
         <motion.div
           initial={{ opacity: 0, x: 20 }}
@@ -154,15 +220,11 @@ const SCENES: Scene[] = [
           className="font-bold leading-none"
           style={{
             fontSize: "clamp(8rem, 22vw, 20rem)",
-            background: BRASS_TEXT_STRONG,
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text",
             filter:
               "drop-shadow(0 14px 28px rgba(0,0,0,0.55)) drop-shadow(0 0 44px rgba(228,196,90,0.32))",
           }}
         >
-          %
+          <ZText3D>%</ZText3D>
         </motion.span>
         <motion.div
           initial={{ opacity: 0, y: 18 }}
@@ -207,30 +269,21 @@ const SCENES: Scene[] = [
           style={{ filter: "drop-shadow(0 16px 36px rgba(0,0,0,0.5))" }}
           aria-label="90 percent"
         >
-          <span
+          <ZText3D
             style={{
               fontSize: "clamp(8rem, 26vw, 22rem)",
-              background: BRASS_TEXT_STRONG,
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text",
             }}
           >
             90
-          </span>
-          <span
+          </ZText3D>
+          <ZText3D
             className="translate-y-[0.04em]"
             style={{
               fontSize: "clamp(6.1rem, 19.5vw, 16.8rem)",
-              background: BRASS_TEXT_STRONG,
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text",
             }}
-            aria-hidden
           >
             %
-          </span>
+          </ZText3D>
         </motion.span>
         <motion.div
           initial={{ opacity: 0, x: 14 }}
@@ -380,15 +433,11 @@ const SCENES: Scene[] = [
             className="font-bold leading-[0.95]"
             style={{
               fontSize: "clamp(3rem, 9vw, 7.5rem)",
-              background: BRASS_TEXT_STRONG,
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text",
               filter: "drop-shadow(0 10px 22px rgba(0,0,0,0.55))",
               letterSpacing: "-0.02em",
             }}
           >
-            {word}
+            <ZText3D>{word}</ZText3D>
           </motion.span>
         ))}
         <motion.span
@@ -634,6 +683,10 @@ function ChapterRail({
 
 const HOWITWORKS_VO_SRC = "/sound/howitworks1percentclub.mp3";
 
+// CursorGoldDust moved to ./MetallicText3D and is now mounted globally
+// from src/app/layout.tsx so the trail follows the cursor across every
+// page in the app, not just the Instructions screen.
+
 export default function Instructions({ playerName, onStart }: InstructionsProps) {
   const { narrate, narrateUrl, stop } = useNarration();
   const [sceneIdx, setSceneIdx] = useState(0);
@@ -749,12 +802,27 @@ export default function Instructions({ playerName, onStart }: InstructionsProps)
       className="absolute inset-0 z-10 flex min-h-full w-full flex-col overflow-hidden font-[Arial,Helvetica,sans-serif] text-[#ebe4d8] antialiased"
       style={{ backgroundColor: "#04020a" }}
     >
-      {/* Solid black stage + warm centre bloom + edge vignette (no photo BG). */}
+      {/* Background video — same looping stage footage we use behind the
+          QuestionScreen, so the Instructions feel like part of the same
+          live broadcast rather than a separate static screen. */}
+      <video
+        src={encodeURI("/new videos/bgvideo (1).mp4")}
+        autoPlay
+        loop
+        muted
+        playsInline
+        preload="auto"
+        className="pointer-events-none absolute inset-0 z-0 h-full w-full object-cover select-none"
+        aria-hidden
+      />
+      {/* Black vignette over the video so the centre stays moody and the
+          gold copy reads cleanly. Subtle enough that the stage motion
+          still bleeds through at the edges. */}
       <div
         className="pointer-events-none absolute inset-0 z-0"
         style={{
           background:
-            "radial-gradient(ellipse 120% 70% at 50% 58%, rgba(16,10,4,0.92) 0%, rgba(6,3,2,0.98) 60%, #020002 100%), radial-gradient(ellipse 140% 120% at 50% 50%, transparent 40%, rgba(0,0,0,0.55) 100%)",
+            "radial-gradient(ellipse 110% 80% at 50% 55%, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.78) 60%, rgba(2,0,2,0.92) 100%)",
         }}
         aria-hidden
       />
@@ -765,6 +833,9 @@ export default function Instructions({ playerName, onStart }: InstructionsProps)
         }}
         aria-hidden
       />
+
+      {/* CursorGoldDust now mounted globally in app/layout.tsx — fires
+          across every screen on cursor movement. */}
 
       {/* Mute (handled by MuteButton — already fixed-positioned) */}
       <MuteButton />

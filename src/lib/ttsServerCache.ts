@@ -6,6 +6,14 @@ import { tmpdir } from "os";
 /** Voice + model must be part of the key so cache invalidates if route settings change. */
 const TTS_MODEL_ID = "eleven_multilingual_v2";
 
+/**
+ * ElevenLabs v3 model id, used by the per-player greeting route only ("Hello {name}.")
+ * v3 is more expressive on short utterances and pronounces names more naturally
+ * than v2 — at the cost of slightly higher latency, which is fine for the
+ * greeting because it's prefetched before the instructions screen mounts.
+ */
+const TTS_MODEL_ID_V3 = "eleven_v3";
+
 const MAX_MEMORY_ENTRIES = 96;
 
 const memoryLru = new Map<string, Buffer>();
@@ -30,9 +38,13 @@ function cacheDir(): string {
   return join(process.cwd(), ".cache", "tts");
 }
 
-export function ttsCacheKey(text: string, voiceId: string): string {
+export function ttsCacheKey(
+  text: string,
+  voiceId: string,
+  modelId: string = TTS_MODEL_ID,
+): string {
   return createHash("sha256")
-    .update(`${voiceId}\0${TTS_MODEL_ID}\0${text}`, "utf8")
+    .update(`${voiceId}\0${modelId}\0${text}`, "utf8")
     .digest("hex");
 }
 
@@ -56,13 +68,18 @@ async function writeDisk(key: string, buf: Buffer): Promise<void> {
 /**
  * Returns MP3 bytes for `text`, using memory → disk → `fetchMp3()` (ElevenLabs).
  * Deduplicates concurrent requests with the same cache key.
+ *
+ * `modelId` is part of the cache key so requests using different ElevenLabs
+ * models (e.g. v2 for general narration, v3 for the player greeting) don't
+ * read each other's cached audio.
  */
 export async function getOrCreateTtsMp3(
   text: string,
   voiceId: string,
   fetchMp3: () => Promise<ArrayBuffer>,
+  modelId: string = TTS_MODEL_ID,
 ): Promise<Buffer> {
-  const key = ttsCacheKey(text, voiceId);
+  const key = ttsCacheKey(text, voiceId, modelId);
 
   const mem = memoryLru.get(key);
   if (mem) {
@@ -97,4 +114,4 @@ export async function getOrCreateTtsMp3(
   return p;
 }
 
-export { TTS_MODEL_ID };
+export { TTS_MODEL_ID, TTS_MODEL_ID_V3 };

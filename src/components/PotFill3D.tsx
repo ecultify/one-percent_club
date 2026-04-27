@@ -19,7 +19,9 @@
 
 import { useRef, useEffect } from "react";
 import * as THREE from "three";
-import * as CANNON from "cannon-es";
+// cannon-es is no longer used — coin movement is now driven by deterministic
+// tweens in the animate loop. Removing the import keeps the bundle lean and
+// stops the dead dependency from confusing future maintainers.
 
 interface PotFill3DProps {
   /** Cumulative coins already collected from previous rounds (settled at start). */
@@ -155,8 +157,11 @@ export default function PotFill3D({
     if (!container) return;
 
     // ── Renderer ────────────────────────────────────────────────
+    // Cap pixel ratio at 1.5 — Retina-2 was quadrupling fragment work for
+    // basically zero perceptual gain on a small inline canvas, and was a
+    // major contributor to the "slow" feel of this scene.
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.85;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -178,29 +183,22 @@ export default function PotFill3D({
     camera.lookAt(0, 0.05, 0);
 
     // ── Lighting ────────────────────────────────────────────────
-    scene.add(new THREE.AmbientLight("#fff0c0", 0.55));
-    const hemi = new THREE.HemisphereLight("#fff2c4", "#3a2410", 1.3);
+    // Light count cut from 8 → 4. Each PBR fragment evaluates every dynamic
+    // light, so 8 lights × ~80 coins × every pixel under each material was
+    // a major contributor to the slowdown. The remaining four cover ambient,
+    // hemisphere fill, a top key spot, and one warm rim — visually similar
+    // to the previous lighting once the env map (already strong) takes over.
+    scene.add(new THREE.AmbientLight("#fff0c0", 0.7));
+    const hemi = new THREE.HemisphereLight("#fff2c4", "#3a2410", 1.4);
     hemi.position.set(0, 4, 0);
     scene.add(hemi);
-    const keySpot = new THREE.SpotLight("#fff5cc", 50, 18, Math.PI / 5, 0.4);
+    const keySpot = new THREE.SpotLight("#fff5cc", 55, 18, Math.PI / 5, 0.4);
     keySpot.position.set(0, 6, 2.4);
     scene.add(keySpot);
     scene.add(keySpot.target);
-    const rimL = new THREE.PointLight("#ffd860", 22, 10);
-    rimL.position.set(-2.6, 1.3, 1.6);
-    scene.add(rimL);
-    const rimR = new THREE.PointLight("#ffaa3a", 18, 10);
-    rimR.position.set(2.6, 1.0, -1.8);
-    scene.add(rimR);
-    const fillR = new THREE.PointLight("#ffe399", 14, 9);
-    fillR.position.set(2.4, 0.6, 2.4);
-    scene.add(fillR);
-    const fillL = new THREE.PointLight("#ffd9a3", 10, 9);
-    fillL.position.set(-2.2, 0.4, 2.2);
-    scene.add(fillL);
-    const bottomGlow = new THREE.PointLight("#ff9a40", 5, 5);
-    bottomGlow.position.set(0, -1.5, 0);
-    scene.add(bottomGlow);
+    const rimLight = new THREE.PointLight("#ffd060", 28, 10);
+    rimLight.position.set(-2.4, 1.1, 1.8);
+    scene.add(rimLight);
 
     // ── Pot geometry — same lathe profile as before ────────────
     const profile: THREE.Vector2[] = [
@@ -223,41 +221,49 @@ export default function PotFill3D({
     const potGeo = new THREE.LatheGeometry(profile, 96);
     potGeo.computeVertexNormals();
 
-    // ── Glass pot material — fully clear with a gold rim breath ──
-    // Maxed transmission + paper-thin geometry path + long attenuation
-    // distance = the body reads as crystal glass with a warm halo, not a
-    // tinted surface. Coins inside should be unmistakably visible.
-    const potMat = new THREE.MeshPhysicalMaterial({
-      color: "#fffaf0",
+    // ── Pot material — TRULY transparent glass ────────────────────
+    // The previous version used color #fffaf0 + opacity 0.42 which read as
+    // a milky white plastic over the black backdrop. The user explicitly
+    // wants "transparent so I can always see the coins inside" — so we go
+    // much harder on transparency:
+    //   - color is barely-tinted (almost neutral white) so the body doesn't
+    //     paint on top of the coins
+    //   - opacity 0.18 — body is now mostly invisible, only the silhouette
+    //     and the highlights from envMap reflections read
+    //   - envMapIntensity bumped to 2.4 so the bits we DO see are crisp
+    //     gold-tinted reflections (the env cube is gold)
+    //   - depthWrite: false so coins behind the pot never get culled by
+    //     the body's depth buffer write — this is the real fix for
+    //     "I can't see the coins through the pot" if it ever happens
+    //   - emissive zero'd — any warmth was reading as a white glow
+    const potMat = new THREE.MeshStandardMaterial({
+      color: "#f8f6ee",
       metalness: 0.0,
-      roughness: 0.02,
-      transmission: 1.0,
-      thickness: 0.06,
-      ior: 1.42,
-      attenuationColor: new THREE.Color("#ffd870"),
-      attenuationDistance: 6.5,
-      envMapIntensity: 1.6,
-      emissive: "#5a3008",
-      emissiveIntensity: 0.08,
-      clearcoat: 1.0,
-      clearcoatRoughness: 0.02,
+      roughness: 0.08,
+      envMapIntensity: 2.4,
       transparent: true,
-      opacity: 0.55,
+      opacity: 0.18,
+      depthWrite: false,
       side: THREE.DoubleSide,
     });
     const pot = new THREE.Mesh(potGeo, potMat);
+    // Render order: coins (default 0) draw first, pot (1) draws after so
+    // the alpha blends correctly against the coins behind it.
+    pot.renderOrder = 1;
 
     // ── Gold rim ring on top — keeps the "treasure pot" identity ──
+    // Downgraded from `MeshPhysicalMaterial` (with clearcoat) to plain
+    // `MeshStandardMaterial`. The env map + emissive already give us the
+    // polished-gold look; clearcoat was adding a second BRDF pass we don't
+    // visually need on a small inline canvas.
     const rimGeo = new THREE.TorusGeometry(0.82, 0.05, 18, 110);
-    const rimMat = new THREE.MeshPhysicalMaterial({
+    const rimMat = new THREE.MeshStandardMaterial({
       color: "#fff5d8",
       metalness: 1.0,
-      roughness: 0.08,
+      roughness: 0.18,
       emissive: "#e0a040",
-      emissiveIntensity: 1.4,
-      envMapIntensity: 2.6,
-      clearcoat: 0.7,
-      clearcoatRoughness: 0.05,
+      emissiveIntensity: 1.2,
+      envMapIntensity: 2.4,
     });
     const rim = new THREE.Mesh(rimGeo, rimMat);
     rim.rotation.x = Math.PI / 2;
@@ -274,115 +280,105 @@ export default function PotFill3D({
     // interior (built from a ring of static walls + a floor disc).
     // Coins collide with each other and pile naturally, then sleep
     // when at rest so they don't jitter forever.
-    const coinGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.04, 28);
-    const coinMat = new THREE.MeshPhysicalMaterial({
+    // Coin segment count cut from 28 → 18: visually indistinguishable at
+    // the scene scale, ~36% fewer triangles per coin × up to 80 coins.
+    const coinGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.04, 18);
+    // Coins downgraded to MeshStandardMaterial. With up to 80 coins on
+    // screen, every BRDF feature multiplies. Clearcoat dropped (the env map
+    // already sells the polished metal); roughness nudged a hair to keep
+    // the coins reading like soft polished gold rather than mirror chrome.
+    const coinMat = new THREE.MeshStandardMaterial({
       color: "#fff0a8",
       metalness: 1.0,
-      roughness: 0.13,
+      roughness: 0.22,
       emissive: "#c08018",
-      emissiveIntensity: 0.55,
-      envMapIntensity: 2.6,
-      clearcoat: 0.6,
-      clearcoatRoughness: 0.06,
+      emissiveIntensity: 0.5,
+      envMapIntensity: 2.4,
     });
 
-    // Physics world
-    const world = new CANNON.World({
-      gravity: new CANNON.Vec3(0, -9.8, 0),
-    });
-    world.broadphase = new CANNON.SAPBroadphase(world);
-    world.allowSleep = true;
-    (world.solver as CANNON.GSSolver).iterations = 10;
-
-    const coinPhysicsMat = new CANNON.Material("coin");
-    const wallPhysicsMat = new CANNON.Material("wall");
-    world.addContactMaterial(
-      new CANNON.ContactMaterial(coinPhysicsMat, coinPhysicsMat, {
-        friction: 0.45,
-        restitution: 0.18,
-      }),
-    );
-    world.addContactMaterial(
-      new CANNON.ContactMaterial(coinPhysicsMat, wallPhysicsMat, {
-        friction: 0.55,
-        restitution: 0.12,
-      }),
-    );
-
-    // Pot interior collision: a thin disc floor + a ring of vertical walls
-    // approximating the interior radius. The pot's inner profile bulges
-    // (widest at the belly, narrower at the rim), so we use 3 stacked rings
-    // at progressively smaller radii to roughly track that shape.
-    const floor = new CANNON.Body({
-      mass: 0,
-      shape: new CANNON.Cylinder(0.7, 0.6, 0.05, 24),
-      material: wallPhysicsMat,
-    });
-    floor.position.set(0, POT_INNER_BOTTOM - 0.02, 0);
-    world.addBody(floor);
-
-    const addRing = (y: number, radius: number, segments = 18) => {
-      const wallH = 0.45;
-      const wallW = (Math.PI * 2 * radius) / segments + 0.05;
-      const halfExt = new CANNON.Vec3(wallW / 2, wallH / 2, 0.02);
-      const wallShape = new CANNON.Box(halfExt);
-      for (let i = 0; i < segments; i++) {
-        const a = (i / segments) * Math.PI * 2;
-        const x = Math.cos(a) * radius;
-        const z = Math.sin(a) * radius;
-        const body = new CANNON.Body({
-          mass: 0,
-          shape: wallShape,
-          material: wallPhysicsMat,
-        });
-        body.position.set(x, y, z);
-        body.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), -a + Math.PI / 2);
-        world.addBody(body);
-      }
-    };
-    addRing(POT_INNER_BOTTOM + 0.18, 0.62);     // belly band 1
-    addRing(POT_INNER_BOTTOM + 0.55, 0.78);     // belly band 2 (widest)
-    addRing(POT_INNER_BOTTOM + 0.95, 0.78);     // belly band 3
-    addRing(POT_INNER_BOTTOM + 1.35, 0.66);     // neck
-
-    type CoinState = {
-      mesh: THREE.Mesh;
-      body: CANNON.Body;
-      mode: "hidden" | "preDrop" | "live";
-      spawnAtMs: number;
-      hadFirstHit: boolean;
-      sleepTimer: number;
-    };
+    // ── Coin pool — TWEENED (no physics) ───────────────────────────
+    // Previous implementation used cannon-es to simulate every coin as a
+    // rigid body. Three problems with that:
+    //   1) Cylinder-cylinder contacts are a known weak spot in cannon-es —
+    //      coins occasionally jitter, sink into each other, or flick out.
+    //   2) Even with sleep enforcement, lots of awake bodies = lots of
+    //      per-frame work, which read as the "load on the website".
+    //   3) The simulated rest pose is non-deterministic, so the "settled"
+    //      pile can drift slightly between rounds.
+    //
+    // Replaced with deterministic tweened drops: each new coin animates
+    // from a randomised spawn position above the rim to its computed slot
+    // (`getCoinSlot(i)`) over ~700 ms, with a custom curve that mimics
+    // gravity acceleration plus a tiny end-of-fall bounce. Pre-existing
+    // coins are placed directly at their slot positions on mount.
+    //
+    // Net: no physics steps in the animate loop, no jitter, no clipping,
+    // and the pile looks identical between runs. cannon-es is still
+    // imported (it ships with the bundle either way), but no longer
+    // contributes to per-frame cost on this scene.
+    type CoinState =
+      | { mode: "hidden"; mesh: THREE.Mesh }
+      | {
+          mode: "settled";
+          mesh: THREE.Mesh;
+        }
+      | {
+          mode: "preDrop";
+          mesh: THREE.Mesh;
+          spawnAtMs: number;
+          slotIndex: number;
+        }
+      | {
+          mode: "dropping";
+          mesh: THREE.Mesh;
+          startMs: number;
+          durationMs: number;
+          startPos: THREE.Vector3;
+          targetPos: THREE.Vector3;
+          startQuat: THREE.Quaternion;
+          targetQuat: THREE.Quaternion;
+          impactScheduled: boolean;
+        };
 
     const coins: CoinState[] = [];
-    const coinShape = new CANNON.Cylinder(0.12, 0.12, 0.04, 16);
     for (let i = 0; i < MAX_VISIBLE_COINS; i++) {
       const m = new THREE.Mesh(coinGeo, coinMat);
       m.visible = false;
       scene.add(m);
-
-      const body = new CANNON.Body({
-        mass: 0.06,
-        shape: coinShape,
-        material: coinPhysicsMat,
-        sleepSpeedLimit: 0.18,
-        sleepTimeLimit: 0.35,
-        linearDamping: 0.18,
-        angularDamping: 0.4,
-      });
-      body.allowSleep = true;
-      body.collisionResponse = false;
-      world.addBody(body);
-
-      coins.push({
-        mesh: m,
-        body,
-        mode: "hidden",
-        spawnAtMs: 0,
-        hadFirstHit: false,
-        sleepTimer: 0,
-      });
+      coins.push({ mode: "hidden", mesh: m });
     }
+
+    /** Build the deterministic resting quaternion for a slot. */
+    const slotQuat = (slotIndex: number): THREE.Quaternion => {
+      const slot = getCoinSlot(slotIndex);
+      const qX = new THREE.Quaternion().setFromAxisAngle(
+        new THREE.Vector3(1, 0, 0),
+        slot.tiltX,
+      );
+      const qZ = new THREE.Quaternion().setFromAxisAngle(
+        new THREE.Vector3(0, 0, 1),
+        slot.tiltZ,
+      );
+      const qY = new THREE.Quaternion().setFromAxisAngle(
+        new THREE.Vector3(0, 1, 0),
+        slot.rotY,
+      );
+      return qY.multiply(qZ).multiply(qX);
+    };
+
+    /** Custom drop curve — accelerating gravity + small bounce + settle.
+     *  Returns 0..~1.04..1 across t ∈ [0,1]. */
+    const dropCurve = (t: number): number => {
+      if (t <= 0) return 0;
+      if (t >= 1) return 1;
+      if (t < 0.78) {
+        const u = t / 0.78;
+        return u * u; // ease in quadratic — feels like falling
+      }
+      // 0.78 → 1.0: damped overshoot bounce (~5% past target, recovers)
+      const u = (t - 0.78) / 0.22;
+      return 1 + 0.05 * Math.sin(Math.PI * u) * Math.pow(1 - u, 1.5);
+    };
 
     // Initial assignment.
     const totalAfter = Math.min(
@@ -392,58 +388,32 @@ export default function PotFill3D({
     const preCount = Math.min(MAX_VISIBLE_COINS, Math.max(0, Math.floor(previousCoinTotal)));
     const newCount = Math.max(0, totalAfter - preCount);
 
-    // Helper: spawn a coin at a randomized position above the rim.
-    const spawnCoin = (c: CoinState) => {
-      c.body.collisionResponse = true;
-      c.body.wakeUp();
-      const ang = Math.random() * Math.PI * 2;
-      const r = Math.random() * 0.32;
-      c.body.position.set(
-        Math.cos(ang) * r,
-        1.6 + Math.random() * 0.45,
-        Math.sin(ang) * r,
-      );
-      c.body.velocity.set(
-        (Math.random() - 0.5) * 0.6,
-        -0.5 - Math.random() * 1.0,
-        (Math.random() - 0.5) * 0.6,
-      );
-      c.body.angularVelocity.set(
-        (Math.random() - 0.5) * 6,
-        (Math.random() - 0.5) * 4,
-        (Math.random() - 0.5) * 6,
-      );
-      c.body.quaternion.setFromAxisAngle(
-        new CANNON.Vec3(Math.random(), Math.random(), Math.random()).unit(),
-        Math.random() * Math.PI,
-      );
-      c.mesh.visible = true;
-      c.mode = "live";
-    };
-
-    // Pre-existing coins: drop them all instantly and let physics settle
-    // before the user even sees the scene. We step the world several
-    // hundred substeps so the pile is at rest at frame 1.
+    // Pre-existing coins → settle at their slot positions immediately.
     for (let i = 0; i < preCount; i++) {
-      spawnCoin(coins[i]);
-    }
-    // Pre-warm: step the physics world to settle pre-existing coins.
-    // Spawning all at once would clip through each other; stagger via
-    // mini-batches with substeps between.
-    for (let batch = 0; batch < 8; batch++) {
-      for (let s = 0; s < 30; s++) world.step(1 / 60);
+      const c = coins[i];
+      const slot = getCoinSlot(i);
+      const q = slotQuat(i);
+      c.mesh.position.set(slot.x, slot.y, slot.z);
+      c.mesh.quaternion.copy(q);
+      c.mesh.visible = true;
+      coins[i] = { mode: "settled", mesh: c.mesh };
     }
 
-    // New coins: queued to drop with stagger after delayMs.
+    // New coins → queued to start dropping after `dropBeginAt + spawnAtMs`.
     for (let i = preCount; i < preCount + newCount; i++) {
-      const c = coins[i];
       const inGroup = i - preCount;
-      c.mode = "preDrop";
-      c.spawnAtMs = 80 + inGroup * 95;
+      coins[i] = {
+        mode: "preDrop",
+        mesh: coins[i].mesh,
+        // Stagger so coins land in sequence — same cadence as the previous
+        // physics version (every 95 ms).
+        spawnAtMs: 80 + inGroup * 95,
+        slotIndex: i,
+      };
     }
-    // Hidden remainder.
+    // The rest stay hidden.
     for (let i = preCount + newCount; i < MAX_VISIBLE_COINS; i++) {
-      coins[i].mode = "hidden";
+      coins[i] = { mode: "hidden", mesh: coins[i].mesh };
     }
 
     // ── Pot rocking spring ─────────────────────────────────────
@@ -462,58 +432,93 @@ export default function PotFill3D({
     let frameId = 0;
     let cancelled = false;
 
+    // Reusable scratch quaternion for slerp (avoids per-frame allocations).
+    const scratchQuat = new THREE.Quaternion();
+
     const animate = () => {
       if (cancelled) return;
       const now = performance.now();
       const delta = Math.min(0.05, (now - lastFrame) / 1000);
       lastFrame = now;
 
-      // Spawn queued new coins as their stagger time elapses.
+      // ── Coin state transitions + tween updates ───────────────────
       for (let i = 0; i < coins.length; i++) {
         const c = coins[i];
+
+        // preDrop → dropping: when the staggered spawn time elapses,
+        // pick a randomised start position above the rim and lock the
+        // drop trajectory to its slot.
         if (c.mode === "preDrop" && now >= dropBeginAt + c.spawnAtMs) {
-          spawnCoin(c);
-          if (!c.hadFirstHit) {
-            // We don't actually know the precise impact moment without
-            // contact callbacks, but kicking the pot around the time of
-            // first descent reads correctly. This fires once per coin.
-            window.setTimeout(() => applyImpactKick(), 320);
-            c.hadFirstHit = true;
+          const slot = getCoinSlot(c.slotIndex);
+          const ang = Math.random() * Math.PI * 2;
+          const r = Math.random() * 0.32;
+          const startPos = new THREE.Vector3(
+            slot.x + Math.cos(ang) * r * 0.6,
+            1.55 + Math.random() * 0.35,
+            slot.z + Math.sin(ang) * r * 0.6,
+          );
+          // Random orientation at spawn → settled slot orientation at land.
+          const startQuat = new THREE.Quaternion().setFromEuler(
+            new THREE.Euler(
+              Math.random() * Math.PI * 2,
+              Math.random() * Math.PI * 2,
+              Math.random() * Math.PI * 2,
+            ),
+          );
+          const targetPos = new THREE.Vector3(slot.x, slot.y, slot.z);
+          const targetQuat = slotQuat(c.slotIndex);
+
+          c.mesh.position.copy(startPos);
+          c.mesh.quaternion.copy(startQuat);
+          c.mesh.visible = true;
+
+          coins[i] = {
+            mode: "dropping",
+            mesh: c.mesh,
+            startMs: now,
+            // 700 ms ± ~120 ms — slight per-coin variation reads as natural.
+            durationMs: 700 + Math.random() * 240,
+            startPos,
+            targetPos,
+            startQuat,
+            targetQuat,
+            impactScheduled: false,
+          };
+          continue;
+        }
+
+        // dropping: advance the tween. When the curve crosses ~0.7 we
+        // schedule the pot's impact kick once (matches the moment the
+        // coin would visually hit the pile).
+        if (c.mode === "dropping") {
+          const t = Math.min(1, (now - c.startMs) / c.durationMs);
+          const k = dropCurve(t);
+
+          c.mesh.position.x = c.startPos.x + (c.targetPos.x - c.startPos.x) * k;
+          c.mesh.position.y = c.startPos.y + (c.targetPos.y - c.startPos.y) * k;
+          c.mesh.position.z = c.startPos.z + (c.targetPos.z - c.startPos.z) * k;
+          // Slerp orientation on the same eased curve.
+          scratchQuat.copy(c.startQuat).slerp(c.targetQuat, Math.min(1, k));
+          c.mesh.quaternion.copy(scratchQuat);
+
+          if (!c.impactScheduled && t >= 0.78) {
+            applyImpactKick();
+            c.impactScheduled = true;
+          }
+
+          if (t >= 1) {
+            // Snap to exact target so floating-point drift doesn't leave
+            // the pile micro-misaligned across many rounds.
+            c.mesh.position.copy(c.targetPos);
+            c.mesh.quaternion.copy(c.targetQuat);
+            coins[i] = { mode: "settled", mesh: c.mesh };
           }
         }
       }
 
-      // Step physics (clamp to a safe max so a long frame doesn't explode).
-      world.step(1 / 60, delta, 3);
-
-      // Sync each live coin's mesh to its body. Force-sleep once velocity
-      // drops below threshold so the pile doesn't jitter forever.
-      for (let i = 0; i < coins.length; i++) {
-        const c = coins[i];
-        if (c.mode !== "live") continue;
-        const p = c.body.position;
-        const q = c.body.quaternion;
-        c.mesh.position.set(p.x, p.y, p.z);
-        c.mesh.quaternion.set(q.x, q.y, q.z, q.w);
-
-        // Manual sleep enforcement — cannon's auto-sleep can be flaky on
-        // light bodies sitting on each other.
-        const v = c.body.velocity;
-        const av = c.body.angularVelocity;
-        const speed2 = v.x*v.x + v.y*v.y + v.z*v.z + av.x*av.x + av.y*av.y + av.z*av.z;
-        if (speed2 < 0.06) {
-          c.sleepTimer += delta;
-          if (c.sleepTimer > 0.4) {
-            c.body.sleep();
-            c.body.velocity.set(0, 0, 0);
-            c.body.angularVelocity.set(0, 0, 0);
-          }
-        } else {
-          c.sleepTimer = 0;
-        }
-      }
-
-      // Pot rocking spring
+      // ── Pot rocking spring ───────────────────────────────────────
+      // Cheap explicit-Euler spring driven by impact kicks. Same logic
+      // as before — physics-free apart from this one analytic spring.
       swingVelX += (-POT_SPRING * swingX - POT_DAMPING * swingVelX) * delta;
       swingVelZ += (-POT_SPRING * swingZ - POT_DAMPING * swingVelZ) * delta;
       swingX += swingVelX * delta;
@@ -522,7 +527,6 @@ export default function PotFill3D({
       if (swingX < -POT_MAX_TILT) { swingX = -POT_MAX_TILT; swingVelX *= -0.3; }
       if (swingZ > POT_MAX_TILT) { swingZ = POT_MAX_TILT; swingVelZ *= -0.3; }
       if (swingZ < -POT_MAX_TILT) { swingZ = -POT_MAX_TILT; swingVelZ *= -0.3; }
-      // Pot stays statically forward-facing; only impact swing tilts it.
       potGroup.rotation.set(swingX, 0, swingZ);
 
       renderer.render(scene, camera);
