@@ -1577,30 +1577,118 @@ function FinalResult({
       // z-[100] sits above the persistent top-left 3D logo (z-[85]) as a belt-
       // and-braces guarantee — GameFlow also hides the logo via the
       // onFinalScreenActiveChange callback, but stacking-context belt is cheap.
-      className="fixed inset-0 z-[100] w-screen h-[100dvh] overflow-hidden bg-[#03020c] flex flex-col items-center justify-center px-6"
+      className="fixed inset-0 z-[100] w-screen h-[100dvh] overflow-hidden bg-black flex flex-col items-center justify-center px-6"
     >
-      {/* Soft brass radial glow behind the centerpiece */}
+      {/* ━━ Layer 0: looping question-screen stage video (same one used during
+              gameplay) so the final summary sits in the same world. ━━ */}
+      <video
+        src={encodeURI("/new videos/bgvideo (1).mp4")}
+        autoPlay
+        loop
+        muted
+        playsInline
+        preload="auto"
+        className="pointer-events-none absolute inset-0 h-full w-full object-cover select-none"
+        aria-hidden
+      />
+
+      {/* ━━ Layer 1: black vignette overlay. Darker towards the edges, near-
+              transparent in the centre so the centerpiece reads cleanly while
+              the BG video stays present in the periphery. ━━ */}
+      <div
+        className="pointer-events-none absolute inset-0"
+        aria-hidden
+        style={{
+          background:
+            "radial-gradient(ellipse 70% 75% at 50% 50%, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.78) 55%, rgba(0,0,0,0.94) 100%)",
+        }}
+      />
+
+      {/* Soft brass radial glow behind the centerpiece (sits above vignette) */}
       <div className="pointer-events-none absolute inset-0" aria-hidden>
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(95vw,900px)] h-[min(95vw,900px)] rounded-full bg-brass/[0.08] blur-[120px]" />
       </div>
 
       {/* Centerpiece: Unicorn Studio scene (the JSON animation that previously
-          played on the FinalStage3D middle LED — now the hero of this page) */}
+          played on the FinalStage3D middle LED — now the hero of this page).
+
+          Visible "centerpiece" footprint = 78vmin square (unchanged), but the
+          actual UnicornScene canvas is rendered at 165% of that, absolutely
+          centered and overflowing on all sides. Reason: the scene's outward
+          rays render onto the canvas's pixel buffer; whatever the canvas
+          edge is, that's where rays get clipped. By giving the canvas more
+          pixel space than the visible frame, the rays have room to taper
+          off naturally and appear to flow OUTSIDE the box. The wrapper has
+          no overflow set (defaults to visible) so nothing clips them back. */}
       <motion.div
         initial={{ opacity: 0, scale: 0.92 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ delay: 0.15, duration: 0.85, ease: [0.16, 1, 0.3, 1] }}
-        className="relative w-[min(78vmin,640px)] aspect-square"
+        className="relative z-[5] w-[min(78vmin,640px)] aspect-square flex items-center justify-center"
       >
-        <UnicornSceneFinal
-          jsonFilePath={FINAL_SCREEN_UNICORN_JSON_PATH}
-          sdkUrl={FINAL_SCREEN_UNICORN_SDK_URL}
-          width="100%"
-          height="100%"
-          production
-          lazyLoad={false}
-          dpi={1.5}
-          fps={60}
+        <div
+          className="pointer-events-none absolute"
+          style={{
+            // 165% of the visible centerpiece — gives the scene's outward
+            // rays ~32% of canvas-radius beyond the perceived "box" before
+            // they hit the canvas edge.
+            width: "165%",
+            height: "165%",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            // The Unicorn scene JSON has a baked-in black background that
+            // would otherwise occlude the bgvideo behind it. "screen" blend
+            // mode treats black as transparent (max-of-channels math) so
+            // the bgvideo shows through, while the gold rays + logo stay
+            // visible (and read slightly more luminous against the stage).
+            mixBlendMode: "screen",
+            zIndex: 1,
+          }}
+        >
+          <UnicornSceneFinal
+            jsonFilePath={FINAL_SCREEN_UNICORN_JSON_PATH}
+            sdkUrl={FINAL_SCREEN_UNICORN_SDK_URL}
+            width="100%"
+            height="100%"
+            production
+            lazyLoad={false}
+            dpi={1.5}
+            fps={60}
+          />
+        </div>
+
+        {/* ━━ Metallic gold gradient border around the centerpiece ━━
+              Sits ABOVE the (oversized, mix-blended) canvas. The dual-
+              background + mask trick draws a real gold gradient on the
+              border ring while leaving the inside fully transparent so
+              the canvas + bgvideo behind still show through. The 165%
+              canvas extends past this frame on all sides, so rays still
+              bleed outside the bordered box (which reads as: a gold-
+              framed window with light escaping past the frame). */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 rounded-[20px]"
+          style={{
+            padding: "2px",
+            // Multi-stop gradient with a bright highlight pass at ~28%
+            // and another at ~68% — that double-highlight is what makes
+            // metals read as "polished" rather than just "yellow".
+            background:
+              "linear-gradient(135deg, #ad841a 0%, #fff1bf 14%, #f5d76e 32%, #c89e2b 50%, #fff1bf 68%, #f5d76e 82%, #8e6a14 100%)",
+            // Subtractive mask: paint everything in `padding-box`, then
+            // subtract the inner `content-box` rectangle so only the
+            // 2px border ring remains. xor / exclude keep the centre
+            // fully transparent (no fill at all).
+            WebkitMask:
+              "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)",
+            WebkitMaskComposite: "xor",
+            maskComposite: "exclude",
+            // Soft outer glow + a faint inner highlight to sell depth.
+            boxShadow:
+              "0 0 28px -6px rgba(245, 215, 110, 0.45), 0 0 60px -16px rgba(245, 215, 110, 0.25)",
+            zIndex: 2,
+          }}
         />
       </motion.div>
 
@@ -1609,7 +1697,7 @@ function FinalResult({
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.55, duration: 0.55, ease: [0.23, 1, 0.32, 1] }}
-        className="relative z-10 mt-6 md:mt-10 flex flex-col md:flex-row items-center justify-center gap-6 md:gap-14"
+        className="relative z-[6] mt-6 md:mt-10 flex flex-col md:flex-row items-center justify-center gap-6 md:gap-14"
       >
         <div className="flex flex-col items-center">
           <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-brass-dim mb-2">
@@ -1638,7 +1726,7 @@ function FinalResult({
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.85, duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
-        className="relative z-10 mt-8 md:mt-12 text-center px-4"
+        className="relative z-[6] mt-8 md:mt-12 text-center px-4"
       >
         <p
           className="font-display font-bold text-xl md:text-2xl lg:text-[1.7rem] leading-tight tracking-tight"
