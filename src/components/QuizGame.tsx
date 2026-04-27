@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } fr
 import { AnimatePresence, motion } from "framer-motion";
 import QuestionScreen from "./QuestionScreen";
 import EliminationReveal from "./EliminationReveal";
-import FinalStage3D from "./FinalStage3D";
+import dynamic from "next/dynamic";
 import MuteButton from "./MuteButton";
 import { useNarration } from "./NarrationProvider";
 import ProductTour, { TourStep } from "./ProductTour";
@@ -20,6 +20,21 @@ const SFX_QUESTION_TIMER = encodeURI("/sound/ITV's _ The 1 club - 30 Second Time
 const SFX_APPLAUSE = encodeURI("/sound/appluase2.wav");
 const ENDING_VO_ALL_CORRECT = encodeURI("/questionscreenimages/endingvoallcorrect.mp3");
 const ENDING_VO_IF_EVEN_ONE_WRONG = encodeURI("/questionscreenimages/endvoifevenonewrong.mp3");
+/** Plays full-screen after the user clicks "See end screen" on the last question.
+ *  When it finishes, the game transitions to the final-result summary. */
+const FINAL_VIDEO_SRC = encodeURI("/questionscreenimages/endingvo.mp4");
+/** Same Unicorn Studio scene previously rendered on the FinalStage3D middle LED.
+ *  We now render it as the centerpiece of the final summary screen. */
+const FINAL_SCREEN_UNICORN_JSON_PATH = "/animations/end_tvscreen_animate.json";
+const FINAL_SCREEN_UNICORN_SDK_URL =
+  "https://cdn.jsdelivr.net/gh/hiunicornstudio/unicornstudio.js@v2.1.9/dist/unicornStudio.umd.js";
+
+// Lazy-load the Unicorn Studio scene only on the final screen — keeps the SDK
+// bundle out of the main quiz flow and avoids running its WebGL setup until
+// the user actually reaches the final summary.
+const UnicornSceneFinal = dynamic(() => import("unicornstudio-react/next"), {
+  ssr: false,
+});
 /** ~2s VO: plays once when **13s** remain (3s before the last-10s tick SFX). */
 const TIMER_VO_SRC = encodeURI("/sound/timerVO.mp3");
 
@@ -221,7 +236,7 @@ export interface GameState {
   playerAnswerTexts: (string | null)[];
   playerCorrect: boolean[];
   eliminatedThisRound: number[];
-  phase: "question-intro" | "question" | "answered" | "elimination" | "final-result";
+  phase: "question-intro" | "question" | "answered" | "elimination" | "final-video" | "final-result";
 }
 
 /** Rewind to the start of the previous round: intro for Q_{n-1}, with economy + answers reverted. */
@@ -472,6 +487,10 @@ interface QuizGameProps {
   onQuestionTimerActiveChange?: (active: boolean) => void;
   /** True from answer submitted through elimination (until Next question); pauses BGM. */
   onEliminationSequenceActiveChange?: (active: boolean) => void;
+  /** Fires true when the final ending-video overlay or the final-result summary
+   *  screen is active. Lets the parent (`GameFlow`) hide the persistent top-left
+   *  3D logo so the centerpiece animation can stand alone, per client request. */
+  onFinalScreenActiveChange?: (active: boolean) => void;
   /** `next dev` only: `GameFlow` sets this to open directly on the perfect-score final result. */
   devChampionPreview?: boolean;
   /** Return to the instructions screen (used when the tour is dismissed or the first question is backed out of). */
@@ -506,6 +525,7 @@ export default function QuizGame({
   onReactionVideoActiveChange,
   onQuestionTimerActiveChange,
   onEliminationSequenceActiveChange,
+  onFinalScreenActiveChange,
   devChampionPreview = false,
   onBackToMenu = () => {},
   onRegisterBack,
@@ -525,6 +545,11 @@ export default function QuizGame({
   const [tourState, setTourState] = useState<
     "prompt" | "playing" | "ready-gate" | "done"
   >(() => (devChampionPreview ? "done" : "prompt"));
+  // True when the user clicked "Replay tour" from the ready-gate.
+  // Triggers a fast, no-narration recap pass through ProductTour.
+  // Reset back to false whenever the tour finishes/skips so a subsequent
+  // first-time entry (defensive — shouldn't happen) gets full narration.
+  const [tourReplayFast, setTourReplayFast] = useState(false);
 
   // Reaction video overlay state
   const [reactionVideo, setReactionVideo] = useState<"correct" | "wrong" | "winner" | null>(null);
@@ -541,10 +566,14 @@ export default function QuizGame({
   // was the root cause of "the next video doesn't play sometimes after reload".
   const introVideoRef = useRef<HTMLVideoElement | null>(null);
   const reactionVideoRef = useRef<HTMLVideoElement | null>(null);
+  /** Plays after the user clicks "See end screen" on the last question. */
+  const finalVideoRef = useRef<HTMLVideoElement | null>(null);
   const [introOutroActive, setIntroOutroActive] = useState(false);
   const [reactionOutroActive, setReactionOutroActive] = useState(false);
+  const [finalVideoOutroActive, setFinalVideoOutroActive] = useState(false);
   const introOutroArmedRef = useRef(false);
   const reactionOutroArmedRef = useRef(false);
+  const finalVideoOutroArmedRef = useRef(false);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -595,11 +624,13 @@ export default function QuizGame({
 
   const handleFinishTour = useCallback(() => {
     stop();
+    setTourReplayFast(false);
     setTourState("ready-gate");
   }, [stop]);
 
   const handleSkipTour = useCallback(() => {
     stop();
+    setTourReplayFast(false);
     // Skipping still goes through the ready-gate so the user explicitly starts Q1
     setTourState("ready-gate");
   }, [stop]);
@@ -807,11 +838,22 @@ export default function QuizGame({
     handleReactionVideoEnd();
   }, [handleReactionVideoEnd]);
 
+  /** Called when the post-game ending video finishes (or the user skips it).
+   *  Wipes from the video to the final-result summary screen. */
+  const handleFinalVideoEnd = useCallback(() => {
+    runWipeThen(() => {
+      setGameState(prev => ({ ...prev, phase: "final-result" }));
+    });
+  }, [runWipeThen]);
+
   const handleContinue = useCallback(() => {
     const nextQ = gameState.currentQuestion + 1;
     if (nextQ >= QUESTIONS.length) {
+      // Last question complete: wipe into the full-screen ending video. When
+      // the video finishes (handleFinalVideoEnd below) we transition to the
+      // `final-result` summary screen.
       runWipeThen(() => {
-        setGameState(prev => ({ ...prev, phase: "final-result" }));
+        setGameState(prev => ({ ...prev, phase: "final-video" }));
       });
       const correct = gameState.playerCorrect.filter(Boolean).length;
       onGameEnd?.({ correct, total: QUESTIONS.length, potPrize: gameState.potPrize });
@@ -859,12 +901,19 @@ export default function QuizGame({
     setReactionOutroActive(false);
     reactionOutroArmedRef.current = false;
   }, [reactionVideoSrc]);
+  useEffect(() => {
+    if (gameState.phase !== "final-video") {
+      setFinalVideoOutroActive(false);
+      finalVideoOutroArmedRef.current = false;
+    }
+  }, [gameState.phase]);
 
   // Hide the floating mute button whenever a full-screen video overlay is on,
   // otherwise it stacks on top of the video's own "Skip ▸" button bottom-right.
   const videoOverlayActive =
     !!reactionVideoSrc ||
-    (gameState.phase === "question-intro" && tourState === "done");
+    (gameState.phase === "question-intro" && tourState === "done") ||
+    gameState.phase === "final-video";
 
   // Robust autoplay for the two full-screen overlays. Without this, after a
   // hard reload the second video in the chain occasionally never starts —
@@ -877,11 +926,21 @@ export default function QuizGame({
     gameState.phase === "question-intro" && tourState === "done",
   );
   useVideoAutoplay(reactionVideoRef, !!reactionVideoSrc);
+  useVideoAutoplay(finalVideoRef, gameState.phase === "final-video");
 
   // Mirror this to the parent so it can hide the 3D logo while a video plays.
   useEffect(() => {
     onVideoOverlayChange?.(videoOverlayActive);
   }, [videoOverlayActive, onVideoOverlayChange]);
+
+  // Tell the parent when the ending video / final summary screen is active so
+  // it can hide the persistent top-left 3D logo (the centerpiece animation
+  // owns the brand mark on this page).
+  const finalScreenActive =
+    gameState.phase === "final-video" || gameState.phase === "final-result";
+  useEffect(() => {
+    onFinalScreenActiveChange?.(finalScreenActive);
+  }, [finalScreenActive, onFinalScreenActiveChange]);
 
   // Reaction-video-only flag: BGM is paused for reactions, but kept playing
   // (at normal volume) underneath the AK question-intro video.
@@ -966,7 +1025,8 @@ export default function QuizGame({
       onBackToMenu();
       return;
     }
-    if (gameState.phase === "final-result") {
+    if (gameState.phase === "final-result" || gameState.phase === "final-video") {
+      // Rewind out of the ending video / summary back to the Q8 elimination overlay.
       setGameState((prev) => ({ ...prev, phase: "elimination" }));
       return;
     }
@@ -1123,6 +1183,50 @@ export default function QuizGame({
         )}
       </AnimatePresence>
 
+      {/* ━━ Ending Video Overlay (plays once after the user clicks "See end screen") ━━ */}
+      <AnimatePresence>
+        {gameState.phase === "final-video" && (
+          <motion.div
+            key="final-video"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.45, ease: [0.23, 1, 0.32, 1] }}
+            className="fixed inset-0 z-[95] bg-black flex items-center justify-center"
+          >
+            <video
+              ref={finalVideoRef}
+              key={FINAL_VIDEO_SRC}
+              className="w-full h-full object-cover"
+              autoPlay
+              playsInline
+              preload="auto"
+              muted={muted}
+              onTimeUpdate={(e) => {
+                if (finalVideoOutroArmedRef.current) return;
+                const el = e.currentTarget;
+                if (!Number.isFinite(el.duration) || el.duration <= 0) return;
+                if (el.duration - el.currentTime <= 1.05) {
+                  finalVideoOutroArmedRef.current = true;
+                  setFinalVideoOutroActive(true);
+                }
+              }}
+              onEnded={handleFinalVideoEnd}
+              onError={handleFinalVideoEnd}
+              src={FINAL_VIDEO_SRC}
+            />
+            <VideoOutroWipe active={finalVideoOutroActive} />
+            {/* Skip → jump straight to the final-result summary screen */}
+            <button
+              onClick={handleFinalVideoEnd}
+              className="absolute bottom-6 right-6 md:bottom-8 md:right-8 z-10 rounded-full bg-black/65 backdrop-blur-md border border-white/15 px-4 py-2 text-[10px] font-mono uppercase tracking-[0.25em] text-foreground/85 hover:text-foreground hover:border-brass/35 hover:bg-black/80 transition-colors"
+            >
+              Skip ▸
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ━━ Guided Tour Prompt (shows before tour starts) ━━ */}
       <AnimatePresence>
         {tourState === "prompt" && (
@@ -1179,6 +1283,7 @@ export default function QuizGame({
           steps={TOUR_STEPS}
           onFinish={handleFinishTour}
           onSkip={handleSkipTour}
+          fast={tourReplayFast}
         />
       )}
 
@@ -1234,6 +1339,7 @@ export default function QuizGame({
                   <button
                     onClick={() => {
                       stop();
+                      setTourReplayFast(true);
                       setTourState("playing");
                     }}
                     className="w-full cursor-pointer rounded-xl border border-brass/25 bg-black/40 py-3 text-center text-[11px] font-mono uppercase tracking-[0.28em] text-brass-dim hover:border-brass/50 hover:text-brass-bright hover:bg-black/60 transition-colors"
@@ -1363,13 +1469,16 @@ function WinnerMetallicConfetti() {
 }
 
 // ── Final Result Component ──
+//
+// The 3D stage scene (FinalStage3D) was removed per client request. The new
+// final summary is a flat, centered layout: the Unicorn Studio scene that
+// used to live on the middle LED is now the brand mark on this page (which
+// is why GameFlow hides the persistent top-left 3D logo while we're here),
+// followed by the run stats and the "Coming Soon" tagline in bold gold.
 function FinalResult({
-  playerName,
   correctCount,
   totalQuestions,
   potPrize,
-  remainingPlayers,
-  reachedPercentage,
   muted,
 }: {
   playerName: string;
@@ -1381,7 +1490,6 @@ function FinalResult({
   muted: boolean;
 }) {
   const isWinner = correctCount === totalQuestions;
-  const shareOfPot = isWinner ? Math.round(potPrize / Math.max(remainingPlayers, 1)) : 0;
   const endingVoPlayedRef = useRef<"all-correct" | "one-wrong" | null>(null);
 
   useEffect(() => {
@@ -1423,23 +1531,89 @@ function FinalResult({
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ duration: 0.6 }}
-      className="fixed inset-0 w-screen h-[100dvh] overflow-hidden"
+      transition={{ duration: 0.7, ease: [0.23, 1, 0.32, 1] }}
+      // z-[100] sits above the persistent top-left 3D logo (z-[85]) as a belt-
+      // and-braces guarantee — GameFlow also hides the logo via the
+      // onFinalScreenActiveChange callback, but stacking-context belt is cheap.
+      className="fixed inset-0 z-[100] w-screen h-[100dvh] overflow-hidden bg-[#03020c] flex flex-col items-center justify-center px-6"
     >
-      {/* The end screen IS the 3D stage. Everything (journey info, brand
-          line, "1% Club" sign) is rendered onto the in-scene LED screens.
-          The redundant Champion card has been removed. */}
-      <FinalStage3D
-        journeyInfo={{
-          correctCount,
-          totalQuestions,
-          reachedPercentage,
-          potPrize,
-          shareOfPot: isWinner ? shareOfPot : undefined,
-          isWinner,
-        }}
-        playerName={playerName}
-      />
+      {/* Soft brass radial glow behind the centerpiece */}
+      <div className="pointer-events-none absolute inset-0" aria-hidden>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(95vw,900px)] h-[min(95vw,900px)] rounded-full bg-brass/[0.08] blur-[120px]" />
+      </div>
+
+      {/* Centerpiece: Unicorn Studio scene (the JSON animation that previously
+          played on the FinalStage3D middle LED — now the hero of this page) */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.92 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ delay: 0.15, duration: 0.85, ease: [0.16, 1, 0.3, 1] }}
+        className="relative w-[min(78vmin,640px)] aspect-square"
+      >
+        <UnicornSceneFinal
+          jsonFilePath={FINAL_SCREEN_UNICORN_JSON_PATH}
+          sdkUrl={FINAL_SCREEN_UNICORN_SDK_URL}
+          width="100%"
+          height="100%"
+          production
+          lazyLoad={false}
+          dpi={1.5}
+          fps={60}
+        />
+      </motion.div>
+
+      {/* Stats row: questions correct + pot */}
+      <motion.div
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.55, duration: 0.55, ease: [0.23, 1, 0.32, 1] }}
+        className="relative z-10 mt-6 md:mt-10 flex flex-col md:flex-row items-center justify-center gap-6 md:gap-14"
+      >
+        <div className="flex flex-col items-center">
+          <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-brass-dim mb-2">
+            Questions correct
+          </p>
+          <p className="font-display text-4xl md:text-5xl font-semibold tabular-nums text-foreground">
+            {correctCount}
+            <span className="text-foreground/45">/{totalQuestions}</span>
+          </p>
+        </div>
+
+        <div className="hidden md:block w-px h-10 bg-gradient-to-b from-transparent via-brass/40 to-transparent" />
+
+        <div className="flex flex-col items-center">
+          <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-brass-dim mb-2">
+            In the pot
+          </p>
+          <p className="font-display text-4xl md:text-5xl font-semibold tabular-nums text-foreground">
+            {formatRupees(potPrize)}
+          </p>
+        </div>
+      </motion.div>
+
+      {/* Gold tagline (bold, gradient gold per client direction) */}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.85, duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
+        className="relative z-10 mt-8 md:mt-12 text-center px-4"
+      >
+        <p
+          className="font-display font-bold text-xl md:text-2xl lg:text-[1.7rem] leading-tight tracking-tight"
+          style={{
+            backgroundImage:
+              "linear-gradient(180deg, #fff1bf 0%, #f5d76e 38%, #c89e2b 70%, #ad841a 100%)",
+            WebkitBackgroundClip: "text",
+            backgroundClip: "text",
+            color: "transparent",
+            textShadow: "0 0 28px rgba(245,215,110,0.18)",
+          }}
+        >
+          Make your brand a part of the 1% Club.
+          <br />
+          <span className="opacity-95">Coming Soon | August 2026</span>
+        </p>
+      </motion.div>
     </motion.div>
   );
 }

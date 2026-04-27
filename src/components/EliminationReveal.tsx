@@ -4,7 +4,10 @@ import { useState, useEffect, useMemo, useRef, type CSSProperties } from "react"
 import { motion, AnimatePresence } from "framer-motion";
 import { formatRupees } from "./QuizGame";
 import { useNarration } from "./NarrationProvider";
-import PotFill3D from "./PotFill3D";
+// Pot animation temporarily disabled per client request — replaced inside the
+// elimination reveal with a flat text card. Keep the import commented out so
+// the component is one uncomment away when the client wants it back.
+// import PotFill3D from "./PotFill3D";
 import CoinTrailToNavbar from "./CoinTrailToNavbar";
 import { ZText3DDanger } from "./MetallicText3D";
 
@@ -481,10 +484,13 @@ export default function EliminationReveal({
       className="relative rounded-2xl overflow-hidden border-2 border-brass/40 bg-black/55 shadow-[0_0_56px_-10px_rgba(228,207,106,0.5)] w-full min-h-[380px] md:min-h-[420px] flex"
     >
       <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[radial-gradient(ellipse_80%_100%_at_50%_0%,rgba(255,220,140,0.32),transparent_70%)] z-[1]" />
-      {/* Canvas fills the entire panel; HUD strip removed (per spec) so the
-          3D pot reads unobstructed. Pot total stays visible in the always-on
-          navbar HUD ("POT ₹X") at the top of the page, so we don't lose the
-          information — just the duplicate inside this card. */}
+
+      {/* ─────────────────────────────────────────────────────────────
+          3D PotFill3D animation — DISABLED per client request.
+          Kept commented so we can re-enable in one step when needed.
+          The `previousCoinTotal` / `newCoinsThisRound` derivations
+          above are still computed; left in place so a re-enable is
+          drop-in (no re-plumbing of props).
       <div className="absolute inset-0">
         <PotFill3D
           previousCoinTotal={previousCoinTotal}
@@ -495,6 +501,61 @@ export default function EliminationReveal({
           style={{ width: "100%", height: "100%" }}
         />
       </div>
+          ───────────────────────────────────────────────────────────── */}
+
+      {/* Replacement text card. Reads the round's contribution in the centre
+          and the running pot total as a small chip in the bottom-right corner
+          of the same brass-bordered "pot" panel. */}
+      <div className="relative z-[2] flex flex-1 flex-col items-center justify-center px-6 py-8 text-center">
+        <motion.p
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3, duration: 0.45, ease: EASE_OUT }}
+          className="font-mono text-[10px] uppercase tracking-[0.4em] text-brass-dim mb-4"
+        >
+          Added this round
+        </motion.p>
+        <motion.p
+          initial={{ opacity: 0, scale: 0.96, y: 8 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ delay: 0.45, duration: 0.55, ease: EASE_OUT }}
+          className="font-display font-bold leading-none tabular-nums"
+          style={{
+            fontSize: "clamp(2.4rem, 6.5vw, 4.4rem)",
+            backgroundImage:
+              "linear-gradient(180deg, #fff1bf 0%, #f5d76e 38%, #c89e2b 70%, #ad841a 100%)",
+            WebkitBackgroundClip: "text",
+            backgroundClip: "text",
+            color: "transparent",
+            textShadow: "0 0 28px rgba(245,215,110,0.18)",
+          }}
+        >
+          + {formatRupees(addedThisRound)}
+        </motion.p>
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.7, duration: 0.45 }}
+          className="mt-3 font-mono text-[10px] uppercase tracking-[0.32em] text-foreground/55"
+        >
+          {eliminated} eliminated × {formatRupees(STAKE_PER_PLAYER)}
+        </motion.p>
+      </div>
+
+      {/* Small chip — running pot total, bottom-right corner of the panel. */}
+      <motion.div
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.55, duration: 0.45, ease: EASE_OUT }}
+        className="absolute bottom-3 right-3 z-[3] rounded-full border border-brass/30 bg-black/55 px-3 py-1.5 backdrop-blur-sm"
+      >
+        <p className="font-mono text-[9px] uppercase tracking-[0.32em] text-brass-dim">
+          Pot total{" "}
+          <span className="text-brass-bright tabular-nums font-semibold">
+            {formatRupees(potPrize)}
+          </span>
+        </p>
+      </motion.div>
     </motion.div>
   );
 
@@ -610,7 +671,7 @@ export default function EliminationReveal({
         whileTap={{ scale: 0.97 }}
         className="game-show-btn relative z-0 w-full cursor-pointer rounded-xl py-3.5 text-center text-[13px] font-semibold uppercase tracking-[0.22em]"
       >
-        <span className="relative z-10">{isLastQuestion ? "See final results" : "Next question"}</span>
+        <span className="relative z-10">{isLastQuestion ? "See end screen" : "Next question"}</span>
       </motion.button>
     </motion.div>
   );
@@ -802,7 +863,7 @@ export default function EliminationReveal({
                 whileTap={{ scale: 0.98 }}
                 className="game-show-btn relative z-0 w-full cursor-pointer rounded-xl bg-brass py-3.5 text-center text-[13px] font-semibold uppercase tracking-[0.18em] text-[#14110a] transition-colors hover:bg-brass-bright"
               >
-                <span className="relative z-10">{isLastQuestion ? "See final results" : "Next question"}</span>
+                <span className="relative z-10">{isLastQuestion ? "See end screen" : "Next question"}</span>
               </motion.button>
             </motion.div>
           </div>

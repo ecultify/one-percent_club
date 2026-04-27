@@ -150,6 +150,10 @@ export default function GameFlow() {
   // fade — which was happening because the logo sits at z-[85] and the video
   // containers fade opacity 0↔1 at z-[95].
   const [videoOverlayActive, setVideoOverlayActive] = useState(false);
+  /** True when QuizGame is on the ending video or final-result summary screen.
+   *  We use this to hide the persistent top-left 3D logo on the final screen
+   *  so the centerpiece JSON animation is the sole brand mark. */
+  const [finalScreenActive, setFinalScreenActive] = useState(false);
   /** True ONLY during reaction videos (correct/wrong/winner) — not during
    *  question-intro videos. Drives BGM suppression so AK question delivery
    *  keeps the theme bed underneath, but reaction stings get a clean stage. */
@@ -507,13 +511,16 @@ export default function GameFlow() {
   const showOverlay =
     phase === "details" || phase === "coming-soon" || phase === "instructions" || phase === "playing";
   const showLogo =
-    phase === "ripple" ||
-    phase === "logo-enter" ||
-    phase === "logo-center" ||
-    phase === "logo-fly-corner" ||
-    showWelcomeVideo ||
-    showPostVideoGate ||
-    showOverlay;
+    (phase === "ripple" ||
+      phase === "logo-enter" ||
+      phase === "logo-center" ||
+      phase === "logo-fly-corner" ||
+      showWelcomeVideo ||
+      showPostVideoGate ||
+      showOverlay) &&
+    // On the final ending video and final-result summary, the centerpiece
+    // JSON animation owns the brand mark — hide the persistent top-left logo.
+    !finalScreenActive;
 
   // All GPU-accelerated: x, y, scale, opacity only
   const getLogoAnimateProps = () => {
@@ -914,6 +921,7 @@ export default function GameFlow() {
                   onReactionVideoActiveChange={setReactionVideoActive}
                   onQuestionTimerActiveChange={setQuestionTimerActive}
                   onEliminationSequenceActiveChange={setEliminationSequenceActive}
+                  onFinalScreenActiveChange={setFinalScreenActive}
                 />
               </motion.div>
             )}

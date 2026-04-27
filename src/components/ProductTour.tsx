@@ -50,6 +50,12 @@ interface ProductTourProps {
   steps: TourStep[];
   onFinish: () => void;
   onSkip: () => void;
+  /**
+   * When true, the tour skips per-step narration and uses a short fixed
+   * pause between steps. Used for the "Replay tour" path where the user
+   * has already heard the voice once and just wants a quick visual recap.
+   */
+  fast?: boolean;
 }
 
 interface Rect {
@@ -130,7 +136,7 @@ function computeTooltipPosition(
   };
 }
 
-export default function ProductTour({ steps, onFinish, onSkip }: ProductTourProps) {
+export default function ProductTour({ steps, onFinish, onSkip, fast = false }: ProductTourProps) {
   const [stepIndex, setStepIndex] = useState(0);
   const [rect, setRect] = useState<Rect | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{
@@ -212,12 +218,35 @@ export default function ProductTour({ steps, onFinish, onSkip }: ProductTourProp
     };
   }, [currentStep, padding]);
 
-  // Fire narration per step + auto-advance when voice finishes (or after read-time if muted / no TTS)
+  // Fire narration per step + auto-advance when voice finishes (or after read-time if muted / no TTS).
+  // In `fast` mode (replay path) we skip narration entirely and just pause long enough
+  // for the user to glance at the spotlight + tooltip, then move on.
   useEffect(() => {
     if (!currentStep) return;
 
     let cancelled = false;
     let advanceTimer: number | null = null;
+
+    if (fast) {
+      // Replay path: no voice, fixed short pause per step.
+      setVoiceActive(false);
+      const FAST_PAUSE_MS = 1500;
+      advanceTimer = window.setTimeout(() => {
+        advanceTimer = null;
+        if (cancelled) return;
+        setStepIndex((i) => {
+          if (i < steps.length - 1) return i + 1;
+          onFinish();
+          return i;
+        });
+      }, FAST_PAUSE_MS);
+
+      return () => {
+        cancelled = true;
+        if (advanceTimer !== null) window.clearTimeout(advanceTimer);
+      };
+    }
+
     setVoiceActive(true);
 
     const narrateStarted = performance.now();
@@ -241,7 +270,7 @@ export default function ProductTour({ steps, onFinish, onSkip }: ProductTourProp
       cancelled = true;
       if (advanceTimer !== null) window.clearTimeout(advanceTimer);
     };
-  }, [stepIndex, currentStep, narrate, onFinish, steps.length]);
+  }, [stepIndex, currentStep, narrate, onFinish, steps.length, fast]);
 
   const handleNext = useCallback(() => {
     stop();
