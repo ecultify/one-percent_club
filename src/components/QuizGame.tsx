@@ -39,8 +39,11 @@ const SFX_WRONG = encodeURI("/sound/131657__bertrof__game-sound-wrong.wav");
 /** Bed for the live countdown (clip is ~30s; looped so it covers the full 30s limit). */
 const SFX_QUESTION_TIMER = encodeURI("/sound/ITV's _ The 1 club - 30 Second Timer.mp3");
 const SFX_APPLAUSE = encodeURI("/sound/appluase2.wav");
-const ENDING_VO_ALL_CORRECT = encodeURI("/questionscreenimages/endingvoallcorrect.mp3");
-const ENDING_VO_IF_EVEN_ONE_WRONG = encodeURI("/questionscreenimages/endvoifevenonewrong.mp3");
+// NOTE: the ENDING_VO_*.mp3 files used to play on the FinalResult screen
+// as standalone audio. Once the .mp4 ending videos were added (which carry
+// the same VO baked into video), the MP3 playback became a duplicate that
+// fired AFTER the video finished. Removed entirely below; MP3 files left
+// on disk in case audio-only fallback is needed later.
 /** Plays full-screen after the user clicks "See end screen" on the last
  *  question. Two variants depending on whether the player got every
  *  answer right:
@@ -1805,7 +1808,6 @@ function FinalResult({
   muted: boolean;
 }) {
   const isWinner = correctCount === totalQuestions;
-  const endingVoPlayedRef = useRef<"all-correct" | "one-wrong" | null>(null);
 
   useEffect(() => {
     if (!isWinner || muted) return;
@@ -1823,24 +1825,11 @@ function FinalResult({
     };
   }, [isWinner, muted]);
 
-  useEffect(() => {
-    if (muted) return;
-    const variant: "all-correct" | "one-wrong" = isWinner ? "all-correct" : "one-wrong";
-    if (endingVoPlayedRef.current === variant) return;
-    endingVoPlayedRef.current = variant;
-    const a = new Audio(isWinner ? ENDING_VO_ALL_CORRECT : ENDING_VO_IF_EVEN_ONE_WRONG);
-    a.volume = 0.85;
-    void a.play().catch(() => {});
-    return () => {
-      a.pause();
-      try {
-        a.currentTime = 0;
-        a.src = "";
-      } catch {
-        /* ignore */
-      }
-    };
-  }, [muted, isWinner]);
+  // Removed: the ENDING_VO MP3 playback that previously fired here.
+  // The .mp4 ending video that plays JUST BEFORE this screen mounts already
+  // carries the same VO baked into video, so playing the MP3 here on top
+  // duplicated the narration. Sound on this screen is now: applause (above,
+  // winners only) + the BGM that resumes from GameFlow + the bgvideo loop.
 
   return (
     <motion.div
