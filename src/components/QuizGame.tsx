@@ -1,5 +1,25 @@
 "use client";
 
+/* ════════════════════════════════════════════════════════════════════════════
+ *  DEV-ONLY ?devq= QUICK-JUMP — REMOVAL GUIDE
+ *  ─────────────────────────────────────────────────────────────────────────
+ *  When the client gives the go-ahead to ship, delete every block in this
+ *  repo bracketed by these markers (grep for them):
+ *
+ *      // ─── DEV-ONLY: ?devq= quick-jump (REMOVE BEFORE PROD) ───
+ *      ...code to delete...
+ *      // ─── END DEV-ONLY ───
+ *
+ *  Files touched:
+ *      src/app/page.tsx
+ *      src/components/GameFlow.tsx
+ *      src/components/QuizGame.tsx
+ *
+ *  After deletion, run:  npx tsc --noEmit   to confirm no orphaned refs.
+ *  No production code paths depend on `devStartFromQuestion` — it is an
+ *  optional prop with a no-op default.
+ * ════════════════════════════════════════════════════════════════════════ */
+
 import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import QuestionScreen from "./QuestionScreen";
@@ -408,6 +428,44 @@ function createDevChampionInitialState(): GameState {
   };
 }
 
+// ─── DEV-ONLY: ?devq= quick-jump (REMOVE BEFORE PROD) ───
+/**
+ * Dev-only: seeds GameState so QuizGame mounts directly at the intro video
+ * for question `qIdx0` (zero-based). Previous questions are marked correct
+ * with sensible mock pot/elimination accumulation so the journey ticker,
+ * remaining-players counter, and pot total display believable values.
+ */
+function createDevQuestionStartState(qIdx0: number): GameState {
+  const safeIdx = Math.max(0, Math.min(qIdx0, QUESTIONS.length - 1));
+  const stakePerPlayer = 100000;
+  const totalPlayers = 100;
+  let remaining = totalPlayers;
+  let pot = 0;
+  const eliminatedHistory: number[] = [];
+  for (let i = 0; i < safeIdx; i++) {
+    const q = QUESTIONS[i];
+    if (!q) continue;
+    const failRate = (100 - q.percentage) / 100;
+    const eliminated = Math.min(remaining - 1, Math.max(0, Math.round(remaining * failRate)));
+    eliminatedHistory.push(eliminated);
+    remaining -= eliminated;
+    pot += eliminated * stakePerPlayer;
+  }
+  return {
+    currentQuestion: safeIdx,
+    totalPlayers,
+    remainingPlayers: remaining,
+    potPrize: pot,
+    stakePerPlayer,
+    playerAnswers: Array.from({ length: safeIdx }, () => 0),
+    playerAnswerTexts: Array.from({ length: safeIdx }, () => null),
+    playerCorrect: Array.from({ length: safeIdx }, () => true),
+    eliminatedThisRound: eliminatedHistory,
+    phase: "question-intro",
+  };
+}
+// ─── END DEV-ONLY ───
+
 /**
  * Proper 1% Club elimination logic:
  * The percentage represents how many people CAN answer correctly.
@@ -499,6 +557,13 @@ interface QuizGameProps {
   onFinalScreenActiveChange?: (active: boolean) => void;
   /** `next dev` only: `GameFlow` sets this to open directly on the perfect-score final result. */
   devChampionPreview?: boolean;
+  // ─── DEV-ONLY: ?devq= quick-jump (REMOVE BEFORE PROD) ───
+  /** Dev-only jump: when set to a 1-based question number, QuizGame mounts
+   *  with gameState seeded at that question intro video, tour skipped,
+   *  prior-question state filled with sensible mock values so the journey
+   *  ticker / pot / remaining-players counts look believable. */
+  devStartFromQuestion?: number;
+  // ─── END DEV-ONLY ───
   /** Return to the instructions screen (used when the tour is dismissed or the first question is backed out of). */
   onBackToMenu?: () => void;
   /** Lets `GameFlow` wire the fixed Back control while `playing` is active. */
@@ -533,12 +598,20 @@ export default function QuizGame({
   onEliminationSequenceActiveChange,
   onFinalScreenActiveChange,
   devChampionPreview = false,
+  // ─── DEV-ONLY: ?devq= quick-jump (REMOVE BEFORE PROD) ───
+  devStartFromQuestion,
+  // ─── END DEV-ONLY ───
   onBackToMenu = () => {},
   onRegisterBack,
 }: QuizGameProps) {
-  const [gameState, setGameState] = useState<GameState>(() =>
-    devChampionPreview ? createDevChampionInitialState() : getDefaultQuizGameState()
-  );
+  const [gameState, setGameState] = useState<GameState>(() => {
+    // ─── DEV-ONLY: ?devq= quick-jump (REMOVE BEFORE PROD) ───
+    if (typeof devStartFromQuestion === "number" && devStartFromQuestion >= 1) {
+      return createDevQuestionStartState(devStartFromQuestion - 1);
+    }
+    // ─── END DEV-ONLY ───
+    return devChampionPreview ? createDevChampionInitialState() : getDefaultQuizGameState();
+  });
 
   // Right-to-left wipe state — flipped briefly between phase changes
   const [wipeActive, setWipeActive] = useState(false);
@@ -550,7 +623,14 @@ export default function QuizGame({
   //   "done"       = gameplay running
   const [tourState, setTourState] = useState<
     "prompt" | "playing" | "ready-gate" | "done"
-  >(() => (devChampionPreview ? "done" : "prompt"));
+  >(() => {
+    // ─── DEV-ONLY: ?devq= quick-jump (REMOVE BEFORE PROD) ───
+    if (typeof devStartFromQuestion === "number" && devStartFromQuestion >= 1) {
+      return "done";
+    }
+    // ─── END DEV-ONLY ───
+    return devChampionPreview ? "done" : "prompt";
+  });
   // True when the user clicked "Replay tour" from the ready-gate.
   // Triggers a fast, no-narration recap pass through ProductTour.
   // Reset back to false whenever the tour finishes/skips so a subsequent

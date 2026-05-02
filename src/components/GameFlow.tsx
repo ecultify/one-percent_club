@@ -2,6 +2,9 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
+// ─── DEV-ONLY: ?devq= quick-jump (REMOVE BEFORE PROD) ───
+import { useSearchParams } from "next/navigation";
+// ─── END DEV-ONLY ───
 import { motion, AnimatePresence } from "framer-motion";
 import UserDetailsModal, { type QuizSet } from "./UserDetailsModal";
 import MuteButton from "./MuteButton";
@@ -10,6 +13,7 @@ import Instructions from "./Instructions";
 import QuizGame from "./QuizGame";
 import ReadyToPlayGate from "./ReadyToPlayGate";
 import GameShowAudio from "./GameShowAudio";
+import EnterButtonHint from "./EnterButtonHint";
 import FlowBackButton from "./FlowBackButton";
 import { useNarration } from "./NarrationProvider";
 import { warmClubLogoGlbAsset } from "@/lib/warmClubLogoAsset";
@@ -177,6 +181,21 @@ export default function GameFlow() {
 
   const positions = useLogoPositions();
   const { unlock: unlockAudio, prefetchAudioUrl, audioUnlocked } = useNarration();
+
+  // ─── DEV-ONLY: ?devq= quick-jump (REMOVE BEFORE PROD) ───
+  // Parse `?devq=N` from the URL (1-based question number, e.g. ?devq=3 jumps
+  // straight to Q3 intro video). Returns undefined when the param is absent
+  // or invalid so the normal flow runs unchanged.
+  const searchParams = useSearchParams();
+  const devStartQ: number | undefined = (() => {
+    const raw = searchParams?.get("devq");
+    if (!raw) return undefined;
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n) || n < 1) return undefined;
+    return n;
+  })();
+  const devJumpDoneRef = useRef(false);
+  // ─── END DEV-ONLY ───
 
   const handleThemeUnlockReady = useCallback((unlockTheme: () => void) => {
     themeUnlockRef.current = unlockTheme;
@@ -467,6 +486,24 @@ export default function GameFlow() {
     return () => window.removeEventListener("keydown", onKey, true);
   }, [phase, showButton, unlockAudio]);
 
+  // ─── DEV-ONLY: ?devq= quick-jump (REMOVE BEFORE PROD) ───
+  // When `?devq=N` is in the URL, skip the home intro video / Enter CTA /
+  // details modal / instructions entirely. Wait for the user one-click
+  // audio unlock (AudioPrimingGate is unavoidable for browser autoplay
+  // policy), then jump straight to phase="playing" with QuizGame seeded
+  // at the requested question. Mock player so UserDetailsModal does not
+  // need to be filled out.
+  useEffect(() => {
+    if (devStartQ === undefined) return;
+    if (!audioUnlocked) return;
+    if (devJumpDoneRef.current) return;
+    if (phase !== "idle") return;
+    devJumpDoneRef.current = true;
+    setPlayer({ name: "Dev Tester", quizSet: "A" });
+    setPhase("playing");
+  }, [devStartQ, audioUnlocked, phase]);
+  // ─── END DEV-ONLY ───
+
   const handleLogoReady = useCallback(() => {
     setLogoModelReady(true);
   }, []);
@@ -590,6 +627,17 @@ export default function GameFlow() {
 
   return (
     <>
+      {/* ─── DEV-ONLY: ?devq= quick-jump badge (REMOVE BEFORE PROD) ─── */}
+      {devStartQ !== undefined && (
+        <div
+          aria-hidden
+          className="pointer-events-none fixed left-3 top-3 z-[300] rounded-md border border-amber-400/40 bg-black/70 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.2em] text-amber-300 shadow-[0_2px_10px_rgba(0,0,0,0.6)]"
+        >
+          DEV · jumping to Q{devStartQ}
+        </div>
+      )}
+      {/* ─── END DEV-ONLY ─── */}
+
       {/* ━━ Play Button ━━ */}
       <AnimatePresence>
         {phase === "idle" && showButton && (
@@ -639,6 +687,17 @@ export default function GameFlow() {
           </motion.button>
         )}
       </AnimatePresence>
+
+      {/* ━━ Enter button cursor hint ━━
+          5s after the Enter CTA appears, a golden metallic mouse-cursor
+          flies in from the bottom-left and points at the lower-left arc
+          of the button, performing a brief click pulse. Repeats every
+          5s until the user actually clicks Enter (at which point
+          `phase` flips off "idle" and the hint stops). */}
+      <EnterButtonHint
+        visible={phase === "idle" && showButton}
+        buttonRef={buttonRef}
+      />
 
       {/* ━━ Ripple ━━ */}
       <AnimatePresence>
@@ -926,6 +985,9 @@ export default function GameFlow() {
                   key={quizSessionKey}
                   playerName={player?.name || "Player"}
                   devChampionPreview={devChampionPreview}
+                  /* ─── DEV-ONLY: ?devq= quick-jump (REMOVE BEFORE PROD) ─── */
+                  devStartFromQuestion={devStartQ}
+                  /* ─── END DEV-ONLY ─── */
                   onBackToMenu={exitQuizToInstructions}
                   onRegisterBack={registerQuizBackHandler}
                   onVideoOverlayChange={setVideoOverlayActive}
