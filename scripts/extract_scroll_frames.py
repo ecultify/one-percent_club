@@ -2,7 +2,7 @@
 """
 Extract evenly spaced JPEGs from `public/new videos/scrollvideo.mp4` into `public/sharp-frames/`.
 
-Crops pixels from the bottom (Grok / UI row) — same idea as trimming the watermark band on the prior video.
+Crops pixels from the bottom (Grok / UI row) — same idea as trimming the watermark band on the prior video. heelooo
 """
 
 from __future__ import annotations
