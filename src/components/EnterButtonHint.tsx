@@ -66,22 +66,21 @@ export default function EnterButtonHint({ visible, buttonRef }: Props) {
       const btn = buttonRef.current;
       if (btn) {
         const rect = btn.getBoundingClientRect();
-        // Land the cursor TIP on the button's lower-left arc (~225° on
-        // the unit circle, where 0° points right). For a circle centred
-        // at (cx, cy) with radius r, that point is:
-        //   (cx + r*cos(225°), cy + r*sin(225°))
-        //   = (cx - r*0.707, cy + r*0.707)
+        // Land the cursor TIP directly on the "ENTER" text in the center
+        // of the button. The CursorSVG path starts at (3, 2) inside its
+        // 24x24 viewBox; the SVG itself is rendered at 44x44 px, so the
+        // visible tip sits at roughly (5.5, 3.7) px from the SVG's
+        // top-left corner. To put that tip at the button's center we
+        // position the wrapper top-left at (centerX - 5.5, centerY - 3.7).
+        // Result: cursor tip lands ON the text, with the cursor body
+        // angling down-right out of the way so the word stays readable.
         const cx = rect.left + rect.width / 2;
         const cy = rect.top + rect.height / 2;
-        const r = rect.width / 2;
-        const ang = (Math.PI * 5) / 4; // 225°
-        // Offset slightly outward so the cursor's pointer tip (which is
-        // at the SVG's top-left corner) sits on the arc rather than past
-        // it. The CursorSVG below is 42px wide; half that = 21px.
-        const tipOffset = 4; // a few px past the arc, then tip touches it
+        const TIP_OFFSET_X = 5.5;
+        const TIP_OFFSET_Y = 3.7;
         setTarget({
-          x: cx + (r + tipOffset) * Math.cos(ang),
-          y: cy + (r + tipOffset) * Math.sin(ang),
+          x: cx - TIP_OFFSET_X,
+          y: cy - TIP_OFFSET_Y,
         });
       }
       startYRef.current = typeof window !== "undefined" ? window.innerHeight + 80 : 1000;

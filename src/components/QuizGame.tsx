@@ -23,6 +23,7 @@
 import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import QuestionScreen from "./QuestionScreen";
+import CorrectAnswerPanel from "./CorrectAnswerPanel";
 import EliminationReveal from "./EliminationReveal";
 import dynamic from "next/dynamic";
 import MuteButton from "./MuteButton";
@@ -40,9 +41,21 @@ const SFX_QUESTION_TIMER = encodeURI("/sound/ITV's _ The 1 club - 30 Second Time
 const SFX_APPLAUSE = encodeURI("/sound/appluase2.wav");
 const ENDING_VO_ALL_CORRECT = encodeURI("/questionscreenimages/endingvoallcorrect.mp3");
 const ENDING_VO_IF_EVEN_ONE_WRONG = encodeURI("/questionscreenimages/endvoifevenonewrong.mp3");
-/** Plays full-screen after the user clicks "See end screen" on the last question.
- *  When it finishes, the game transitions to the final-result summary. */
-const FINAL_VIDEO_SRC = encodeURI("/questionscreenimages/endingvo.mp4");
+/** Plays full-screen after the user clicks "See end screen" on the last
+ *  question. Two variants depending on whether the player got every
+ *  answer right:
+ *    - All-correct → endingvoifallcorrect.mp4 (the "champion" tail)
+ *    - Any-wrong  → endvoifevenonewrong.mp4 (the consolation tail)
+ *  Resolved at render time by `pickFinalVideoSrc(playerCorrect)` below
+ *  so the right clip mounts the moment the user clicks "See end screen". */
+const FINAL_VIDEO_SRC_ALL_CORRECT = encodeURI("/questionscreenimages/endingvoifallcorrect.mp4");
+const FINAL_VIDEO_SRC_IF_ANY_WRONG = encodeURI("/questionscreenimages/endvoifevenonewrong.mp4");
+function pickFinalVideoSrc(playerCorrect: boolean[]): string {
+  const allCorrect =
+    playerCorrect.length === QUESTIONS.length &&
+    playerCorrect.every((v) => v === true);
+  return allCorrect ? FINAL_VIDEO_SRC_ALL_CORRECT : FINAL_VIDEO_SRC_IF_ANY_WRONG;
+}
 /** Same Unicorn Studio scene previously rendered on the FinalStage3D middle LED.
  *  We now render it as the centerpiece of the final summary screen. */
 const FINAL_SCREEN_UNICORN_JSON_PATH = "/animations/end_tvscreen_animate.json";
@@ -97,48 +110,112 @@ async function checkAnswerWithOpenAI(
   }
 }
 
+/** ─────────────────────────────────────────────────────────────────────────
+ *  QUESTION_PATHS — single source of truth for all per-question asset paths.
+ *  ─────────────────────────────────────────────────────────────────────────
+ *  After the May 2026 reorganization the 8-question lineup expanded to 10
+ *  and folder names were renamed from `questionN/` to
+ *  `questionN(descriptor-tier)/`. Every video / VO file lives inside its
+ *  matching folder; the resolvers below do a flat lookup against this map
+ *  so adding / re-tiering / renaming a question only touches this table.
+ *
+ *  Folder names contain literal `(` and `)` characters. Modern Next.js
+ *  serves these static asset paths transparently (the browser URL-encodes
+ *  the parens to %28/%29 on its own). If a 404 ever appears for one of
+ *  these, wrap the return value below in `encodeURI(...)`.
+ *  ─────────────────────────────────────────────────────────────────────── */
+const QUESTION_PATHS: Record<number, {
+  folder: string;
+  intro: string;
+  vo: string;
+  correct: string;
+}> = {
+  1: {
+    folder: "question1(findthemistake-90)",
+    intro: "q1intro.mp4",
+    vo: "q1VO(canyoufindthemistake).mp3",
+    correct: "q1correct.mp4",
+  },
+  2: {
+    folder: "question2(gandhijirealornot-80)",
+    intro: "q2intro.mp4",
+    vo: "q2VO(gandhiji).mp3",
+    correct: "q2_new_sequence_yes.mp4",
+  },
+  3: {
+    folder: "question3(cardsnglasses-70)",
+    intro: "q3intro.mp4",
+    vo: "q3VO(cardsnglasses).mp3",
+    correct: "q3_new_sequence_yes.mp4",
+  },
+  4: {
+    folder: "question4(jessicanmandy-60)",
+    intro: "q4intro.mp4",
+    vo: "q4VO.mp3",
+    correct: "q4_new_sequence_yes.mp4",
+  },
+  5: {
+    folder: "question5(biggestsquare-50)",
+    intro: "q5intro.mp4",
+    vo: "q5VOrevised.mp3",
+    correct: "q5correct.mp4",
+  },
+  6: {
+    folder: "question6(4transports-40)",
+    intro: "q6intro.mp4",
+    vo: "q6VO.mp3",
+    correct: "q6_new_sequence_yes.mp4",
+  },
+  7: {
+    folder: "question7(earthnmars-30)",
+    intro: "q7intro.mp4",
+    vo: "q7VO.mp3",
+    correct: "q7correct.mp4",
+  },
+  8: {
+    folder: "question8(gymnast-20)",
+    intro: "q8intro.mp4",
+    vo: "q8VO.mp3",
+    correct: "q8_new_sequence_yes.mp4",
+  },
+  9: {
+    folder: "question9(number1to6-10)",
+    intro: "q9intro.mp4",
+    vo: "q9VO.mp3",
+    correct: "q9_new_sequence_yes.mp4",
+  },
+  10: {
+    folder: "question10(onepercent-1)",
+    intro: "q10intro.mp4",
+    vo: "q10VO.mp3",
+    correct: "q10correct.mp4",
+  },
+};
+
 function questionIntroVideoSrc(questionIndex: number): string {
-  return `/questionscreenimages/question${questionIndex + 1}/q${questionIndex + 1}intro.mp4`;
+  const p = QUESTION_PATHS[questionIndex + 1];
+  return `/questionscreenimages/${p.folder}/${p.intro}`;
 }
 
 function questionVoSrc(questionId: number): string {
-  // Q1 VO replaced with the corrected take that lines up with the new
-  // intro-video pacing (q1VOcorrect.mp3). Old file q1VO.mp3 is retained on
-  // disk for reference but no longer referenced from the runtime.
-  if (questionId === 1) return `/questionscreenimages/question1/q1VOcorrect.mp3`;
-  if (questionId === 2) return `/questionscreenimages/question2/q2VOrevised.mp3`;
-  if (questionId === 4) return `/questionscreenimages/question4/q4VOrevised.mp3`;
-  // Q5 was rewritten as a QWERTY pattern MCQ, so the original q5VO.mp3
-  // (which narrated the old number-grid puzzle) no longer matches. Use the
-  // new take recorded against the rewritten question.
-  if (questionId === 5) return `/questionscreenimages/question5/q5VOnew.mp3`;
-  return `/questionscreenimages/question${questionId}/q${questionId}VO.mp3`;
+  const p = QUESTION_PATHS[questionId];
+  return `/questionscreenimages/${p.folder}/${p.vo}`;
 }
 
 function correctReactionSrc(questionIndex: number): string {
-  // Q5 (questionIndex === 4) was rewritten as the QWERTY MCQ. The old
-  // `q5correct.mp4` no longer matches the new question, so we point at
-  // the freshly recorded reaction file `q5correctvid.mp4`.
-  if (questionIndex === 4) {
-    return "/questionscreenimages/question5/q5correctvid.mp4";
-  }
-  // Q8 (the final question, questionIndex === 7) when answered correctly
-  // plays the dedicated "1% Club" winner reaction. Confetti is dropped
-  // from the top for the first 10s in QuizGame while this clip plays.
-  if (questionIndex === 7) {
+  // The final question's "winner" correct-reaction is the dedicated
+  // 1% Club celebratory video at the top level of /questionscreenimages.
+  // Confetti is dropped from the top for the first 10s in QuizGame.
+  if (questionIndex === QUESTIONS.length - 1) {
     return "/questionscreenimages/1percentfinalcorrect.mp4";
   }
-  return `/questionscreenimages/question${questionIndex + 1}/q${questionIndex + 1}correct.mp4`;
+  const p = QUESTION_PATHS[questionIndex + 1];
+  return `/questionscreenimages/${p.folder}/${p.correct}`;
 }
 
 function pickWrongReactionUrl(questionIndex: number): string {
-  if (questionIndex === 7) {
+  if (questionIndex === QUESTIONS.length - 1) {
     return "/questionscreenimages/wrongrxns/1percentwrongmodified.mp4";
-  }
-  // Q5 has its own dedicated wrong-reaction file recorded against the
-  // QWERTY MCQ rewrite — bypass the generic shared wrongrxns pool.
-  if (questionIndex === 4) {
-    return "/questionscreenimages/question5/q5wrongvid.mp4";
   }
   const templates = [
     "/questionscreenimages/wrongrxns/qwrong1.mp4",
@@ -283,17 +360,32 @@ function rewindToPreviousRoundStart(prev: GameState): GameState {
   };
 }
 
-// ── Questions (client-provided, 1% Club India edit) ──
+// ── Questions (client-provided, 1% Club India edit — May 2026 10-question lineup) ──
+//
+// Folder structure:
+//   /public/questionscreenimages/questionN(descriptor-tier)/
+//     ├ qNintro.mp4              — host setup video (plays before this screen)
+//     ├ qNVO[(descriptor)].mp3   — host narration that runs while the user reads
+//     ├ qN<topic>.png            — single backing image (when the question uses one)
+//     ├ qNimageM.png             — multi-image option set (M=1..N) for image MCQ
+//     ├ qNcorrect.mp4 OR qN_new_sequence_yes.mp4 — correct-answer reaction video
+//
+// Asset path resolvers live in QUESTION_PATHS above. The Q array below only
+// declares the per-question CONTENT (text, options, scoring rules, inline
+// media references). Folder-pathed reaction/intro/VO files are resolved at
+// runtime by questionIntroVideoSrc / questionVoSrc / correctReactionSrc.
 const QUESTIONS: Question[] = [
   {
+    // Q1 (90%) — Find the Mistake.
+    // The intro video poses the question ("Can you find the mistake?"
+    // with 'the' written twice in the run-up text). User types what
+    // they spotted; OpenAI semantically grades the answer. The Q1 path
+    // in handleAnswer below also short-circuits to correct on a bare
+    // "the" so a one-word answer still passes.
     id: 1,
     percentage: 90,
-    // Q1 — "Find the mistake" video question. The intro video IS the
-    // question — it shows "Can you find the mistake? 1 2 3 4 5 6 7 8 9"
-    // with the article 'the' written twice. User types what they spotted.
-    // Correct answer: the word "the" is doubled.
     question: "What is the answer to this question?",
-    image: "/questionscreenimages/question1/q1image.png",
+    image: "/questionscreenimages/question1(findthemistake-90)/q1mistake.png",
     textInput: true,
     correctAnswerText: "The word 'the' appears twice / the article 'the' is doubled / 'the the' is written repeated",
     options: [],
@@ -301,46 +393,64 @@ const QUESTIONS: Question[] = [
     timeLimit: 30,
   },
   {
+    // Q2 (80%) — Gandhiji photo MCQ.
+    // Three image tiles. Photo 1 is the doctored / impossible one
+    // (correct answer); photos 2 and 3 are real. No "ALL ARE REAL"
+    // option — pure 3-tile image pick.
     id: 2,
     percentage: 80,
-    // Q2 — Which photo cannot be real? Three photo options: fake giraffe
-    // (answer), tiger, zebra. User clicks one image.
-    question: "Which of these photographs cannot be real?",
+    question: "Which photograph of Gandhiji cannot be real?",
     images: [
-      "/questionscreenimages/question2/q2fakegiraffe.png",
-      "/questionscreenimages/question2/q2tiger.png",
-      "/questionscreenimages/question2/q2zebra.png",
+      "/questionscreenimages/question2(gandhijirealornot-80)/gandhijiinaccurate.png",
+      "/questionscreenimages/question2(gandhijirealornot-80)/gandhjiaccurate1-ezremove.png",
+      "/questionscreenimages/question2(gandhijirealornot-80)/gandhjiaccurate2-ezremove.png",
     ],
-    imageCaptions: ["Giraffe", "Tiger", "Zebra"],
+    // No imageCaptions: the photos ARE the answer — the A/B/C corner badge
+    // already labels each tile, so a "Photo 1/2/3" caption underneath only
+    // ate vertical space that the photos themselves needed to be readable.
     imagesAreOptions: true,
     options: ["Photo 1", "Photo 2", "Photo 3"],
     correctIndex: 0,
     timeLimit: 30,
   },
   {
+    // Q3 (70%) — Cards & Glasses.
+    // 2-option text MCQ with one backing image. Standard text-button
+    // renderer (NOT imagesAreOptions); the image sits above the buttons.
     id: 3,
     percentage: 70,
-    // Q3 — Word play: Earth has Heart (anagram), Mars has ARMS (anagram).
-    // Question image shown above the text input. User types answer.
-    // OpenAI semantic check — accepts "ARMS", "arm", "arms", etc.
-    question: "If planet 'Earth' has a 'Heart', which body part does planet 'Mars' have?",
-    image: "/questionscreenimages/question3/q3.png",
+    question: "What are there more of in this picture: cards or glasses?",
+    image: "/questionscreenimages/question3(cardsnglasses-70)/q3cardsnglasses.png",
+    options: ["Cards", "Glasses"],
+    correctIndex: 0,
+    timeLimit: 30,
+  },
+  {
+    // Q4 (60%) — Jessica & Mandy.
+    // Pure text puzzle, no image. Twist: Mandy IS the NAME of Jessica's
+    // sister (since Jessica's only sister is Mandy herself). Accept any
+    // spelling/casing of "name" or "naam"; reject "Mandy", "herself",
+    // "sister", or any other relational answer. Semantic grading via OpenAI.
+    id: 4,
+    percentage: 60,
+    question: "Jessica is Mandy's only sister. Mandy is the _____ of Jessica's sister.",
     textInput: true,
-    correctAnswerText: "ARMS (anagram of MARS — the letters of the word Mars rearranged spell Arms)",
+    correctAnswerText: "The literal word 'name' (or its Hindi equivalent 'naam'). The puzzle's twist is that Mandy IS the name of Jessica's sister, since Jessica's only sister is Mandy herself. Accept any spelling/casing of 'name' or 'naam'. REJECT 'Mandy', 'herself', 'sister', or any other relational answer.",
     options: [],
     correctIndex: 0,
     timeLimit: 30,
   },
   {
-    id: 4,
-    percentage: 60,
-    // Q4 — Biggest SQUARE out of three shapes. User clicks one image.
-    // Correct answer: index 0 (first image is the actual square).
+    // Q5 (50%) — Biggest SQUARE among three shapes.
+    // Three image tiles, single correct (index 0). Same imagesAreOptions
+    // 3-tile renderer used by Q2.
+    id: 5,
+    percentage: 50,
     question: "Which SQUARE has the biggest total area?",
     images: [
-      "/questionscreenimages/question4/q4image1.png",
-      "/questionscreenimages/question4/q4image2.png",
-      "/questionscreenimages/question4/q4image3.png",
+      "/questionscreenimages/question5(biggestsquare-50)/q5image1.png",
+      "/questionscreenimages/question5(biggestsquare-50)/q5image2.png",
+      "/questionscreenimages/question5(biggestsquare-50)/q5image3.png",
     ],
     imageCaptions: ["A", "B", "C"],
     imagesAreOptions: true,
@@ -349,63 +459,79 @@ const QUESTIONS: Question[] = [
     timeLimit: 30,
   },
   {
-    id: 5,
-    percentage: 50,
-    // Q5 — Pattern recognition. The pattern Q W E R T Y U is the top row
-    // of a QWERTY keyboard. The next three keys after U are I, O, P, so
-    // 3 positions after U is P. Correct answer: index 2 ("P").
-    question:
-      "Q, W, E, R, T, Y, U — Which letter comes 3 positions after U in this pattern?",
-    options: ["I", "O", "P", "L"],
-    correctIndex: 2,
-    timeLimit: 30,
-  },
-  {
+    // Q6 (40%) — Four transports rearranged by passenger capacity.
+    // Images alphabetical: bike, bus, car, plane. After rearranging
+    // low→high by passenger count: bike (1), car (5), bus (40), plane (200)
+    // → only bike (pos 1) and plane (pos 4) stay put. Answer: 2.
     id: 6,
-    percentage: 30,
-    // Q6 — Transport rearrangement (MOVED from previous Q7 slot).
-    // Four transport modes shown alphabetically. User counts how many stay
-    // in the same position when rearranged by passenger count low→high.
-    // Correct answer: index 0 ("1") — only Local train stays in the same
-    // position (low→high: Cycle, Autorickshaw, Bus, Local train = pos. 3,1,2,4).
+    percentage: 40,
     question: "Four modes of transport are arranged below alphabetically. If you rearrange them from lowest to highest by the number of passengers they typically carry, how many will stay in the same place?",
     images: [
-      "/questionscreenimages/question6/auto-ezremove.png",
-      "/questionscreenimages/question6/bus-ezremove.png",
-      "/questionscreenimages/question6/cycle-ezremove.png",
-      "/questionscreenimages/question6/localtrain-ezremove.png",
+      "/questionscreenimages/question6(4transports-40)/bike.png",
+      "/questionscreenimages/question6(4transports-40)/bus.png",
+      "/questionscreenimages/question6(4transports-40)/car.png",
+      "/questionscreenimages/question6(4transports-40)/plane.png",
     ],
-    imageCaptions: ["Autorickshaw", "Bus", "Cycle", "Local train"],
+    imageCaptions: ["Bike", "Bus", "Car", "Plane"],
     compactImageRow: true,
     options: ["1", "2", "3"],
-    correctIndex: 0,
+    correctIndex: 1,
     timeLimit: 30,
   },
   {
+    // Q7 (30%) — Earth & Mars anagram.
+    // Single backing image + text input. Earth contains the anagram
+    // HEART; Mars contains the anagram ARMS. Semantic grading.
     id: 7,
-    percentage: 10,
-    // Q7 — Larry the Llama (NEW question in this slot).
-    // Larry always LIES. Claims: behind even door, door < 6, door is
-    // multiple of 3. All three are lies, so real door is: ODD, >= 6,
-    // NOT a multiple of 3. From 1-10, only door 7 fits all three constraints.
-    // User types a single digit. Correct answer: 7.
-    question: "Larry the llama ALWAYS lies. He's hiding behind one of 10 doors (1-10). Larry says: 'I'm behind an EVEN door, my door is SMALLER than 6, and my door is a MULTIPLE of 3.' Which door is Larry really behind?",
-    image: "/questionscreenimages/question7/q7image.png",
-    numberInput: true,
-    maxDigits: 1,
-    correctNumber: 7,
+    percentage: 30,
+    question: "If planet 'Earth' has a 'Heart', which body part does planet 'Mars' have?",
+    image: "/questionscreenimages/question7(earthnmars-30)/q7earthnmars.png",
+    textInput: true,
+    correctAnswerText: "ARMS (anagram of MARS — the letters of the word Mars rearranged spell Arms)",
     options: [],
     correctIndex: 0,
     timeLimit: 30,
   },
   {
+    // Q8 (20%) — Gymnast left foot.
+    // Single backing image with the labels A and B baked into the image
+    // itself; options below are simple text buttons. Do NOT set
+    // imagesAreOptions — the image is informational, the answer is text.
     id: 8,
+    percentage: 20,
+    question: "Which one (A or B) is the gymnast's left foot?",
+    image: "/questionscreenimages/question8(gymnast-20)/gymnast.png",
+    options: ["A", "B"],
+    correctIndex: 0,
+    timeLimit: 30,
+  },
+  {
+    // Q9 (10%) — Shapes-to-Numbers.
+    // Single backing image (the shape diagram). Single-digit number input;
+    // exact numeric match against correctNumber=3.
+    id: 9,
+    percentage: 10,
+    question: "You need to put a number from 1 to 6 into each circle, but you can only use each number once. What number will replace the question mark?",
+    image: "/questionscreenimages/question9(number1to6-10)/q9image.png",
+    numberInput: true,
+    maxDigits: 1,
+    correctNumber: 3,
+    options: [],
+    correctIndex: 0,
+    timeLimit: 30,
+  },
+  {
+    // Q10 (1%) — TNECREPE reversed phrase.
+    // wordPuzzle renders as oversized monospace ("T N E C R E P E _ _").
+    // 4-option text MCQ. TNECREPENO reversed = "ONE PERCENT", so
+    // correct answer is "NO" (index 2 → C). No backing image — wordPuzzle
+    // is the visual. Distractor letters (OP, ER, RE) are all 2-letter
+    // English-looking pairs so the puzzle stays a pure pattern test.
+    id: 10,
     percentage: 1,
-    // Q8 — TNECREPE (unchanged content, only timer updated to 30s and
-    // asset paths rewired in Part 3 below).
-    question: "TNECREPE is the beginning of a reversed phrase. Which two letters complete it?",
-    wordPuzzle: "TNECREPE _ _",
-    options: ["RC", "AR", "NO", "TE"],
+    question: "What are the next 2 letters in this sequence?",
+    wordPuzzle: "T N E C R E P E _ _",
+    options: ["OP", "ER", "NO", "RE"],
     correctIndex: 2,
     timeLimit: 30,
   },
@@ -506,7 +632,7 @@ function simulateEliminations(
     return othersEliminated + (playerGotItRight ? 0 : 1);
   }
 
-  // ── Q1 … Q7 (original crowd simulation, unchanged) ─────────────────────
+  // ── All non-final rounds (original crowd simulation, unchanged) ───────
   // What fraction gets it WRONG
   const failRate = (100 - percentage) / 100;
   // Small variance: ±10% of the fail rate
@@ -639,10 +765,17 @@ export default function QuizGame({
 
   // Reaction video overlay state
   const [reactionVideo, setReactionVideo] = useState<"correct" | "wrong" | "winner" | null>(null);
-  /** True for the first 10 seconds of the Q8 winner reaction video — drops
-   *  metallic gold confetti from the top of the screen above the video. */
+  /** True for the first 10 seconds of the final-question (Q10) winner reaction
+   *  video — drops metallic gold confetti from the top of the screen above the video. */
   const [lastQuestionConfettiActive, setLastQuestionConfettiActive] = useState(false);
-  /** Picked when showing a wrong reaction; stable URL for the clip (Q1–Q7 random, Q8 fixed). */
+  /** Drives the right-side `CorrectAnswerPanel` slide-in. Flips true ~1.2s
+   *  after ANY reaction (correct, wrong, or winner) starts — the panel
+   *  always teaches what the right answer was. Flips false the moment the
+   *  reaction ends, the video begins its outro wipe, or the phase
+   *  transitions out, so the panel slide-out runs concurrently with the
+   *  video fade rather than lingering after it. */
+  const [showCorrectPanel, setShowCorrectPanel] = useState(false);
+  /** Picked when showing a wrong reaction; stable URL for the clip (Q1–Q9 random, Q10 fixed). */
   const wrongReactionUrlRef = useRef<string | null>(null);
   const pendingEliminationRef = useRef<{ eliminated: number; addedToPot: number } | null>(null);
   /** Bumped from `handleQuizBack` to cancel the 2s answer→reaction / time-up chain. */
@@ -980,6 +1113,10 @@ export default function QuizGame({
         : wrongReactionUrlRef.current;
 
   const introVideoSrc = questionIntroVideoSrc(gameState.currentQuestion);
+  // Resolved at render time so the right ending clip is selected the moment
+  // the player clicks "See end screen" on the elimination overlay. Recomputes
+  // every render from the current playerCorrect snapshot — cheap, no memo.
+  const finalVideoSrc = pickFinalVideoSrc(gameState.playerCorrect);
 
   // Reset the outro wipe whenever a new overlay mounts.
   useEffect(() => {
@@ -997,8 +1134,8 @@ export default function QuizGame({
     }
   }, [gameState.phase]);
 
-  // Confetti drop on the Q8 winner reaction. Mounts the metallic confetti
-  // layer above the reaction video for the first 10 seconds of playback,
+  // Confetti drop on the final-question winner reaction. Mounts the metallic
+  // confetti layer above the reaction video for the first 10 seconds of playback,
   // then auto-stops. The layer is unmounted on cleanup so a back-out / quick
   // skip can't leave confetti hanging on screen.
   useEffect(() => {
@@ -1015,6 +1152,37 @@ export default function QuizGame({
       setLastQuestionConfettiActive(false);
     };
   }, [reactionVideo]);
+
+  // Right-side answer-explanation panel. Fires for ANY reaction (correct,
+  // winner, OR wrong) and waits 1.2s so AK's opening beat plays first. On
+  // wrong reactions the panel still teaches what the correct answer was —
+  // that was missing originally and Abhinav flagged it on Q5 wrong.
+  // Cleanup hides the panel immediately on any change in reactionVideo
+  // (skip, end, phase change, unmount), driving the AnimatePresence exit
+  // transition (slide-out to the right).
+  useEffect(() => {
+    if (reactionVideo == null) {
+      setShowCorrectPanel(false);
+      return;
+    }
+    // Don't carry over a stale "true" from a previous reaction.
+    setShowCorrectPanel(false);
+    const t = window.setTimeout(() => {
+      setShowCorrectPanel(true);
+    }, 1200);
+    return () => {
+      window.clearTimeout(t);
+      setShowCorrectPanel(false);
+    };
+  }, [reactionVideo]);
+
+  // Sync the panel's slide-out with the video's own outro wipe. The video
+  // arms `reactionOutroActive` ~1.05s before its end — the moment that
+  // fires we hide the panel so its 400ms slide-out and the video's fade
+  // happen concurrently instead of the panel lingering past the video.
+  useEffect(() => {
+    if (reactionOutroActive) setShowCorrectPanel(false);
+  }, [reactionOutroActive]);
 
   // Hide the floating mute button whenever a full-screen video overlay is on,
   // otherwise it stacks on top of the video's own "Skip ▸" button bottom-right.
@@ -1134,7 +1302,7 @@ export default function QuizGame({
       return;
     }
     if (gameState.phase === "final-result" || gameState.phase === "final-video") {
-      // Rewind out of the ending video / summary back to the Q8 elimination overlay.
+      // Rewind out of the ending video / summary back to the final-question elimination overlay.
       setGameState((prev) => ({ ...prev, phase: "elimination" }));
       return;
     }
@@ -1227,7 +1395,16 @@ export default function QuizGame({
                 if (introOutroArmedRef.current) return;
                 const el = e.currentTarget;
                 if (!Number.isFinite(el.duration) || el.duration <= 0) return;
-                if (el.duration - el.currentTime <= 1.05) {
+                // Per-question outro lead time (seconds before video end at
+                // which the black wipe arms). Default 1.05s.
+                //   Q6 (40% transports): 2.5s — fade was felt too late.
+                //   Q10 (1% TNECREPE):    0.2s — fade was felt too early
+                //                                and ate the final beat of
+                //                                the clip.
+                // Easy to extend per-question by adding more entries here.
+                const qid = gameState.currentQuestion + 1;
+                const leadSec = qid === 6 ? 2.5 : qid === 10 ? 0.2 : 1.05;
+                if (el.duration - el.currentTime <= leadSec) {
                   introOutroArmedRef.current = true;
                   setIntroOutroActive(true);
                 }
@@ -1280,6 +1457,22 @@ export default function QuizGame({
               src={reactionVideoSrc}
             />
             <VideoOutroWipe active={reactionOutroActive} />
+
+            {/* ━━ Answer-explanation panel — slides in from the right edge
+                    ~1.2s into ANY reaction (correct, winner, OR wrong). On
+                    wrong reactions the panel still teaches what the right
+                    answer was. Floats ABOVE the video at z-[5]; the video
+                    element above is untouched (its CSS dimensions, parent,
+                    and aspect ratio stay exactly as they were). The skip
+                    pill below sits at z-10 so it remains clickable on top
+                    of the panel. The panel auto-hides when the video arms
+                    its outro wipe so both fades run together. ━━ */}
+            <CorrectAnswerPanel
+              questionId={gameState.currentQuestion + 1}
+              visible={showCorrectPanel && reactionVideo != null}
+              reactionKind={reactionVideo}
+            />
+
             {/* Skip button */}
             <button
               onClick={handleSkipReactionVideo}
@@ -1291,8 +1484,8 @@ export default function QuizGame({
         )}
       </AnimatePresence>
 
-      {/* ━━ Q8 winner confetti — drops from the top for the first 10s of the
-              "1percentfinalcorrect" reaction video. Layer sits at z-[96], one
+      {/* ━━ Final-question (Q10) winner confetti — drops from the top for the
+              first 10s of the "1percentfinalcorrect" reaction video. Layer sits at z-[96], one
               level above the z-[95] reaction overlay so the gold strips are
               visible against the video. Pointer-events-none so the Skip pill
               underneath stays clickable. ━━ */}
@@ -1315,7 +1508,7 @@ export default function QuizGame({
           >
             <video
               ref={finalVideoRef}
-              key={FINAL_VIDEO_SRC}
+              key={finalVideoSrc}
               className="w-full h-full object-cover"
               autoPlay
               playsInline
@@ -1332,7 +1525,7 @@ export default function QuizGame({
               }}
               onEnded={handleFinalVideoEnd}
               onError={handleFinalVideoEnd}
-              src={FINAL_VIDEO_SRC}
+              src={finalVideoSrc}
             />
             <VideoOutroWipe active={finalVideoOutroActive} />
             {/* Skip → jump straight to the final-result summary screen */}
@@ -1772,12 +1965,16 @@ function FinalResult({
         />
       </motion.div>
 
-      {/* Stats row: questions correct + pot */}
+      {/* Stats row: questions correct + pot.
+          Margins tightened (was mt-6 md:mt-10) so the tagline below — and
+          especially the "Coming Soon | August 2026" second line — stays
+          inside the viewport on shorter laptop screens (~720-900px tall),
+          where it was previously getting cropped under the bottom edge. */}
       <motion.div
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.55, duration: 0.55, ease: [0.23, 1, 0.32, 1] }}
-        className="relative z-[6] mt-6 md:mt-10 flex flex-col md:flex-row items-center justify-center gap-6 md:gap-14"
+        className="relative z-[6] mt-3 md:mt-5 flex flex-col md:flex-row items-center justify-center gap-4 md:gap-12"
       >
         <div className="flex flex-col items-center">
           <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-brass-dim mb-2">
@@ -1801,12 +1998,15 @@ function FinalResult({
         </div>
       </motion.div>
 
-      {/* Gold tagline (bold, gradient gold per client direction) */}
+      {/* Gold tagline (bold, gradient gold per client direction).
+          Two-line block — the "Coming Soon | August 2026" line is rendered
+          as its own <p> beneath the brand line so it never collapses on
+          narrow viewports and so its size can be tuned independently. */}
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.85, duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
-        className="relative z-[6] mt-8 md:mt-12 text-center px-4"
+        className="relative z-[6] mt-4 md:mt-6 text-center px-4 flex flex-col gap-1.5 md:gap-2"
       >
         <p
           className="font-display font-bold text-xl md:text-2xl lg:text-[1.7rem] leading-tight tracking-tight"
@@ -1820,8 +2020,20 @@ function FinalResult({
           }}
         >
           Make your brand a part of the 1% Club.
-          <br />
-          <span className="opacity-95">Coming Soon | August 2026</span>
+        </p>
+        <p
+          className="font-display font-bold text-base md:text-lg lg:text-xl leading-tight tracking-[0.18em] uppercase"
+          style={{
+            backgroundImage:
+              "linear-gradient(180deg, #fff1bf 0%, #f5d76e 38%, #c89e2b 70%, #ad841a 100%)",
+            WebkitBackgroundClip: "text",
+            backgroundClip: "text",
+            color: "transparent",
+            textShadow: "0 0 22px rgba(245,215,110,0.22)",
+            opacity: 0.95,
+          }}
+        >
+          Coming Soon · August 2026
         </p>
       </motion.div>
     </motion.div>

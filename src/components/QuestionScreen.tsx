@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { motion, AnimatePresence, useMotionValue, useSpring } from "framer-motion";
+import { Play, Pause } from "lucide-react";
 import type { Question } from "./QuizGame";
 import { formatRupees } from "./QuizGame";
 import { useNarration } from "./NarrationProvider";
@@ -406,8 +407,8 @@ export const PANEL_INNER_FILL: CSSProperties = {
     "inset 0 1px 0 rgba(255,245,210,0.08), inset 0 -1px 0 rgba(0,0,0,0.52), inset 0 0 32px rgba(0,0,0,0.48)",
 };
 
-// Vertical "journey" ticker — the 8 actual game checkpoints, top (90) to bottom (1).
-const JOURNEY = [90, 80, 70, 60, 50, 30, 10, 1];
+// Vertical "journey" ticker — the 10 actual game checkpoints, top (90) to bottom (1).
+const JOURNEY = [90, 80, 70, 60, 50, 40, 30, 20, 10, 1];
 
 /** PNG in public/questionscreenimages/ — filenames like `90%.png`, `1%.png` */
 function percentImageSrc(pct: number): string {
@@ -432,11 +433,23 @@ const CIRC_CHANNEL = 2 * Math.PI * R_CHANNEL;
 interface PercentTimerDockProps {
   timeLeft: number;
   timeLimit: number;
+  /** True when the host has paused the timer mid-question. Renders the
+   *  play button as the active action and shows a subtle "PAUSED" label. */
+  timerPaused: boolean;
+  /** Toggle handler bound to the play / pause buttons (and to the spacebar
+   *  shortcut handled at the QuestionScreen root). */
+  onTogglePause: () => void;
+  /** Disable the pause/play controls when the question is already answered or
+   *  while the host narration is playing — pausing wouldn't be meaningful then. */
+  controlsDisabled: boolean;
 }
 
 function PercentTimerDock({
   timeLeft,
   timeLimit,
+  timerPaused,
+  onTogglePause,
+  controlsDisabled,
 }: PercentTimerDockProps) {
   /** Elapsed fraction: ring fills from 0 → full circumference as time runs out */
   const elapsed =
@@ -445,12 +458,17 @@ function PercentTimerDock({
   const almostFull = elapsed > 0.75;
 
   return (
+    // Outer wrapper accepts pointer events so the play/pause buttons inside
+    // are clickable (was pointer-events-none on the original spec dock; the
+    // SVG ring + countdown stay aria-hidden via the inner container).
     <div
-      className="pointer-events-none fixed bottom-4 left-3 z-20 md:bottom-6 md:left-6 select-none amb-spot-flicker"
+      className="fixed bottom-4 left-3 z-20 md:bottom-6 md:left-6 select-none flex flex-col items-center gap-2 md:gap-3"
       data-tour-id="timer"
-      aria-hidden
     >
-      <div className="relative h-[210px] w-[210px] md:h-[248px] md:w-[248px]">
+      <div
+        className="pointer-events-none relative h-[150px] w-[150px] md:h-[176px] md:w-[176px] amb-spot-flicker"
+        aria-hidden
+      >
         <svg
           className="absolute inset-0 h-full w-full"
           viewBox={`0 0 ${VB} ${VB}`}
@@ -565,10 +583,13 @@ function PercentTimerDock({
           className="absolute left-1/2 top-1/2 flex h-[60%] w-[60%] -translate-x-1/2 -translate-y-1/2 items-center justify-center overflow-hidden rounded-full bg-black/65 shadow-[inset_0_0_32px_rgba(0,0,0,0.7)] backdrop-blur-md"
           style={{ WebkitBackdropFilter: "blur(16px)" }}
         >
-          <span
+          <motion.span
             className="font-display font-bold tabular-nums leading-none select-none flex items-baseline"
             style={{
-              fontSize: "clamp(40px, 9vmin, 64px)",
+              // Reduced ~35% from the original (clamp 40-64px → clamp 26-42px)
+              // so the play/pause control row below has room to breathe without
+              // pushing the dock off the bottom edge of the viewport.
+              fontSize: "clamp(26px, 6vmin, 42px)",
               backgroundImage:
                 "linear-gradient(180deg, #fff0c2 0%, #f9e89a 26%, #e4c55a 52%, #b28622 82%, #6d4e13 100%)",
               WebkitBackgroundClip: "text",
@@ -578,13 +599,128 @@ function PercentTimerDock({
               filter:
                 "drop-shadow(0 2px 8px rgba(0,0,0,0.7)) drop-shadow(0 0 14px rgba(228,207,106,0.45))",
             }}
+            // Subtle pulse while paused so the dock visually communicates the
+            // paused state without needing extra chrome. No effect on layout.
+            animate={timerPaused ? { opacity: [1, 0.55, 1] } : { opacity: 1 }}
+            transition={
+              timerPaused
+                ? { duration: 1.4, ease: "easeInOut", repeat: Infinity }
+                : { duration: 0.2 }
+            }
           >
             {Math.max(0, Math.ceil(timeLeft))}
             <span style={{ fontSize: "0.5em", marginLeft: "0.06em" }}>s</span>
-          </span>
+          </motion.span>
         </div>
       </div>
+
+      {/* ━━ Play / Pause control row — sits directly below the timer ring.
+              Buttons are circular ~40px brass discs matching the rest of the
+              UI's metallic language. The button representing the action you
+              CAN take (pause when running, play when paused) is highlighted;
+              the other is dimmed. Disabled outright when the question is
+              already answered or the host narration is still in flight. ━━ */}
+      <div
+        className="pointer-events-auto flex items-center gap-2 md:gap-2.5"
+        role="group"
+        aria-label="Timer controls"
+      >
+        <TimerControlButton
+          icon="play"
+          label="Resume timer"
+          active={timerPaused}
+          onClick={onTogglePause}
+          disabled={controlsDisabled || !timerPaused}
+        />
+        <TimerControlButton
+          icon="pause"
+          label="Pause timer"
+          active={!timerPaused}
+          onClick={onTogglePause}
+          disabled={controlsDisabled || timerPaused}
+        />
+      </div>
+
+      {/* Tiny "PAUSED" label — only when paused. Mono caps to match the rest
+          of the brass enamel labels. Reserved space (h-3) when not paused so
+          adding/removing it doesn't reflow the dock. */}
+      <div className="h-3 flex items-center">
+        {timerPaused && (
+          <span
+            className="font-mono text-[9px] uppercase tracking-[0.32em] font-bold pointer-events-none"
+            style={{
+              color: "#f4dc7c",
+              textShadow:
+                "0 1px 0 rgba(20,10,0,0.7), 0 0 8px rgba(228,174,68,0.5)",
+            }}
+          >
+            Paused
+          </span>
+        )}
+      </div>
     </div>
+  );
+}
+
+interface TimerControlButtonProps {
+  icon: "play" | "pause";
+  label: string;
+  /** Highlighted brass state — this is the action the host can take next. */
+  active: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+}
+
+function TimerControlButton({
+  icon,
+  label,
+  active,
+  onClick,
+  disabled = false,
+}: TimerControlButtonProps) {
+  const Icon = icon === "play" ? Play : Pause;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      className={`relative h-10 w-10 md:h-11 md:w-11 rounded-full p-[1.5px] overflow-hidden transition-all duration-200 ${
+        disabled ? "cursor-not-allowed" : "cursor-pointer hover:-translate-y-0.5 active:translate-y-0"
+      } ${active && !disabled ? "amb-glow-pulse" : ""}`}
+      style={{
+        background: active && !disabled ? METALLIC_RIM_STRONG : METALLIC_RIM_GRADIENT,
+        boxShadow:
+          active && !disabled
+            ? "0 0 18px rgba(228,207,106,0.55), 0 6px 14px -4px rgba(0,0,0,0.7), 0 0 0 1px rgba(0,0,0,0.55)"
+            : "0 4px 10px -4px rgba(0,0,0,0.7), 0 0 0 1px rgba(0,0,0,0.55)",
+        opacity: disabled ? 0.42 : 1,
+        filter: disabled ? "saturate(0.45) brightness(0.85)" : undefined,
+      }}
+    >
+      <span
+        className="relative w-full h-full rounded-full flex items-center justify-center"
+        style={{
+          background: "rgba(8,5,2,0.9)",
+          boxShadow:
+            "inset 0 1px 0 rgba(255,245,210,0.08), inset 0 -1px 0 rgba(0,0,0,0.55), inset 0 0 14px rgba(0,0,0,0.45)",
+        }}
+      >
+        <Icon
+          // lucide icons inherit text color via currentColor; using brass
+          // when active, dimmed brass otherwise.
+          color={active && !disabled ? "#f9e89a" : "#a6801f"}
+          fill={active && !disabled ? "#f9e89a" : "none"}
+          strokeWidth={2}
+          size={icon === "play" ? 16 : 15}
+          // The Play glyph is rendered visually right-of-center because of
+          // its triangle shape. A 0.5px nudge corrects that without breaking
+          // the Pause icon's symmetry.
+          style={{ marginLeft: icon === "play" ? "1px" : 0 }}
+        />
+      </span>
+    </button>
   );
 }
 
@@ -635,11 +771,59 @@ export default function QuestionScreen({
   const [textInputValue, setTextInputValue] = useState("");
   const [numberInputValue, setNumberInputValue] = useState("");
   const [answerChecking, setAnswerChecking] = useState(false);
+  /** Host-controlled timer pause. Lives in QuestionScreen because the
+   *  component is keyed on currentQuestion in QuizGame, so it auto-resets
+   *  to false on every new question (matching the spec's "always reset to
+   *  playing on new question load" requirement). When true, the tick effect
+   *  bails, all answer surfaces lock, and the timer SFX/VO cue freeze. */
+  const [timerPaused, setTimerPaused] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasCalledTimeUp = useRef(false);
   const tickAudioRef = useRef<HTMLAudioElement | null>(null);
   const timerVoCueFiredRef = useRef(false);
   const { muted: narrationMuted } = useNarration();
+
+  /** Effective lock-out used by every answer surface. Combines the existing
+   *  `paused` (host narration / tour) with the new `timerPaused` (host pause
+   *  control). Anywhere `paused` was checked before, `inputsLocked` now goes. */
+  const inputsLocked = paused || timerPaused;
+
+  const togglePause = useCallback(() => {
+    // No-op while the host is still narrating, after the answer is locked in,
+    // or while the API call is in flight. Matches the controlsDisabled gate
+    // on the pause/play buttons themselves.
+    if (paused || answered || answerChecking) return;
+    setTimerPaused((p) => !p);
+  }, [paused, answered, answerChecking]);
+
+  // Spacebar shortcut for pause/resume. Ignored when focus is inside an
+  // editable element so typing answers (Q1 "the", Q4 "name", etc.) isn't
+  // hijacked. Also ignored on repeat events so holding spacebar doesn't
+  // toggle rapidly. And ignored while host narration is still playing —
+  // pause/play has no meaning before the timer actually starts.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.code !== "Space" && e.key !== " ") return;
+      if (e.repeat) return;
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (
+          tag === "INPUT" ||
+          tag === "TEXTAREA" ||
+          tag === "SELECT" ||
+          target.isContentEditable
+        ) {
+          return;
+        }
+      }
+      if (paused || answered || answerChecking) return;
+      e.preventDefault();
+      setTimerPaused((p) => !p);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [paused, answered, answerChecking]);
 
   // ── Cursor-driven 3D tilt on the question board ───────────────
   // Adds depth without changing colors or visuals — the board lifts off
@@ -695,13 +879,13 @@ export default function QuestionScreen({
 
   useEffect(() => {
     if (!onTimerVoCue) return;
-    if (answered || paused || answerChecking) return;
+    if (answered || paused || timerPaused || answerChecking) return;
     if (question.timeLimit < TIMER_VO_CUE_AT_REMAINING) return;
     if (timeLeft !== TIMER_VO_CUE_AT_REMAINING) return;
     if (timerVoCueFiredRef.current) return;
     timerVoCueFiredRef.current = true;
     onTimerVoCue();
-  }, [timeLeft, answered, paused, answerChecking, onTimerVoCue, question.timeLimit, question.id]);
+  }, [timeLeft, answered, paused, timerPaused, answerChecking, onTimerVoCue, question.timeLimit, question.id]);
 
   const stopTickSound = useCallback(() => {
     const a = tickAudioRef.current;
@@ -715,7 +899,7 @@ export default function QuestionScreen({
   }, []);
 
   useEffect(() => {
-    if (narrationMuted || answered || paused || answerChecking) {
+    if (narrationMuted || answered || paused || timerPaused || answerChecking) {
       stopTickSound();
       return;
     }
@@ -731,10 +915,10 @@ export default function QuestionScreen({
     return () => {
       stopTickSound();
     };
-  }, [timeLeft, narrationMuted, answered, paused, answerChecking, stopTickSound]);
+  }, [timeLeft, narrationMuted, answered, paused, timerPaused, answerChecking, stopTickSound]);
 
   useEffect(() => {
-    if (answered || paused || answerChecking) {
+    if (answered || paused || timerPaused || answerChecking) {
       if (intervalRef.current) clearInterval(intervalRef.current);
       return;
     }
@@ -753,22 +937,22 @@ export default function QuestionScreen({
       });
     }, 1000);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [answered, onTimeUp, paused, answerChecking]);
+  }, [answered, onTimeUp, paused, timerPaused, answerChecking]);
 
   const handleSelect = useCallback(
     (index: number) => {
-      if (answered || selected !== null || paused) return;
+      if (answered || selected !== null || inputsLocked) return;
       stopTickSound();
       setSelected(index);
       if (intervalRef.current) clearInterval(intervalRef.current);
       onAnswer(index);
     },
-    [answered, selected, onAnswer, paused, stopTickSound],
+    [answered, selected, onAnswer, inputsLocked, stopTickSound],
   );
 
   const submitTextOrNumber = useCallback(
     async (typed: string) => {
-      if (answered || paused || answerChecking) return;
+      if (answered || inputsLocked || answerChecking) return;
       const t = typed.trim();
       if (!t) return;
       stopTickSound();
@@ -780,7 +964,7 @@ export default function QuestionScreen({
         setAnswerChecking(false);
       }
     },
-    [answered, paused, answerChecking, onAnswer, stopTickSound],
+    [answered, inputsLocked, answerChecking, onAnswer, stopTickSound],
   );
 
   const handleTextSubmit = useCallback(() => {
@@ -852,6 +1036,15 @@ export default function QuestionScreen({
       <PercentTimerDock
         timeLeft={timeLeft}
         timeLimit={question.timeLimit}
+        timerPaused={timerPaused}
+        onTogglePause={togglePause}
+        // Lock the pause/play buttons whenever the timer wouldn't actually
+        // be running anyway: while the host is still narrating the question
+        // (the `paused` prop is true during narration / tour), once an answer
+        // has been submitted, or while the semantic-grade API call is in
+        // flight. The buttons only light up after AK finishes speaking and
+        // the countdown actually starts.
+        controlsDisabled={paused || answered || answerChecking}
       />
 
       {/* ━━ Fullscreen blur backdrop — ONLY when after-round overlay is present.
@@ -1287,7 +1480,17 @@ export default function QuestionScreen({
                                 const imgH = question.compactImageRow
                                   ? "h-[92px] sm:h-[108px] md:h-[120px] w-auto max-w-[min(22vw,120px)] md:max-w-[min(20vw,140px)]"
                                   : isThreeImageOptions
-                                    ? "h-[180px] sm:h-[200px] md:h-[220px] w-full max-w-[min(32vw,220px)] object-contain rounded"
+                                    // Q2 (Gandhi photos): tall portraits → use
+                                    // big boxes so the photos render at usable
+                                    // scale.
+                                    // Q5 (Squares): the source PNGs are
+                                    // landscape canvases with small shapes in
+                                    // the middle, so a tall box just leaves
+                                    // empty letterboxing top/bottom. Smaller
+                                    // boxes hug the actual content.
+                                    ? question.id === 5
+                                      ? "h-[170px] sm:h-[190px] md:h-[210px] lg:h-[220px] w-full max-w-[min(38vw,260px)] md:max-w-[min(28vw,300px)] object-contain rounded"
+                                      : "h-[280px] sm:h-[320px] md:h-[360px] lg:h-[380px] w-full max-w-[min(38vw,260px)] md:max-w-[min(28vw,300px)] object-contain rounded"
                                     : "h-[236px] sm:h-[252px] md:h-[300px] lg:h-[320px] w-auto max-w-[min(34vw,200px)] md:max-w-[min(30vw,280px)]";
                                 return (
                                   <motion.button
@@ -1297,16 +1500,16 @@ export default function QuestionScreen({
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: 0.3 + i * 0.06, duration: 0.4, ease: EASE_OUT }}
                                     onClick={() => handleSelect(i)}
-                                    disabled={answered || selected !== null || paused}
+                                    disabled={answered || selected !== null || inputsLocked}
                                     className={`relative group border-0 bg-transparent p-0 appearance-none text-left ${
                                       isThreeImageOptions
                                         ? "w-full max-w-[240px] justify-self-center"
                                         : "flex-shrink-0"
                                     } ${
-                                      !answered && selected === null && !paused
+                                      !answered && selected === null && !inputsLocked
                                         ? "cursor-pointer hover:-translate-y-0.5"
                                         : "cursor-not-allowed"
-                                    } ${paused && !answered ? "opacity-60 saturate-50" : ""} transition-transform duration-200`}
+                                    } ${inputsLocked && !answered ? "opacity-60 saturate-50" : ""} transition-transform duration-200`}
                                     style={{
                                       animation:
                                         showResult && isSelected && !isCorrectOption
@@ -1579,18 +1782,18 @@ export default function QuestionScreen({
                               handleTextSubmit();
                             }
                           }}
-                          disabled={answered || paused || answerChecking}
+                          disabled={answered || inputsLocked || answerChecking}
                           autoComplete="off"
                         />
                       </div>
                       <motion.button
                         type="button"
                         onClick={handleTextSubmit}
-                        disabled={!textInputValue.trim() || answered || paused || answerChecking}
-                        whileHover={textInputValue.trim() && !answered && !paused && !answerChecking ? { scale: 1.02 } : undefined}
-                        whileTap={textInputValue.trim() && !answered && !paused && !answerChecking ? { scale: 0.97 } : undefined}
+                        disabled={!textInputValue.trim() || answered || inputsLocked || answerChecking}
+                        whileHover={textInputValue.trim() && !answered && !inputsLocked && !answerChecking ? { scale: 1.02 } : undefined}
+                        whileTap={textInputValue.trim() && !answered && !inputsLocked && !answerChecking ? { scale: 0.97 } : undefined}
                         className={`game-show-btn relative z-0 shrink-0 cursor-pointer rounded-xl px-8 py-3 text-center text-[12px] font-semibold uppercase tracking-[0.2em] min-h-[48px] md:min-h-[54px] ${
-                          !textInputValue.trim() || answered || paused || answerChecking ? "opacity-50 pointer-events-none" : ""
+                          !textInputValue.trim() || answered || inputsLocked || answerChecking ? "opacity-50 pointer-events-none" : ""
                         } ${answerChecking ? "animate-pulse" : ""}`}
                       >
                         <span className="relative z-10">{answerChecking ? "Checking…" : "Submit"}</span>
@@ -1663,18 +1866,18 @@ export default function QuestionScreen({
                               handleNumberSubmit();
                             }
                           }}
-                          disabled={answered || paused || answerChecking}
+                          disabled={answered || inputsLocked || answerChecking}
                           autoComplete="off"
                         />
                       </div>
                       <motion.button
                         type="button"
                         onClick={handleNumberSubmit}
-                        disabled={!numberInputValue.trim() || answered || paused || answerChecking}
-                        whileHover={numberInputValue.trim() && !answered && !paused && !answerChecking ? { scale: 1.02 } : undefined}
-                        whileTap={numberInputValue.trim() && !answered && !paused && !answerChecking ? { scale: 0.97 } : undefined}
+                        disabled={!numberInputValue.trim() || answered || inputsLocked || answerChecking}
+                        whileHover={numberInputValue.trim() && !answered && !inputsLocked && !answerChecking ? { scale: 1.02 } : undefined}
+                        whileTap={numberInputValue.trim() && !answered && !inputsLocked && !answerChecking ? { scale: 0.97 } : undefined}
                         className={`game-show-btn relative z-0 shrink-0 cursor-pointer rounded-xl px-8 py-3 text-center text-[12px] font-semibold uppercase tracking-[0.2em] min-h-[48px] md:min-h-[54px] ${
-                          !numberInputValue.trim() || answered || paused || answerChecking ? "opacity-50 pointer-events-none" : ""
+                          !numberInputValue.trim() || answered || inputsLocked || answerChecking ? "opacity-50 pointer-events-none" : ""
                         } ${answerChecking ? "animate-pulse" : ""}`}
                       >
                         <span className="relative z-10">{answerChecking ? "Checking…" : "Submit"}</span>
@@ -1686,7 +1889,18 @@ export default function QuestionScreen({
                   {/* Options row — hidden when images are the answers, or text/number input. */}
                   {!question.imagesAreOptions && !question.textInput && !question.numberInput && question.options.length > 0 && (
                   <div
-                    className={`${question.options.length === 3 ? "grid grid-cols-3" : "grid grid-cols-4"} gap-3 md:gap-4`}
+                    // Grid columns track the option count exactly so 2-option
+                    // questions (Q3 cards/glasses, Q8 gymnast) fill the row
+                    // instead of leaving an empty right half. 3-option
+                    // questions get a tight 3-col grid; 4-option questions
+                    // (Q10) get the standard 4-col grid.
+                    className={`${
+                      question.options.length === 2
+                        ? "grid grid-cols-2"
+                        : question.options.length === 3
+                          ? "grid grid-cols-3"
+                          : "grid grid-cols-4"
+                    } gap-3 md:gap-4`}
                     data-tour-id="options-area"
                   >
                     {question.options.map((option, i) => {
@@ -1701,12 +1915,12 @@ export default function QuestionScreen({
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: 0.36 + i * 0.06, duration: 0.38, ease: EASE_OUT }}
                           onClick={() => handleSelect(i)}
-                          disabled={answered || selected !== null || paused}
+                          disabled={answered || selected !== null || inputsLocked}
                           className={`relative group block p-0 border-0 bg-transparent appearance-none text-left ${
-                            !answered && selected === null && !paused
+                            !answered && selected === null && !inputsLocked
                               ? "cursor-pointer hover:-translate-y-0.5"
                               : "cursor-not-allowed"
-                          } ${paused && !answered ? "opacity-60 saturate-50" : ""} transition-transform duration-200`}
+                          } ${inputsLocked && !answered ? "opacity-60 saturate-50" : ""} transition-transform duration-200`}
                           style={{
                             animation: showResult && isSelected && !isCorrectOption ? "wrong-shake 0.4s ease-in-out" : undefined,
                           }}

@@ -34,3 +34,8 @@ Thumbs.db
 # Local audio backup before +6dB ffmpeg boost — safety only, do not commit
 public/questionscreenimages/_audio_backup_pre_boost/
 env.txt
+
+# Large backups / installers / source masters (NEVER COMMIT)
+*-original-*.mp4
+*.dmg
+*.aep

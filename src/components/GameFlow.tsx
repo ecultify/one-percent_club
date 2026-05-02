@@ -25,9 +25,9 @@ const Logo3D = dynamic(() => import("./Logo3D"), { ssr: false });
 /** Studio backdrop for registration (details) + instructions — rendered blurred beneath the content. */
 const DETAILS_INSTRUCTIONS_BG = `/questionscreenimages/${encodeURIComponent("Gemini_Generated_Image_i8attui8attui8at-ezremove.png")}`;
 
-/** Teaser that plays after the scrolly canvas / Start Experience. File hosted on
- *  ecultify.com; requested as `/teaser-video.mp4` and proxied in next.config.mjs so
- *  playback is same-origin and avoids CORS on `<video>`. */
+/** Teaser that plays after the scrolly canvas / Start Experience. Served
+ *  directly from /public/teaser-video.mp4. To swap the teaser, drop a new
+ *  file at the same path — no code changes, no dev-server restart needed. */
 const WELCOME_VIDEO_SRC = "/teaser-video.mp4";
 
 const DHAK_SRC = "/sound/dhak.wav";
@@ -538,7 +538,14 @@ export default function GameFlow() {
     // BGM stays on during elimination too — GameShowAudio applies a slow-tempo
     // duck via the bgmSlowMode prop instead of muting completely.
     (phase === "playing" && !questionTimerActive);
-  const bgmSuppressForVideo = showWelcomeVideo || reactionVideoActive;
+  // Suppress (and slow-tempo) the BGM during ANY full-screen video — the
+  // welcome teaser, question-intro clips, correct/wrong/winner reactions,
+  // and the final ending video. videoOverlayActive is QuizGame's roll-up
+  // flag for "any quiz-side overlay is on", so it covers all in-game video
+  // states; we OR the welcome video on top because that runs in GameFlow,
+  // not QuizGame. GameShowAudio reads this flag and reduces playbackRate
+  // to 0.85x for the underscore feel (volume already ducks via VOL_VIDEO_BED).
+  const bgmSuppressForVideo = showWelcomeVideo || videoOverlayActive;
 
   // Welcome video is controlled entirely by phase, so sync it here. Quiz-phase
   // videos (question-intro, reaction) are reported via QuizGame's callback.

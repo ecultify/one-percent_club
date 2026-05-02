@@ -15,11 +15,19 @@ const VO_DUCK_SPEAKING = 0.055;
  *  keep a quiet bed so the room doesn't go dead between phases. The video's own
  *  audio cuts through cleanly because this sits well below dialogue level. */
 const VOL_VIDEO_BED = 0.08;
+/** Playback rate for the BGM bed under any full-screen video (intros,
+ *  reactions, ending). Reduced tempo gives a "movie underscore" feel that
+ *  sits naturally beneath the host's video audio. Keep above ~0.8 to
+ *  avoid the obvious pitch artifact that would otherwise read as "lossy". */
+const RATE_VIDEO_BED = 0.85;
 /** BGM during elimination sequence — slightly higher than video bed since
- *  there's no dialogue to compete with, but still ducked from normal. */
+ *  there's no dialogue to compete with, but still ducked from normal.
+ *  NOTE: tempo stays at 1.0x (no playbackRate change). The earlier 0.85x
+ *  slowdown made the bed feel lossy / pitched-down on the elimination screen,
+ *  even though it was just a tempo stretch — Abhinav called it out as "feels
+ *  like 0.98-0.99x" perception. Volume ducking alone gives the underscore
+ *  feel without the pitch artifact. */
 const VOL_SLOW_MODE = 0.13;
-/** Playback rate during elimination — slower tempo for tension. */
-const RATE_SLOW_MODE = 0.85;
 
 /**
  * One shared HTMLAudioElement for the game-show bed for the whole app lifetime.
@@ -226,12 +234,16 @@ export default function GameShowAudio({
     const duck = hostVoiceDucksBgmRef.current;
     const speaking = isSpeakingRef.current;
     if (suppressForVideo) {
+      // Video underscore: low volume + slowed tempo. Reduced playback rate
+      // gives the bed a cinematic "underscoring" feel beneath the host's
+      // video dialogue without competing with it.
       el.volume = VOL_VIDEO_BED;
-      el.playbackRate = 1;
+      el.playbackRate = RATE_VIDEO_BED;
     } else if (slowMode) {
-      // Elimination sequence: ducked + slow tempo for tension.
+      // Elimination sequence: ducked volume only (tempo stays 1.0x — see
+      // the VOL_SLOW_MODE comment above for the history on why).
       el.volume = VOL_SLOW_MODE;
-      el.playbackRate = RATE_SLOW_MODE;
+      el.playbackRate = 1;
     } else {
       el.volume = duck
         ? speaking
