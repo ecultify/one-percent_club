@@ -157,9 +157,9 @@ const SCENES: Scene[] = [
     ),
   },
 
-  // 1 — 8 SAWAAL — the slam
+  // 1 — 10 SAWAAL — the slam
   {
-    key: "eight-sawaal",
+    key: "ten-sawaal",
     at: 3.0,
     tone: "gold",
     eyebrow: "The count",
@@ -178,7 +178,7 @@ const SCENES: Scene[] = [
               "drop-shadow(0 18px 40px rgba(0,0,0,0.6)) drop-shadow(0 0 60px rgba(228,196,90,0.35))",
           }}
         >
-          <ZText3D>8</ZText3D>
+          <ZText3D>10</ZText3D>
         </motion.span>
         <motion.div
           initial={{ opacity: 0, x: 20 }}
