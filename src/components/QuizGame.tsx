@@ -197,7 +197,8 @@ const QUESTION_PATHS: Record<number, {
 
 function questionIntroVideoSrc(questionIndex: number): string {
   const p = QUESTION_PATHS[questionIndex + 1];
-  return `/questionscreenimages/${p.folder}/${p.intro}`;
+  // Hosted on Cloudflare R2 (bucket: tempstorage), flat layout — filename only.
+  return `https://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev/${p.intro}`;
 }
 
 function questionVoSrc(questionId: number): string {
@@ -213,7 +214,8 @@ function correctReactionSrc(questionIndex: number): string {
     return "https://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev/q10correct.mp4";
   }
   const p = QUESTION_PATHS[questionIndex + 1];
-  return `/questionscreenimages/${p.folder}/${p.correct}`;
+  // Hosted on Cloudflare R2 (bucket: tempstorage), flat layout.
+  return `https://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev/${p.correct}`;
 }
 
 function pickWrongReactionUrl(questionIndex: number): string {
