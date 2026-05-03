@@ -48,32 +48,15 @@ export default function RootLayout({
           as="audio"
           type="audio/mpeg"
         />
-        {/* Preload the cinema-screen JSON so it's already in cache by
-            the time FinalStage3D mounts. Without this the user waits on
-            a cold fetch when they hit the end screen. */}
-        <link
-          rel="preload"
-          href="/animations/end_tvscreen_animate.json"
-          as="fetch"
-          type="application/json"
-          crossOrigin="anonymous"
-        />
         {/* Warm the Unicorn Studio SDK CDN connection so the script
             request hits an established socket. */}
         <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="anonymous" />
-        {/* Preload-warm the AK welcome teaser hosted on Cloudflare R2.
-            Uses as="fetch" instead of as="video" because Chrome does not
-            fully support as="video" (it warns "unsupported as value" and
-            silently skips the preload). as="fetch" treats it as a generic
-            resource preload — when the <video> element later requests the
-            same URL the browser still serves it from cache. */}
-        <link
-          rel="preload"
-          href="https://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev/teaser-video.mp4"
-          as="fetch"
-          type="video/mp4"
-          crossOrigin="anonymous"
-        />
+        {/* Warm a TCP/TLS connection to the R2 video CDN so the first
+            video request (HomeIntroVideo's FullVIDF2.mp4) doesn't pay
+            DNS + TLS RTT cost. preconnect is a tiny request, unlike a
+            full preload which would pull a whole video file eagerly and
+            steal bandwidth from the welcome video that's about to play. */}
+        <link rel="preconnect" href="https://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev" crossOrigin="anonymous" />
       </head>
       <body className="antialiased" style={{ fontFamily: "Arial, Helvetica, sans-serif" }}>
         <NarrationProvider>

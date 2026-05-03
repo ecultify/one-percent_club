@@ -53,15 +53,19 @@ export default function AudioPrimingGate({ children }: { children: React.ReactNo
             // background video (the "1% CLUB" hero letters) fully visible.
             className="fixed inset-0 z-[200] flex flex-col items-center justify-end overflow-hidden bg-[#030208] px-6 pb-[8vh] md:pb-[10vh]"
           >
-            {/* Home page video as the backdrop — sharp, no blur. Muted so it
-                can autoplay before the user grants the audio activation gesture. */}
+            {/* Home page video as the backdrop. Muted so it can autoplay
+                before the user grants the audio activation gesture.
+                preload="metadata" (was "auto") so we don't pull the entire
+                file from R2 while the user is on the gate for 1-3 seconds.
+                The browser will stream just-in-time once autoplay kicks in,
+                and the gate dismisses long before the full file is needed. */}
             <video
               src="https://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev/homepagevideo.mp4"
               autoPlay
               muted
               loop
               playsInline
-              preload="auto"
+              preload="metadata"
               aria-hidden
               className="pointer-events-none absolute inset-0 h-full w-full object-cover"
             />

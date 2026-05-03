@@ -97,21 +97,62 @@ function warmOne(url: string): void {
 }
 
 /**
- * Kick off the audio prewarm. Idempotent — safe to call multiple times.
+ * Kick off the audio prewarm. Idempotent: safe to call multiple times.
  * Call from AudioPrimingGate after the user grants the audio activation
  * gesture (so any browser that gates fetch() on user activation also
  * lets these requests through immediately).
+ *
+ * Bandwidth strategy:
+ *   - Tier 1 fires immediately. Small SFX files, ~10 of them. Browser
+ *     queues beyond 6 concurrent connections per origin so they finish
+ *     in 2-3 waves.
+ *   - Tier 2 (per-question VOs) waits for the home intro video to fire
+ *     "homevideo:enter-cue", which is the moment the welcome hero beat
+ *     completes and the Enter button surfaces. By that time the welcome
+ *     video has finished its critical playback window and bandwidth is
+ *     free for the next tier.
+ *   - Within Tier 2, files load in batches of 2 with a 4s stagger. Since
+ *     the user spends ~30s on each question, q3+q4 only need to be in
+ *     cache 60s after the user reaches Q1. Loading all 10 in parallel
+ *     was wasting bandwidth that the welcome video and home loop video
+ *     needed.
+ *   - Fallback: if "homevideo:enter-cue" never fires (e.g., the dev
+ *     ?devq=N quick-jump skips HomeIntroVideo entirely), Tier 2 starts
+ *     after a 15s safety timer.
  */
 export function preloadAllAudioAssets(): void {
   if (typeof window === "undefined") return;
   if (preloadStarted) return;
   preloadStarted = true;
 
-  // Tier 1: eager — fetch right now.
+  // Tier 1: eager. Critical SFX needed in first 30 seconds.
   for (const url of TIER_1_CRITICAL_AUDIO) warmOne(url);
 
-  // Tier 2: deferred to next macrotask so Tier 1 has bandwidth priority.
-  window.setTimeout(() => {
-    for (const url of TIER_2_QUESTION_VOS) warmOne(url);
-  }, 0);
+  // Tier 2: gated on the home video signaling its hero beat is done.
+  let tier2Started = false;
+  // window.setTimeout returns number (DOM lib). The Node global setTimeout
+  // returns NodeJS.Timeout — these conflict in a Next.js TS project, so we
+  // pin to number explicitly to match window.setTimeout / window.clearTimeout.
+  let tier2Fallback: number | undefined;
+  const startTier2 = () => {
+    if (tier2Started) return;
+    tier2Started = true;
+    window.removeEventListener("homevideo:enter-cue", startTier2);
+    if (tier2Fallback !== undefined) window.clearTimeout(tier2Fallback);
+
+    // Stagger in batches of 2 with a 4s gap. q1+q2 fire at t=0, q3+q4 at
+    // t=4s, etc. Maximum 2 concurrent question-VO downloads so the home
+    // loop video and any user-triggered audio cues stay smooth.
+    const STAGGER_MS = 4000;
+    for (let i = 0; i < TIER_2_QUESTION_VOS.length; i += 2) {
+      window.setTimeout(() => {
+        const batch = TIER_2_QUESTION_VOS.slice(i, i + 2);
+        for (const url of batch) warmOne(url);
+      }, (i / 2) * STAGGER_MS);
+    }
+  };
+
+  window.addEventListener("homevideo:enter-cue", startTier2, { once: true });
+  // Safety net for non-standard entry paths (e.g., ?devq=N skips home video).
+  tier2Fallback = window.setTimeout(startTier2, 15000);
 }
