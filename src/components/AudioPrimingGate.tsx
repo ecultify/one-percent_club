@@ -60,7 +60,7 @@ export default function AudioPrimingGate({ children }: { children: React.ReactNo
                 The browser will stream just-in-time once autoplay kicks in,
                 and the gate dismisses long before the full file is needed. */}
             <video
-              src="https://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev/homepagevideo.mp4"
+              src="/homepagevideo.mp4"
               autoPlay
               muted
               loop
