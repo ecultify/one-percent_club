@@ -69,7 +69,7 @@ export default function RootLayout({
             same URL the browser still serves it from cache. */}
         <link
           rel="preload"
-          href="https://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev/teaser-video.mp4"
+          href="https://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.devhttps://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev/teaser-video.mp4"
           as="fetch"
           type="video/mp4"
           crossOrigin="anonymous"

@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useNarration } from "./NarrationProvider";
 
-const HOME_VIDEO_SRC = "/questionscreenimages/FullVIDF2.mp4";
-const LOOP_VIDEO_SRC = "/questionscreenimages/LastVid2.mp4";
+const HOME_VIDEO_SRC = "https://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev/FullVIDF2.mp4";
+const LOOP_VIDEO_SRC = "https://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev/LastVid2.mp4";
 const DHAK_SRC = "/sound/dhak.wav";
 
 /** Dhak hits at these video timestamps (seconds). Tightened sequence per

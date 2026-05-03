@@ -51,8 +51,8 @@ const SFX_APPLAUSE = encodeURI("/sound/appluase2.wav");
  *    - Any-wrong  → endvoifevenonewrong.mp4 (the consolation tail)
  *  Resolved at render time by `pickFinalVideoSrc(playerCorrect)` below
  *  so the right clip mounts the moment the user clicks "See end screen". */
-const FINAL_VIDEO_SRC_ALL_CORRECT = encodeURI("/questionscreenimages/endingvoifallcorrect.mp4");
-const FINAL_VIDEO_SRC_IF_ANY_WRONG = encodeURI("/questionscreenimages/endvoifevenonewrong.mp4");
+const FINAL_VIDEO_SRC_ALL_CORRECT = encodeURI("https://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev/endingvoifallcorrect.mp4");
+const FINAL_VIDEO_SRC_IF_ANY_WRONG = encodeURI("https://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev/endvoifevenonewrong.mp4");
 function pickFinalVideoSrc(playerCorrect: boolean[]): string {
   const allCorrect =
     playerCorrect.length === QUESTIONS.length &&
@@ -210,7 +210,7 @@ function correctReactionSrc(questionIndex: number): string {
   // 1% Club celebratory video inside the question10 folder.
   // Confetti is dropped from the top for the first 10s in QuizGame.
   if (questionIndex === QUESTIONS.length - 1) {
-    return "/questionscreenimages/question10(onepercent-1)/q10correct.mp4";
+    return "https://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev/q10correct.mp4";
   }
   const p = QUESTION_PATHS[questionIndex + 1];
   return `/questionscreenimages/${p.folder}/${p.correct}`;
@@ -218,11 +218,11 @@ function correctReactionSrc(questionIndex: number): string {
 
 function pickWrongReactionUrl(questionIndex: number): string {
   if (questionIndex === QUESTIONS.length - 1) {
-    return "/questionscreenimages/wrongrxns/1percentwrongmodified.mp4";
+    return "https://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev/1percentwrongmodified.mp4";
   }
   const templates = [
-    "/questionscreenimages/wrongrxns/qwrong1.mp4",
-    "/questionscreenimages/wrongrxns/qwrong2.mp4",
+    "https://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev/qwrong1.mp4",
+    "https://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev/qwrong2.mp4",
   ];
   return templates[Math.floor(Math.random() * templates.length)];
 }
@@ -1852,7 +1852,7 @@ function FinalResult({
       {/* ━━ Layer 0: looping question-screen stage video (same one used during
               gameplay) so the final summary sits in the same world. ━━ */}
       <video
-        src={encodeURI("/new videos/bgvideo (1).mp4")}
+        src={encodeURI("https://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev/bgvideo (1).mp4")}
         autoPlay
         loop
         muted

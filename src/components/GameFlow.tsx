@@ -26,9 +26,9 @@ const Logo3D = dynamic(() => import("./Logo3D"), { ssr: false });
 const DETAILS_INSTRUCTIONS_BG = `/questionscreenimages/${encodeURIComponent("Gemini_Generated_Image_i8attui8attui8at-ezremove.png")}`;
 
 /** Teaser that plays after the scrolly canvas / Start Experience. Served
- *  directly from /public/teaser-video.mp4. To swap the teaser, drop a new
+ *  directly from /publichttps://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev/teaser-video.mp4. To swap the teaser, drop a new
  *  file at the same path — no code changes, no dev-server restart needed. */
-const WELCOME_VIDEO_SRC = "https://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev/teaser-video.mp4";
+const WELCOME_VIDEO_SRC = "https://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.devhttps://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev/teaser-video.mp4";
 
 const DHAK_SRC = "/sound/dhak.wav";
 /** Story frames 25 and 79 (1-based) → zero-based scrolly indices. */

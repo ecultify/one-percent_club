@@ -56,7 +56,7 @@ export default function AudioPrimingGate({ children }: { children: React.ReactNo
             {/* Home page video as the backdrop — sharp, no blur. Muted so it
                 can autoplay before the user grants the audio activation gesture. */}
             <video
-              src="/homepagevideo.mp4"
+              src="https://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev/homepagevideo.mp4"
               autoPlay
               muted
               loop
