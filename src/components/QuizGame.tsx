@@ -207,10 +207,10 @@ function questionVoSrc(questionId: number): string {
 
 function correctReactionSrc(questionIndex: number): string {
   // The final question's "winner" correct-reaction is the dedicated
-  // 1% Club celebratory video at the top level of /questionscreenimages.
+  // 1% Club celebratory video inside the question10 folder.
   // Confetti is dropped from the top for the first 10s in QuizGame.
   if (questionIndex === QUESTIONS.length - 1) {
-    return "/questionscreenimages/1percentfinalcorrect.mp4";
+    return "/questionscreenimages/question10(onepercent-1)/q10correct.mp4";
   }
   const p = QUESTION_PATHS[questionIndex + 1];
   return `/questionscreenimages/${p.folder}/${p.correct}`;
@@ -1450,7 +1450,15 @@ export default function QuizGame({
                 if (reactionOutroArmedRef.current) return;
                 const el = e.currentTarget;
                 if (!Number.isFinite(el.duration) || el.duration <= 0) return;
-                if (el.duration - el.currentTime <= 1.05) {
+                // Per-question outro lead time (seconds before reaction-video
+                // end at which the panel slide-out + black wipe arm). Default
+                // 0.5s — panel stays visible longer so explanations get full
+                // reading time. Q2 (Gandhi) gets an even tighter 0.25s lead
+                // because its panel is image + caption (more to take in than
+                // a one-line text reasoning).
+                const qid = gameState.currentQuestion + 1;
+                const reactionLeadSec = qid === 2 ? 0.25 : 0.5;
+                if (el.duration - el.currentTime <= reactionLeadSec) {
                   reactionOutroArmedRef.current = true;
                   setReactionOutroActive(true);
                 }

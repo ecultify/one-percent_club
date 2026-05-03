@@ -68,7 +68,7 @@ const PANEL_CONTENT: Record<number, PanelContent> = {
     type: "text",
     answer: "A",
     reasoning:
-      "Only A is an actual square. B and C are rectangles, so the question only applies to A by default. The trick is in noticing which shapes qualify.",
+      "Only A is an actual square. B is a rectangle and C is a rhombus, so neither qualifies. The question only applies to A by default. The trick is in noticing which shapes are actually squares.",
   },
   6: {
     type: "text",

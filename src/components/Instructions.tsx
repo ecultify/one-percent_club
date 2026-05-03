@@ -101,7 +101,7 @@ export function buildInstructionsNarration(name: string) {
   const first = firstNameOf(name);
   return (
     `${first}, ab suniye game kaise khelna hai. ` +
-    `Yeh khel aath sawaalon ka hai. Har sawaal ke saath ek percentage diya hoga. ` +
+    `Yeh khel das sawaalon ka hai. Har sawaal ke saath ek percentage diya hoga. ` +
     `Yeh percentage batata hai ki India mein kitne log yeh sawaal sahi kar sakte hain. ` +
     `Pehla sawaal nabbe percent ka, kaafi aasaan. ` +
     `Aur aakhri sawaal sirf ek percent ka. Sirf ek percent log usse crack kar paate hain. ` +
@@ -164,7 +164,7 @@ const SCENES: Scene[] = [
     tone: "gold",
     eyebrow: "The count",
     recapNarration: () =>
-      `Poora game aath sawaalon ka hai — ek ke baad ek, bilkul seedhi line mein.`,
+      `Poora game das sawaalon ka hai — ek ke baad ek, bilkul seedhi line mein.`,
     render: () => (
       <div className="flex items-baseline justify-center gap-6 md:gap-10">
         <motion.span

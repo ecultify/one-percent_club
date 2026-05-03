@@ -11,7 +11,7 @@ const READY_BG = `/questionscreenimages/${encodeURIComponent("Gemini_Generated_I
 
 const ASSETS = {
   players: "/questionscreenimages/100.png",
-  questions: "/questionscreenimages/8.png",
+  questions: "/questionscreenimages/10.png",
   prize: "/questionscreenimages/1cr.png",
 } as const;
 
@@ -27,7 +27,7 @@ interface StatTileProps {
   delay?: number;
 }
 
-/** One square tile — ascending stage stats left → right: 8 questions, 100 players, prize. */
+/** One square tile — ascending stage stats left → right: 10 questions, 100 players, prize. */
 function StatTile({ src, caption, delay = 0 }: StatTileProps) {
   return (
     <motion.div
