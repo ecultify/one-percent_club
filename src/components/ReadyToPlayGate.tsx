@@ -25,10 +25,13 @@ interface StatTileProps {
   src: string;
   caption: string;
   delay?: number;
+  /** Resting scale for the inner glyph image. Default 1.22 (large fill).
+   *  Use a smaller value for wider glyphs (e.g. "10" reads better at 1.0). */
+  imgScale?: number;
 }
 
 /** One square tile — ascending stage stats left → right: 10 questions, 100 players, prize. */
-function StatTile({ src, caption, delay = 0 }: StatTileProps) {
+function StatTile({ src, caption, delay = 0, imgScale = 1.22 }: StatTileProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 24 }}
@@ -54,10 +57,11 @@ function StatTile({ src, caption, delay = 0 }: StatTileProps) {
               alt=""
               draggable={false}
               className="h-full w-auto max-h-[92%] max-w-[92%] object-contain object-center"
-              // Larger overshoot + larger resting scale so the glyph fills
-              // most of the tile. Was 1.06 → 1; now 1.3 → 1.22.
-              initial={{ scale: 1.3, opacity: 0 }}
-              animate={{ scale: 1.22, opacity: 1 }}
+              // Larger overshoot + resting scale so the glyph fills most
+              // of the tile. The overshoot is computed proportionally from
+              // imgScale (overshoot is ~6.5% bigger than rest).
+              initial={{ scale: imgScale * 1.065, opacity: 0 }}
+              animate={{ scale: imgScale, opacity: 1 }}
               transition={{ duration: 0.55, delay: delay + 0.12, ease: EASE_EXPO }}
               style={{ transformOrigin: "center" }}
             />
@@ -192,7 +196,7 @@ export default function ReadyToPlayGate({ onStart }: ReadyToPlayGateProps) {
         </motion.div>
 
         <div className="flex w-full max-w-[min(96vw,1040px)] flex-row items-stretch justify-center gap-2.5 sm:gap-4 md:gap-6 lg:gap-8">
-          <StatTile src={ASSETS.questions} caption="Questions" delay={0.16} />
+          <StatTile src={ASSETS.questions} caption="Questions" delay={0.16} imgScale={0.95} />
           <StatTile src={ASSETS.players} caption="Contestants" delay={0.28} />
           <StatTile src={ASSETS.prize} caption="Cash prize" delay={0.4} />
         </div>

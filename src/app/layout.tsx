@@ -62,13 +62,15 @@ export default function RootLayout({
             request hits an established socket. */}
         <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="anonymous" />
         {/* Preload-warm the AK welcome teaser hosted on Cloudflare R2.
-            crossOrigin="anonymous" is required for cross-origin preloads.
-            By the time the user reaches the welcome-video phase, the file
-            should be cached and playback starts instantly. */}
+            Uses as="fetch" instead of as="video" because Chrome does not
+            fully support as="video" (it warns "unsupported as value" and
+            silently skips the preload). as="fetch" treats it as a generic
+            resource preload — when the <video> element later requests the
+            same URL the browser still serves it from cache. */}
         <link
           rel="preload"
           href="https://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev/teaser-video.mp4"
-          as="video"
+          as="fetch"
           type="video/mp4"
           crossOrigin="anonymous"
         />
