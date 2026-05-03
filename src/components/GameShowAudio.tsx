@@ -15,11 +15,15 @@ const VO_DUCK_SPEAKING = 0.055;
  *  keep a quiet bed so the room doesn't go dead between phases. The video's own
  *  audio cuts through cleanly because this sits well below dialogue level. */
 const VOL_VIDEO_BED = 0.08;
-/** Playback rate for the BGM bed under any full-screen video (intros,
- *  reactions, ending). Reduced tempo gives a "movie underscore" feel that
- *  sits naturally beneath the host's video audio. Keep above ~0.8 to
- *  avoid the obvious pitch artifact that would otherwise read as "lossy". */
-const RATE_VIDEO_BED = 0.85;
+/** Playback rate for the BGM bed under any full-screen video.
+ *  Kept at 1.0 — Abhinav called out (May 2026) that the earlier 0.85x
+ *  slowdown made the theme sound "lossy / pitched down" rather than
+ *  "ducked". This was the same complaint that previously led us to
+ *  remove playbackRate from VOL_SLOW_MODE (elimination). Volume ducking
+ *  alone (VOL_VIDEO_BED) provides the underscore feel without any pitch
+ *  artifact. Do NOT re-introduce a sub-1.0 rate here without explicit
+ *  signoff. */
+const RATE_VIDEO_BED = 1;
 /** BGM during elimination sequence — slightly higher than video bed since
  *  there's no dialogue to compete with, but still ducked from normal.
  *  NOTE: tempo stays at 1.0x (no playbackRate change). The earlier 0.85x
@@ -234,9 +238,11 @@ export default function GameShowAudio({
     const duck = hostVoiceDucksBgmRef.current;
     const speaking = isSpeakingRef.current;
     if (suppressForVideo) {
-      // Video underscore: low volume + slowed tempo. Reduced playback rate
-      // gives the bed a cinematic "underscoring" feel beneath the host's
-      // video dialogue without competing with it.
+      // Video underscore: ducked volume only. Tempo stays at 1.0x because
+      // any playbackRate < 1 reads to the ear as "the music is broken /
+      // pitched down" rather than "the music is quieter". Volume ducking
+      // alone gives the cinematic underscore feel beneath the host's
+      // video dialogue.
       el.volume = VOL_VIDEO_BED;
       el.playbackRate = RATE_VIDEO_BED;
     } else if (slowMode) {
