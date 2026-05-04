@@ -195,6 +195,39 @@ const QUESTION_PATHS: Record<number, {
   },
 };
 
+/** Inject a `<link rel="preload" as="video">` into the document head so
+ *  the browser fetches the named video in the background. Used to prime
+ *  the next question's intro + reactions while the current question is
+ *  on screen — eliminates the cold network start that was visible on
+ *  every question transition. Idempotent (uses an id-keyed dedupe so
+ *  re-renders don't stack duplicate <link> tags) and SSR-safe. */
+function preloadVideo(src: string): void {
+  if (typeof document === "undefined") return;
+  const id = `vpreload-${src}`;
+  if (document.getElementById(id)) return;
+  const link = document.createElement("link");
+  link.id = id;
+  link.rel = "preload";
+  link.as = "video";
+  link.href = src;
+  // No crossOrigin — videos here are same-origin (/public served by Vercel)
+  // OR R2 public-dev URL. R2 doesn't return Access-Control-Allow-Origin
+  // headers on the dev URL, so a CORS preload would be blocked. Same
+  // pattern we already validated for the layout.tsx <video> preload tag.
+  document.head.appendChild(link);
+}
+
+/** Returns the poster image path for a given video src by appending
+ *  ".poster.jpg". The convention is set up by the Phase-2 ffmpeg poster
+ *  extraction script — every video file in /public has a sibling
+ *  <filename>.poster.jpg co-located with it. The poster paints
+ *  immediately on <video> mount while the actual stream loads, so the
+ *  first frame is never a black flash. For dynamic-src videos (intro,
+ *  reaction, final), pass the same src binding to this helper. */
+function posterForVideo(videoSrc: string): string {
+  return `${videoSrc}.poster.jpg`;
+}
+
 function questionIntroVideoSrc(questionIndex: number): string {
   const p = QUESTION_PATHS[questionIndex + 1];
   // Hosted on Cloudflare R2 (bucket: tempstorage), flat layout — filename only.
@@ -808,6 +841,41 @@ export default function QuizGame({
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
+  }, []);
+
+  // ─── Preload-next pattern ─────────────────────────────────────────
+  // Eliminates the cold-network-start gap on every question transition.
+  // We inject <link rel="preload" as="video"> tags for the next
+  // question's intro + correct reaction whenever the current question
+  // changes, so by the time the user actually answers, the next clip's
+  // first kilobytes (and ideally the moov atom + initial keyframe) are
+  // already in the browser HTTP cache. Wrong-reaction clips are a
+  // small static pool (qwrong1, qwrong2) so we prime them once on
+  // mount and let cache do the rest.
+  // ──────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const nextIdx = gameState.currentQuestion + 1;
+    if (nextIdx < QUESTIONS.length) {
+      preloadVideo(questionIntroVideoSrc(nextIdx));
+      preloadVideo(correctReactionSrc(nextIdx));
+    }
+    // Wrong-reactions are a static pool used across most questions —
+    // worth keeping warm regardless of which question is active.
+    preloadVideo("/questionscreenimages/wrongrxns/qwrong1.mp4");
+    preloadVideo("/questionscreenimages/wrongrxns/qwrong2.mp4");
+  }, [gameState.currentQuestion]);
+
+  // One-time mount priming. Even Q1's intro should be in cache before
+  // the user finishes the welcome flow + instructions. Also pre-warms
+  // the final-question wrong reaction (1percentwrongmodified.mp4)
+  // because that clip is large (12 MB) and used at the climax — no
+  // budget for a cold fetch at that moment.
+  useEffect(() => {
+    preloadVideo(questionIntroVideoSrc(0));
+    preloadVideo(correctReactionSrc(0));
+    preloadVideo("/questionscreenimages/wrongrxns/qwrong1.mp4");
+    preloadVideo("/questionscreenimages/wrongrxns/qwrong2.mp4");
+    preloadVideo("/questionscreenimages/wrongrxns/1percentwrongmodified.mp4");
   }, []);
 
   // Narrate each question as it comes up (only after tour is done).
@@ -1453,6 +1521,7 @@ export default function QuizGame({
             <video
               ref={introVideoRef}
               key={introVideoSrc}
+              poster={posterForVideo(introVideoSrc)}
               className="w-full h-full object-cover"
               autoPlay
               playsInline
@@ -1505,6 +1574,7 @@ export default function QuizGame({
             <video
               ref={reactionVideoRef}
               key={reactionVideoSrc}
+              poster={posterForVideo(reactionVideoSrc)}
               className="w-full h-full object-cover"
               autoPlay
               playsInline
@@ -1584,6 +1654,7 @@ export default function QuizGame({
             <video
               ref={finalVideoRef}
               key={finalVideoSrc}
+              poster={posterForVideo(finalVideoSrc)}
               className="w-full h-full object-cover"
               autoPlay
               playsInline
@@ -1917,6 +1988,7 @@ function FinalResult({
               gameplay) so the final summary sits in the same world. ━━ */}
       <video
         src={encodeURI("/new videos/bgvideo (1).mp4")}
+        poster={encodeURI("/new videos/bgvideo (1).mp4.poster.jpg")}
         autoPlay
         loop
         muted

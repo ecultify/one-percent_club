@@ -57,6 +57,7 @@ export default function AudioPrimingGate({ children }: { children: React.ReactNo
                 attribute — browser default kicks in. */}
             <video
               src="/homepagevideo.mp4"
+              poster="/homepagevideo.mp4.poster.jpg"
               autoPlay
               muted
               loop

@@ -25,11 +25,15 @@ const Logo3D = dynamic(() => import("./Logo3D"), { ssr: false });
 /** Studio backdrop for registration (details) + instructions — rendered blurred beneath the content. */
 const DETAILS_INSTRUCTIONS_BG = `/questionscreenimages/${encodeURIComponent("Gemini_Generated_Image_i8attui8attui8at-ezremove.png")}`;
 
-/** Teaser that plays after the scrolly canvas / Start Experience. Hosted
- *  on Cloudflare R2 at pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev/teaser-video.mp4.
- *  To swap the teaser, re-upload to the same key in the bucket. No code
- *  changes, no dev-server restart needed. */
-const WELCOME_VIDEO_SRC = "https://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev/teaser-video.mp4";
+/** Teaser that plays after the scrolly canvas / Start Experience. Served
+ *  from /public/teaser-video.mp4 — same-origin, Vercel CDN, no R2
+ *  cold-edge variance. Was previously on R2 at pub-...r2.dev/teaser-
+ *  video.mp4 but moved local for consistent first-byte latency. To
+ *  swap the teaser, drop a new file at the same /public path. */
+const WELCOME_VIDEO_SRC = "/teaser-video.mp4";
+/** Poster extracted from the same local video file. Co-located with the
+ *  source via the .poster.jpg suffix convention used across the app. */
+const WELCOME_VIDEO_POSTER = "/teaser-video.mp4.poster.jpg";
 
 const DHAK_SRC = "/sound/dhak.wav";
 /** Story frames 25 and 79 (1-based) → zero-based scrolly indices. */
@@ -795,6 +799,7 @@ export default function GameFlow() {
           >
             <video
               ref={welcomeVideoRef}
+              poster={WELCOME_VIDEO_POSTER}
               className="w-full h-full object-cover"
               autoPlay
               playsInline

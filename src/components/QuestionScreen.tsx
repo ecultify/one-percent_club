@@ -994,6 +994,7 @@ export default function QuestionScreen({
       {/* ━━ Full-bleed stage BG — looping video that plays throughout the journey ━━ */}
       <video
         src={encodeURI("/new videos/bgvideo (1).mp4")}
+        poster={encodeURI("/new videos/bgvideo (1).mp4.poster.jpg")}
         autoPlay
         loop
         muted

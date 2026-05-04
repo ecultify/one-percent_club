@@ -774,6 +774,7 @@ export default function Instructions({ playerName, onStart }: InstructionsProps)
           live broadcast rather than a separate static screen. */}
       <video
         src={encodeURI("/new videos/bgvideo (1).mp4")}
+        poster={encodeURI("/new videos/bgvideo (1).mp4.poster.jpg")}
         autoPlay
         loop
         muted

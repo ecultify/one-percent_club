@@ -4,7 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { useNarration } from "./NarrationProvider";
 
 const HOME_VIDEO_SRC = "/questionscreenimages/FullVIDF2.mp4";
+const HOME_VIDEO_POSTER = "/questionscreenimages/FullVIDF2.mp4.poster.jpg";
 const LOOP_VIDEO_SRC = "/questionscreenimages/LastVid2.mp4";
+const LOOP_VIDEO_POSTER = "/questionscreenimages/LastVid2.mp4.poster.jpg";
 const DHAK_SRC = "/sound/dhak.wav";
 
 /** Dhak hits at these video timestamps (seconds). Tightened sequence per
@@ -142,6 +144,7 @@ export default function HomeIntroVideo() {
       <video
         ref={videoRef}
         src={HOME_VIDEO_SRC}
+        poster={HOME_VIDEO_POSTER}
         loop={false}
         playsInline
         preload="auto"
@@ -157,6 +160,7 @@ export default function HomeIntroVideo() {
       <video
         ref={loopVideoRef}
         src={LOOP_VIDEO_SRC}
+        poster={LOOP_VIDEO_POSTER}
         loop
         playsInline
         preload="metadata"

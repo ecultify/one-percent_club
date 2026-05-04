@@ -51,12 +51,8 @@ export default function RootLayout({
         {/* Warm the Unicorn Studio SDK CDN connection so the script
             request hits an established socket. */}
         <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="anonymous" />
-        {/* Warm a TCP/TLS connection to the R2 video CDN so the first
-            video request (HomeIntroVideo's FullVIDF2.mp4) doesn't pay
-            DNS + TLS RTT cost. preconnect is a tiny request, unlike a
-            full preload which would pull a whole video file eagerly and
-            steal bandwidth from the welcome video that's about to play. */}
-        <link rel="preconnect" href="https://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev" crossOrigin="anonymous" />
+{/* R2 preconnect removed — all videos are now served from same-origin
+            /public via Vercel CDN. Nothing fetches from R2 anymore. */}
       </head>
       <body className="antialiased" style={{ fontFamily: "Arial, Helvetica, sans-serif" }}>
         <NarrationProvider>
