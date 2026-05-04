@@ -825,20 +825,47 @@ export default function QuizGame({
     if (!q) return;
 
     let cancelled = false;
-    setNarratingQuestion(true);
-    const delayMs = 2000;
-    const delayId = window.setTimeout(() => {
+    // window.setTimeout returns number (DOM lib); Node global setTimeout returns NodeJS.Timeout — pin to number.
+    let delayId: number | undefined;
+
+    // ─── Phase-transition contention fix ──────────────────────────────
+    // This effect runs at the EXACT moment the QuestionScreen + its
+    // bgvideo are mounting (phase just flipped from "question-intro" to
+    // "question"). Firing `setNarratingQuestion(true)` synchronously
+    // re-renders the 2040-line QuizGame component while the video
+    // element is trying to attach + call play(). React's reconciliation
+    // for that tree size blocks the main thread for 50-150ms. The
+    // browser silently rejects autoplay (or stalls mid-playback) when
+    // play() lands during a long main-thread block — this is the cause
+    // of the "video sometimes gets stuck" symptom that the watchdog at
+    // line 925 was built to recover from.
+    //
+    // Deferring the state update + narration scheduling to a 50ms macro-
+    // task lets React commit, the browser paint, and the new video
+    // element's decoder spin up first. Then our state work lands when
+    // the video is already playing smoothly. The 50ms delay is imper-
+    // ceptible to the user (narration was already on a 2s timer) and
+    // costs nothing perceptually. Cleanup is intentionally still sync —
+    // tearing down the previous narration must happen immediately on
+    // phase change to avoid double-narration races.
+    // ──────────────────────────────────────────────────────────────────
+    const deferredId = window.setTimeout(() => {
       if (cancelled) return;
-      const vo = questionVoSrc(q.id);
-      const done = narrateUrl(`q-${q.id}-vo`, vo);
-      void done.then(() => {
-        if (!cancelled) setNarratingQuestion(false);
-      });
-    }, delayMs);
+      setNarratingQuestion(true);
+      delayId = window.setTimeout(() => {
+        if (cancelled) return;
+        const vo = questionVoSrc(q.id);
+        const done = narrateUrl(`q-${q.id}-vo`, vo);
+        void done.then(() => {
+          if (!cancelled) setNarratingQuestion(false);
+        });
+      }, 2000);
+    }, 50);
 
     return () => {
       cancelled = true;
-      window.clearTimeout(delayId);
+      window.clearTimeout(deferredId);
+      if (delayId !== undefined) window.clearTimeout(delayId);
       stop();
       setNarratingQuestion(false);
     };
