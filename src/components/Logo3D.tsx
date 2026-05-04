@@ -251,21 +251,30 @@ export default function Logo3D({ settled, className, style, onReady }: Logo3DPro
       tryLoad();
 
       // ── Render loop ──
+      // Spin while center-stage (settled=false, logo-enter / logo-center).
+      // Once the logo flies to the navbar (settled=true), snap to a clean
+      // front-facing pose, draw ONE final frame, and STOP the rAF loop.
+      // This removes a continuous main-thread + WebGL workload that was
+      // running through every quiz phase, including reaction-video playback.
       function animate() {
-        state.frameId = requestAnimationFrame(animate);
         const delta = clock.getDelta();
-        const elapsed = clock.getElapsedTime();
 
         if (state.model) {
-          // Clean Y-axis turntable spin (model is centered at origin via pivot)
-          const speed = settledRef.current ? 1.2 : 2.0;
-          state.model.rotation.y += delta * speed;
-          // Keep X and Z level (no wobble)
+          if (settledRef.current) {
+            // Settled in the navbar: lock to front-facing, render once, stop.
+            state.model.rotation.set(0, 0, 0);
+            renderer.render(scene, camera);
+            state.frameId = 0;
+            return;
+          }
+          // Not yet settled: clean turntable spin around Y.
+          state.model.rotation.y += delta * 2.0;
           state.model.rotation.x = 0;
           state.model.rotation.z = 0;
         }
 
         renderer.render(scene, camera);
+        state.frameId = requestAnimationFrame(animate);
       }
       animate();
 
