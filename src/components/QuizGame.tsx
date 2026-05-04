@@ -1394,7 +1394,7 @@ export default function QuizGame({
               className="w-full h-full object-cover"
               autoPlay
               playsInline
-              preload="auto"
+              preload="metadata"
               muted={muted}
               onTimeUpdate={(e) => {
                 if (introOutroArmedRef.current) return;
@@ -1446,7 +1446,7 @@ export default function QuizGame({
               className="w-full h-full object-cover"
               autoPlay
               playsInline
-              preload="auto"
+              preload="metadata"
               muted={muted}
               onTimeUpdate={(e) => {
                 if (reactionOutroArmedRef.current) return;
@@ -1525,7 +1525,7 @@ export default function QuizGame({
               className="w-full h-full object-cover"
               autoPlay
               playsInline
-              preload="auto"
+              preload="metadata"
               muted={muted}
               onTimeUpdate={(e) => {
                 if (finalVideoOutroArmedRef.current) return;
@@ -1859,7 +1859,7 @@ function FinalResult({
         loop
         muted
         playsInline
-        preload="auto"
+        preload="metadata"
         className="pointer-events-none absolute inset-0 h-full w-full object-cover select-none"
         aria-hidden
       />

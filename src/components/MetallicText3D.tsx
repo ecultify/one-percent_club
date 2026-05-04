@@ -284,13 +284,19 @@ export function CursorGoldDust() {
   useEffect(() => {
     const handlePointerMove = (e: PointerEvent) => {
       const now = performance.now();
-      if (now - lastEmitRef.current < 35) return;
+      // Throttle raised 35ms (~28Hz) -> 60ms (~16Hz). Each particle is a
+      // DOM node with framer-motion + radial-gradient + mix-blend-mode at
+      // z-9000, which forces its own GPU compositor layer. Spawning fewer
+      // per move dramatically cuts compositor work during gameplay.
+      if (now - lastEmitRef.current < 60) return;
       lastEmitRef.current = now;
 
       const id = idRef.current++;
       const drift = (Math.random() - 0.5) * 36;
       const size = 3 + Math.random() * 4;
-      const duration = 650 + Math.random() * 400;
+      // Lifetime 650-1050ms -> 400-600ms. Combined with throttle raise,
+      // peak simultaneous particles drops from ~25 to ~10.
+      const duration = 400 + Math.random() * 200;
 
       setParticles((prev) => [
         ...prev,
@@ -320,7 +326,10 @@ export function CursorGoldDust() {
             background:
               "radial-gradient(circle, rgba(255,250,210,1) 0%, rgba(245,215,110,0.95) 35%, rgba(180,130,40,0) 100%)",
             mixBlendMode: "screen",
-            boxShadow: `0 0 ${p.size * 3}px ${p.size * 0.5}px rgba(245,215,110,0.55)`,
+            // Removed boxShadow blur. boxShadow + blur + mix-blend-mode +
+            // z-9000 forced a separate compositor layer per particle that
+            // was repainted every frame. The radial-gradient already
+            // provides core glow without the GPU cost.
           }}
           initial={{ opacity: 0.95, scale: 1, x: 0, y: 0 }}
           animate={{

@@ -778,7 +778,7 @@ export default function Instructions({ playerName, onStart }: InstructionsProps)
         loop
         muted
         playsInline
-        preload="auto"
+        preload="metadata"
         className="pointer-events-none absolute inset-0 z-0 h-full w-full object-cover select-none"
         aria-hidden
       />

@@ -144,7 +144,7 @@ export default function HomeIntroVideo() {
         src={HOME_VIDEO_SRC}
         loop={false}
         playsInline
-        preload="auto"
+        preload="metadata"
         onTimeUpdate={handleTimeUpdate}
         onEnded={handleEnded}
         className="absolute inset-0 h-full w-full object-cover"
@@ -159,7 +159,7 @@ export default function HomeIntroVideo() {
         src={LOOP_VIDEO_SRC}
         loop
         playsInline
-        preload="auto"
+        preload="metadata"
         className="absolute inset-0 h-full w-full object-cover"
         style={{
           opacity: loopActive ? 1 : 0,

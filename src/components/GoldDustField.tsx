@@ -96,6 +96,46 @@ export default function GoldDustField({
     });
     for (let i = 0; i < count; i++) particles.push(spawn(true));
 
+    // Pre-render two particle sprites (one per gold tone) onto offscreen
+    // canvases. The render loop uses drawImage instead of recreating a
+    // radial gradient per particle per frame. createRadialGradient + arc
+    // fill per particle was burning ~25-40% of frame budget at 55
+    // particles × 60fps. drawImage from a cached canvas is a near-free
+    // GPU blit. Visual delta: instead of continuous interpolation between
+    // COLOR_A and COLOR_B, particles bucket into one of two tones based
+    // on hueShift > 0.5. At particle scale (0.6-2.4 px core, 9 px glow)
+    // this is imperceptible.
+    const SPRITE_SIZE = 64;
+    const SPRITE_CENTER = SPRITE_SIZE / 2;
+    // Original: glow at radius p.size * 4.5, core at p.size. Sprite must
+    // preserve the same ratio so visual identity holds across all sizes.
+    const SPRITE_CORE_RADIUS = SPRITE_CENTER / 4.5;
+    const buildSprite = (color: { r: number; g: number; b: number }) => {
+      const c = document.createElement("canvas");
+      c.width = c.height = SPRITE_SIZE;
+      const cx = c.getContext("2d");
+      if (!cx) return c;
+      const glow = cx.createRadialGradient(
+        SPRITE_CENTER, SPRITE_CENTER, 0,
+        SPRITE_CENTER, SPRITE_CENTER, SPRITE_CENTER,
+      );
+      glow.addColorStop(0, `rgba(${color.r},${color.g},${color.b},0.45)`);
+      glow.addColorStop(0.4, `rgba(${color.r},${color.g},${color.b},0.18)`);
+      glow.addColorStop(1, `rgba(${color.r},${color.g},${color.b},0)`);
+      cx.fillStyle = glow;
+      cx.fillRect(0, 0, SPRITE_SIZE, SPRITE_SIZE);
+      const cr = Math.min(255, color.r + 30);
+      const cg = Math.min(255, color.g + 30);
+      const cb = Math.min(255, color.b + 30);
+      cx.fillStyle = `rgba(${cr},${cg},${cb},1)`;
+      cx.beginPath();
+      cx.arc(SPRITE_CENTER, SPRITE_CENTER, SPRITE_CORE_RADIUS, 0, Math.PI * 2);
+      cx.fill();
+      return c;
+    };
+    const spriteA = buildSprite(COLOR_A);
+    const spriteB = buildSprite(COLOR_B);
+
     let lastTime = performance.now();
     let raf = 0;
     let cancelled = false;
@@ -119,7 +159,7 @@ export default function GoldDustField({
       }
 
       ctx.clearRect(0, 0, viewW, viewH);
-      ctx.globalCompositeOperation = "lighter"; // additive — particles add to whatever's beneath
+      ctx.globalCompositeOperation = "lighter"; // additive blending preserved
 
       for (let i = 0; i < particles.length; i++) {
         const p = particles[i];
@@ -128,45 +168,30 @@ export default function GoldDustField({
         p.y += p.vy;
         p.twinklePhase += delta * p.twinkleRate;
 
-        // Recycle particles that drifted off the top, faded out, or expired.
         if (p.y < -10 || p.age > p.life) {
           particles[i] = spawn(false);
           continue;
         }
 
-        // Lifetime fade: fade in at start, hold, fade out near end.
         const u = p.age / p.life;
         let alpha;
         if (u < 0.15) alpha = u / 0.15;
         else if (u > 0.7) alpha = (1 - u) / 0.3;
         else alpha = 1;
-        // Subtle twinkle on top
         const twinkle = 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(p.twinklePhase));
         alpha *= twinkle * 0.85;
 
-        // Mix two gold tones
-        const m = p.hueShift;
-        const r = Math.round(COLOR_A.r + (COLOR_B.r - COLOR_A.r) * m);
-        const g = Math.round(COLOR_A.g + (COLOR_B.g - COLOR_A.g) * m);
-        const b = Math.round(COLOR_A.b + (COLOR_B.b - COLOR_A.b) * m);
-
-        // Outer soft glow
-        const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size * 4.5);
-        glow.addColorStop(0, `rgba(${r},${g},${b},${0.45 * alpha})`);
-        glow.addColorStop(0.4, `rgba(${r},${g},${b},${0.18 * alpha})`);
-        glow.addColorStop(1, `rgba(${r},${g},${b},0)`);
-        ctx.fillStyle = glow;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size * 4.5, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Bright core
-        ctx.fillStyle = `rgba(${Math.min(255, r + 30)},${Math.min(255, g + 30)},${Math.min(255, b + 30)},${alpha})`;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fill();
+        // Pick cached sprite, draw it scaled + alpha-modulated. drawImage
+        // honours globalAlpha for the whole image so per-frame alpha just
+        // sets globalAlpha once per particle.
+        const sprite = p.hueShift > 0.5 ? spriteB : spriteA;
+        const drawRadius = p.size * 4.5;
+        const drawSize = drawRadius * 2;
+        ctx.globalAlpha = alpha;
+        ctx.drawImage(sprite, p.x - drawRadius, p.y - drawRadius, drawSize, drawSize);
       }
 
+      ctx.globalAlpha = 1;
       ctx.globalCompositeOperation = "source-over";
       raf = requestAnimationFrame(render);
     };

@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNarration } from "./NarrationProvider";
-import { preloadAllAudioAssets } from "@/lib/audioPreload";
 
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
@@ -22,12 +21,12 @@ export default function AudioPrimingGate({ children }: { children: React.ReactNo
     setBusy(true);
     try {
       await unlock();
-      // Kick off the audio cache prewarm right after the user gesture
-      // unlocks audio. Browser fetches all the SFX / VO files in the
-      // background while the welcome video plays, so every later
-      // `new Audio(SRC).play()` reads from cache instead of incurring
-      // a 300-900ms cold fetch from Vercel.
-      preloadAllAudioAssets();
+      // Audio prewarm removed (was custom logic in audioPreload.ts).
+      // Browser HTTP cache handles repeat plays naturally — first play
+      // pays a small cold-fetch cost, subsequent plays are instant.
+      // The custom prewarm was forcing 20 file fetches at this exact
+      // moment, competing for bandwidth with the welcome video that
+      // starts ~immediately after this gate dismisses.
       setDismissed(true);
     } finally {
       setBusy(false);
