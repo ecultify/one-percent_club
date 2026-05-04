@@ -798,7 +798,7 @@ export default function GameFlow() {
               className="w-full h-full object-cover"
               autoPlay
               playsInline
-              preload="metadata"
+              preload="auto"
               onLoadedData={() => {
                 void welcomeVideoRef.current?.play().catch(() => {});
               }}

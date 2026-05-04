@@ -144,7 +144,7 @@ export default function HomeIntroVideo() {
         src={HOME_VIDEO_SRC}
         loop={false}
         playsInline
-        preload="metadata"
+        preload="auto"
         onTimeUpdate={handleTimeUpdate}
         onEnded={handleEnded}
         className="absolute inset-0 h-full w-full object-cover"
