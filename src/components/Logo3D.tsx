@@ -25,9 +25,6 @@ export default function Logo3D({ settled, className, style, onReady }: Logo3DPro
     animate: () => void;
   } | null>(null);
 
-  const settledRef = useRef(settled);
-  settledRef.current = settled;
-
   const [modelReady, setModelReady] = useState(false);
 
   const init = useCallback(
@@ -259,32 +256,25 @@ export default function Logo3D({ settled, className, style, onReady }: Logo3DPro
       tryLoad();
 
       // ── Render loop ──
-      // Spin while center-stage (settled=false, logo-enter / logo-center).
-      // Once the logo settles in the navbar (settled=true) AND a model is
-      // loaded, snap to a clean front-facing pose, draw ONE final frame,
-      // and STOP the rAF loop. The useEffect on `settled` below restarts
-      // the loop if the prop ever flips back to false (e.g., logo-enter
-      // landing after the ripple phase, where this component first mounts
-      // with settled already true).
+      // No rotation any more. The "loading" feel during logo-enter /
+      // logo-center comes from a CSS shine overlay rendered as a sibling
+      // (see JSX below), which runs entirely on the compositor thread.
+      // The Three.js side just needs to:
+      //   1. Wait for the model to load (poll via rAF until state.model is set)
+      //   2. Render one frame at a clean front-facing pose
+      //   3. Halt the rAF loop forever
+      // Resize is handled by an explicit re-render in the ResizeObserver.
       function animate() {
-        const delta = clock.getDelta();
-
-        if (state.model) {
-          if (settledRef.current) {
-            // Settled in the navbar: lock to front-facing, render once, stop.
-            state.model.rotation.set(0, 0, 0);
-            renderer.render(scene, camera);
-            state.frameId = 0;
-            return;
-          }
-          // Not yet settled: clean turntable spin around Y.
-          state.model.rotation.y += delta * 2.0;
-          state.model.rotation.x = 0;
-          state.model.rotation.z = 0;
+        if (!state.model) {
+          // Model not ready yet — render an empty frame and try again.
+          renderer.render(scene, camera);
+          state.frameId = requestAnimationFrame(animate);
+          return;
         }
-
+        // Model loaded: lock pose, render once, halt.
+        state.model.rotation.set(0, 0, 0);
         renderer.render(scene, camera);
-        state.frameId = requestAnimationFrame(animate);
+        state.frameId = 0;
       }
       state.animate = animate;
       animate();
@@ -294,17 +284,6 @@ export default function Logo3D({ settled, className, style, onReady }: Logo3DPro
     },
     [onReady],
   );
-
-  // When `settled` flips back to false (e.g., transitioning from ripple
-  // to logo-enter), the rAF loop may have already halted itself. Re-kick
-  // it here so the spin resumes for the center-stage moments.
-  useEffect(() => {
-    const state = stateRef.current;
-    if (!state) return;
-    if (settled) return;          // settled=true: loop will halt itself
-    if (state.frameId !== 0) return; // already running
-    state.animate();
-  }, [settled]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -319,6 +298,11 @@ export default function Logo3D({ settled, className, style, onReady }: Logo3DPro
       state.camera.aspect = w / h;
       state.camera.updateProjectionMatrix();
       state.renderer.setSize(w, h, false);
+      // Since the rAF loop has halted, we must explicitly redraw or the
+      // canvas will stretch the last framebuffer at the new size.
+      if (state.model) {
+        state.renderer.render(state.scene, state.camera);
+      }
     });
     observer.observe(container);
 
@@ -332,18 +316,53 @@ export default function Logo3D({ settled, className, style, onReady }: Logo3DPro
     };
   }, [init]);
 
+  // Show the loading shine overlay while the logo is centre-stage and a
+  // model is loaded. The CSS animation runs entirely on the compositor
+  // thread (transform-based), so it adds no main-thread cost while quiz
+  // videos play. Hidden the moment `settled` flips true (logo flies to
+  // the navbar), so the navbar logo stays static and clean.
+  const showLoadingShine = !settled && modelReady;
+
   return (
     <div
       ref={containerRef}
       className={className}
       style={{
         ...style,
+        position: "relative",
         // Opacity only — `visibility:hidden` on a WebGL canvas parent can suppress
         // compositing in some browsers so the logo never appears after load.
         opacity: modelReady ? 1 : 0,
         transition: "opacity 0.4s ease-out",
         pointerEvents: "none",
       }}
-    />
+    >
+      {showLoadingShine && (
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            inset: 0,
+            pointerEvents: "none",
+            overflow: "hidden",
+            mixBlendMode: "screen",
+          }}
+        >
+          <div
+            className="logo-loading-shine"
+            style={{
+              position: "absolute",
+              top: 0,
+              bottom: 0,
+              left: 0,
+              width: "55%",
+              background:
+                "linear-gradient(115deg, transparent 0%, rgba(255,245,180,0.35) 35%, rgba(255,255,235,0.85) 50%, rgba(255,245,180,0.35) 65%, transparent 100%)",
+              willChange: "transform",
+            }}
+          />
+        </div>
+      )}
+    </div>
   );
 }

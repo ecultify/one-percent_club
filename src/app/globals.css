@@ -218,6 +218,29 @@ body {
   }
 }
 
+/* Logo3D loading shine — a diagonal specular band sweeping across the
+ * 3D logo while the model loads / displays at centre stage. Pure
+ * transform animation so it lives on the compositor thread, no main-
+ * thread JS work and no WebGL re-render needed. Hidden once the logo
+ * settles in the navbar. */
+@keyframes logo-loading-shine {
+  0%   { transform: translateX(-110%) skewX(-12deg); }
+  60%  { transform: translateX(220%)  skewX(-12deg); }
+  100% { transform: translateX(220%)  skewX(-12deg); }
+}
+
+.logo-loading-shine {
+  animation: logo-loading-shine 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .logo-loading-shine {
+    animation: none;
+    transform: translateX(40%) skewX(-12deg);
+    opacity: 0.5;
+  }
+}
+
 
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
