@@ -773,7 +773,7 @@ export default function Instructions({ playerName, onStart }: InstructionsProps)
           QuestionScreen, so the Instructions feel like part of the same
           live broadcast rather than a separate static screen. */}
       <video
-        src={encodeURI("https://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev/bgvideo (1).mp4")}
+        src={encodeURI("/new videos/bgvideo (1).mp4")}
         autoPlay
         loop
         muted
