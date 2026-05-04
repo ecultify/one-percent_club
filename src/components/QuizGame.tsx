@@ -1150,14 +1150,25 @@ export default function QuizGame({
   // every render from the current playerCorrect snapshot — cheap, no memo.
   const finalVideoSrc = pickFinalVideoSrc(gameState.playerCorrect);
 
-  // Reset the outro wipe whenever a new overlay mounts.
+  // ─── Outro-reset defer (phase-transition contention fix) ──────────
+  // These two effects USED to fire setState synchronously the moment a
+  // new intro/reaction <video> element mounted, blocking the main thread
+  // for 50-150ms during the exact tick when the video element was trying
+  // to call play(). That contention is the cause of "video lags when the
+  // answer screen comes up" symptoms. The ref-write is sync (it must be —
+  // arming logic reads it on first onTimeUpdate). The state update is
+  // deferred 50ms so the new video has a clean main-thread window to
+  // mount + start its decoder.
+  // ──────────────────────────────────────────────────────────────────
   useEffect(() => {
-    setIntroOutroActive(false);
     introOutroArmedRef.current = false;
+    const id = window.setTimeout(() => setIntroOutroActive(false), 50);
+    return () => window.clearTimeout(id);
   }, [introVideoSrc, gameState.phase, tourState]);
   useEffect(() => {
-    setReactionOutroActive(false);
     reactionOutroArmedRef.current = false;
+    const id = window.setTimeout(() => setReactionOutroActive(false), 50);
+    return () => window.clearTimeout(id);
   }, [reactionVideoSrc]);
   useEffect(() => {
     if (gameState.phase !== "final-video") {
@@ -1197,13 +1208,37 @@ export default function QuizGame({
       setShowCorrectPanel(false);
       return;
     }
-    // Don't carry over a stale "true" from a previous reaction.
-    setShowCorrectPanel(false);
-    const t = window.setTimeout(() => {
-      setShowCorrectPanel(true);
-    }, 1200);
+    // ─── Reaction-video phase-transition contention fix ──────────────
+    // This effect fires AT the exact moment the reaction-video
+    // AnimatePresence is mounting and its <video> element is trying to
+    // call play(). Firing setShowCorrectPanel(false) synchronously here
+    // re-renders the 2040-line QuizGame component, which blocks the
+    // main thread for 50-150ms — exactly when the reaction video needs
+    // it free to start its decoder. This is the cause of "video lags
+    // when the answer screen comes up" — the reaction-video sibling of
+    // the same bug we already fixed for question-intro at line 821.
+    //
+    // Deferring the initial state setup to a 50ms macrotask lets React
+    // commit, the browser paint, and the new video element's decoder
+    // spin up first. The 1.2s timeout for showing the panel is unchanged.
+    // Cleanup stays sync — we MUST clear panel visibility immediately
+    // when reactionVideo unmounts to drive the slide-out exit animation.
+    // ──────────────────────────────────────────────────────────────────
+    let cancelled = false;
+    let panelTimer: number | undefined;
+    const deferredId = window.setTimeout(() => {
+      if (cancelled) return;
+      // Don't carry over a stale "true" from a previous reaction.
+      setShowCorrectPanel(false);
+      panelTimer = window.setTimeout(() => {
+        if (cancelled) return;
+        setShowCorrectPanel(true);
+      }, 1200);
+    }, 50);
     return () => {
-      window.clearTimeout(t);
+      cancelled = true;
+      window.clearTimeout(deferredId);
+      if (panelTimer !== undefined) window.clearTimeout(panelTimer);
       setShowCorrectPanel(false);
     };
   }, [reactionVideo]);
