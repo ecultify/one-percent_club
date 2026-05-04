@@ -109,18 +109,24 @@ export default function HomeIntroVideo() {
         // ignore
       }
     }
-    const loop = loopVideoRef.current;
-    if (loop) {
-      try {
-        loop.currentTime = 0;
-      } catch {
-        // ignore
-      }
-      void loop.play().catch(() => {
-        // ignore
-      });
-    }
-    setLoopActive(true);
+    // ─── Looping background video DISABLED ────────────────────────────────
+    // The LastVid2.mp4 loop was a continuously-active second decoder running
+    // alongside the quiz videos and was contributing to mid-playback stutter.
+    // We now let the main intro video hold on its final frame instead. The
+    // loopVideoRef + <video> element below are commented out together.
+    // ──────────────────────────────────────────────────────────────────────
+    // const loop = loopVideoRef.current;
+    // if (loop) {
+    //   try {
+    //     loop.currentTime = 0;
+    //   } catch {
+    //     // ignore
+    //   }
+    //   void loop.play().catch(() => {
+    //     // ignore
+    //   });
+    // }
+    // setLoopActive(true);
   };
 
   useEffect(() => {
@@ -157,6 +163,14 @@ export default function HomeIntroVideo() {
         }}
         aria-hidden
       />
+      {/* ─── Looping background video DISABLED (perf) ──────────────────
+          The LastVid2.mp4 loop was a continuously-active second decoder
+          competing with the quiz-side videos for hardware decode slots,
+          contributing to mid-playback stutter. The main FullVIDF2 video
+          above now holds its last frame after onEnded fires (no swap to
+          opacity 0, no second decoder).
+          ────────────────────────────────────────────────────────────── */}
+      {/*
       <video
         ref={loopVideoRef}
         src={LOOP_VIDEO_SRC}
@@ -172,6 +186,7 @@ export default function HomeIntroVideo() {
         }}
         aria-hidden
       />
+      */}
     </div>
   );
 }

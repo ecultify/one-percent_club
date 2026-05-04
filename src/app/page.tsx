@@ -2,6 +2,7 @@ import HomeIntroVideo from "@/components/HomeIntroVideo";
 import GameFlow from "@/components/GameFlow";
 import AudioPrimingGate from "@/components/AudioPrimingGate";
 import { ScrollScrollyProvider } from "@/contexts/ScrollScrollyContext";
+import { PERF_FLAGS } from "@/lib/perfFlags";
 
 // ─── DEV-ONLY: ?devq= quick-jump (REMOVE BEFORE PROD) ───
 type HomeSearchParams = { devq?: string | string[] };
@@ -35,7 +36,7 @@ export default function Home({ searchParams }: { searchParams?: HomeSearchParams
     <AudioPrimingGate>
       <ScrollScrollyProvider>
         <main className="relative w-full h-screen">
-          {!devJump && <HomeIntroVideo />}
+          {!devJump && PERF_FLAGS.backgroundVideo && <HomeIntroVideo />}
           <GameFlow />
         </main>
       </ScrollScrollyProvider>

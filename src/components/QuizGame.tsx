@@ -24,6 +24,7 @@ import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } fr
 import { VideoPlayer } from "./VideoPlayer";
 import { useVideoPlayback } from "@/lib/VideoPlaybackContext";
 import { AnimatePresence, motion } from "framer-motion";
+import { PERF_FLAGS } from "@/lib/perfFlags";
 import QuestionScreen from "./QuestionScreen";
 import CorrectAnswerPanel from "./CorrectAnswerPanel";
 import EliminationReveal from "./EliminationReveal";
@@ -1592,17 +1593,56 @@ export default function QuizGame({
             phase is active. Source switches in place via VideoPlayer's
             useEffect (no decoder remount, no concurrent decode). Skip
             button + outro wipe + (conditional) answer panel all share the
-            same overlay so we never have two overlays mounted simultaneously. */}
-      <AnimatePresence>
-        {foregroundActive && (
-          <motion.div
-            key="foreground-video"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.45, ease: [0.23, 1, 0.32, 1] }}
-            className="fixed inset-0 z-[95] bg-black flex items-center justify-center"
-          >
+            same overlay so we never have two overlays mounted simultaneously.
+
+            Perf-test: when PERF_FLAGS.framerVideoFades is FALSE, we render
+            the overlay as a plain div (instant cut, no opacity animation,
+            no AnimatePresence exit hold). This isolates whether the
+            framer-motion JS-driven crossfade is contributing to the
+            mid-playback stutter. */}
+      {PERF_FLAGS.framerVideoFades ? (
+        <AnimatePresence>
+          {foregroundActive && (
+            <motion.div
+              key="foreground-video"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.45, ease: [0.23, 1, 0.32, 1] }}
+              className="fixed inset-0 z-[95] bg-black flex items-center justify-center"
+            >
+              <VideoPlayer
+                externalRef={foregroundVideoRef}
+                src={foregroundSrc}
+                poster={foregroundPoster}
+                muted={muted}
+                onEnded={handleForegroundEnded}
+                onError={handleForegroundEnded}
+                onTimeUpdate={handleForegroundTimeUpdate}
+                className="w-full h-full object-cover"
+              />
+              <VideoOutroWipe active={foregroundOutroActive} />
+
+              {foregroundMode === "reaction" && (
+                <CorrectAnswerPanel
+                  questionId={gameState.currentQuestion + 1}
+                  visible={showCorrectPanel && reactionVideo != null}
+                  reactionKind={reactionVideo}
+                />
+              )}
+
+              <button
+                onClick={handleForegroundSkip}
+                className="absolute bottom-6 right-6 md:bottom-8 md:right-8 z-10 rounded-full bg-black/65 backdrop-blur-md border border-white/15 px-4 py-2 text-[10px] font-mono uppercase tracking-[0.25em] text-foreground/85 hover:text-foreground hover:border-brass/35 hover:bg-black/80 transition-colors"
+              >
+                Skip ▸
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      ) : (
+        foregroundActive && (
+          <div className="fixed inset-0 z-[95] bg-black flex items-center justify-center">
             <VideoPlayer
               externalRef={foregroundVideoRef}
               src={foregroundSrc}
@@ -1615,10 +1655,6 @@ export default function QuizGame({
             />
             <VideoOutroWipe active={foregroundOutroActive} />
 
-            {/* Answer-explanation panel — only during reaction mode.
-                Slides in 1.2s after reactionVideo is set; auto-hides
-                when reactionOutroActive arms (so the panel slide-out
-                and the video fade run together). */}
             {foregroundMode === "reaction" && (
               <CorrectAnswerPanel
                 questionId={gameState.currentQuestion + 1}
@@ -1627,16 +1663,15 @@ export default function QuizGame({
               />
             )}
 
-            {/* Skip button — picks the right handler based on mode */}
             <button
               onClick={handleForegroundSkip}
               className="absolute bottom-6 right-6 md:bottom-8 md:right-8 z-10 rounded-full bg-black/65 backdrop-blur-md border border-white/15 px-4 py-2 text-[10px] font-mono uppercase tracking-[0.25em] text-foreground/85 hover:text-foreground hover:border-brass/35 hover:bg-black/80 transition-colors"
             >
               Skip ▸
             </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+        )
+      )}
 
       {/* ━━ Final-question (Q10) winner confetti — drops from the top for the
               first 10s of the "1percentfinalcorrect" reaction video. Layer sits at z-[96], one

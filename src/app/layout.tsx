@@ -6,6 +6,7 @@ import UiHoverSound from "@/components/UiHoverSound";
 import GoldDustField from "@/components/GoldDustField";
 import { CursorGoldDust } from "@/components/MetallicText3D";
 import { VideoPlaybackProvider } from "@/lib/VideoPlaybackContext";
+import { PERF_FLAGS } from "@/lib/perfFlags";
 import { Fraunces, Outfit, JetBrains_Mono } from "next/font/google";
 
 const instructionsDisplay = Fraunces({
@@ -62,10 +63,10 @@ export default function RootLayout({
           <UiHoverSound />
           {/* Ambient gold dust drifts across every screen — gives the
               "always alive" feel without per-page wiring. */}
-          <GoldDustField count={55} zIndex={5} />
+          {PERF_FLAGS.particles && <GoldDustField count={55} zIndex={5} />}
           {/* Cursor-tied gold dust trail — emits short-lived gold sparks
               wherever the user moves the pointer, on every page. */}
-          <CursorGoldDust />
+          {PERF_FLAGS.cursorParticles && <CursorGoldDust />}
           {children}
         </VideoPlaybackProvider>
         </NarrationProvider>

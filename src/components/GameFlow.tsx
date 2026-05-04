@@ -19,20 +19,22 @@ import { useNarration } from "./NarrationProvider";
 import { warmClubLogoGlbAsset } from "@/lib/warmClubLogoAsset";
 import { useVideoAutoplay } from "@/lib/useVideoAutoplay";
 import { useScrollScrolly } from "@/contexts/ScrollScrollyContext";
+import { PERF_FLAGS } from "@/lib/perfFlags";
 
 const Logo3D = dynamic(() => import("./Logo3D"), { ssr: false });
 
 /** Studio backdrop for registration (details) + instructions — rendered blurred beneath the content. */
 const DETAILS_INSTRUCTIONS_BG = `/questionscreenimages/${encodeURIComponent("Gemini_Generated_Image_i8attui8attui8at-ezremove.png")}`;
 
-/** Teaser that plays after the scrolly canvas / Start Experience. Served
- *  from /public/teaser-video.mp4 — same-origin, Vercel CDN, no R2
- *  cold-edge variance. Was previously on R2 at pub-...r2.dev/teaser-
- *  video.mp4 but moved local for consistent first-byte latency. To
- *  swap the teaser, drop a new file at the same /public path. */
-const WELCOME_VIDEO_SRC = "/teaser-video.mp4";
-/** Poster extracted from the same local video file. Co-located with the
- *  source via the .poster.jpg suffix convention used across the app. */
+/** Teaser that plays after the scrolly canvas / Start Experience.
+ *  Hosted on Cloudflare R2 at the bucket's public dev URL. To swap
+ *  the teaser, re-upload to the same R2 key — no code changes
+ *  required. The poster stays local because R2 doesn't host an
+ *  image file alongside the video. */
+const WELCOME_VIDEO_SRC = "https://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev/teaser-video.mp4";
+/** Poster extracted from the local public/teaser-video.mp4 (a copy
+ *  of the same source asset) so the first frame paints instantly
+ *  even though the video stream itself comes from R2. */
 const WELCOME_VIDEO_POSTER = "/teaser-video.mp4.poster.jpg";
 
 const DHAK_SRC = "/sound/dhak.wav";
@@ -208,9 +210,19 @@ export default function GameFlow() {
 
   useEffect(() => { modelReadyRef.current = logoModelReady; }, [logoModelReady]);
 
+  // Perf-test: when Three.js is disabled, mark the logo as ready immediately
+  // so the phase machine (which waits for `logoModelReady` before flying to
+  // the corner) doesn't stall on a logo we never mount.
+  useEffect(() => {
+    if (!PERF_FLAGS.threeJs && !logoModelReady) {
+      setLogoModelReady(true);
+    }
+  }, [logoModelReady]);
+
   // Warm Logo3D chunk + start full GLB decode (Draco) as soon as the page loads.
   // By the time the user scrolls to "Enter" / clicks, the mesh is often already in memory.
   useEffect(() => {
+    if (!PERF_FLAGS.threeJs) return;
     void import("./Logo3D");
     warmClubLogoGlbAsset();
     void import("@/lib/logoModelPreload")
@@ -271,6 +283,18 @@ export default function GameFlow() {
     window.addEventListener(HOME_VIDEO_ENTER_EVENT, onCue);
     return () => window.removeEventListener(HOME_VIDEO_ENTER_EVENT, onCue);
   }, [phase]);
+
+  // Perf-test fallback: when HomeIntroVideo is disabled it never dispatches
+  // the enter / theme cues, so reveal the Enter CTA + arm the theme as soon
+  // as the user's audio gesture lands.
+  useEffect(() => {
+    if (PERF_FLAGS.backgroundVideo) return;
+    if (phase !== "idle") return;
+    if (!audioUnlocked) return;
+    setShowButton(true);
+    setIdleScrollThemeArmed(true);
+    themeUnlockRef.current?.();
+  }, [phase, audioUnlocked]);
 
   // Theme cue: HomeIntroVideo dispatches "homevideo:theme-cue" at the
   // 6-second mark of the home video. We mirror what the legacy
@@ -776,11 +800,13 @@ export default function GameFlow() {
                   <div className="absolute -inset-2 rounded-2xl bg-brass/12 blur-lg" />
                 )}
 
-              <Logo3D
-                settled={phase !== "logo-enter" && phase !== "logo-center"}
-                onReady={handleLogoReady}
-                className="w-full h-full"
-              />
+              {PERF_FLAGS.threeJs && (
+                <Logo3D
+                  settled={phase !== "logo-enter" && phase !== "logo-center"}
+                  onReady={handleLogoReady}
+                  className="w-full h-full"
+                />
+              )}
             </motion.div>
           )}
         </AnimatePresence>
