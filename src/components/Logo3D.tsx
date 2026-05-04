@@ -20,6 +20,9 @@ export default function Logo3D({ settled, className, style, onReady }: Logo3DPro
     model: THREE.Group | null;
     frameId: number;
     clock: THREE.Clock;
+    /** Allows an external `settled` change to re-kick the rAF loop after
+     *  it has halted itself (see useEffect on `settled` below). */
+    animate: () => void;
   } | null>(null);
 
   const settledRef = useRef(settled);
@@ -167,6 +170,8 @@ export default function Logo3D({ settled, className, style, onReady }: Logo3DPro
         model: null as THREE.Group | null,
         frameId: 0,
         clock,
+        // Filled in below once `animate` is defined.
+        animate: () => {},
       };
 
       // ── Load model (or use preloaded) ──
@@ -204,8 +209,11 @@ export default function Logo3D({ settled, className, style, onReady }: Logo3DPro
         // Offset the model so its geometric center sits at (0,0,0)
         model.position.set(-center.x, -center.y, -center.z);
 
-        // Fix mirrored text: flip on X axis
-        model.scale.x = -1;
+        // The GLB exports with the correct orientation. Earlier this code
+        // applied `model.scale.x = -1` to "fix mirroring", but that flip is
+        // what was actually rendering the text reversed ("EHT" instead of
+        // "THE"). Leaving scale at the identity preserves the model's
+        // intended facing.
 
         // Wrap in a pivot group that we'll rotate
         const pivot = new THREE.Group();
@@ -252,10 +260,12 @@ export default function Logo3D({ settled, className, style, onReady }: Logo3DPro
 
       // ── Render loop ──
       // Spin while center-stage (settled=false, logo-enter / logo-center).
-      // Once the logo flies to the navbar (settled=true), snap to a clean
-      // front-facing pose, draw ONE final frame, and STOP the rAF loop.
-      // This removes a continuous main-thread + WebGL workload that was
-      // running through every quiz phase, including reaction-video playback.
+      // Once the logo settles in the navbar (settled=true) AND a model is
+      // loaded, snap to a clean front-facing pose, draw ONE final frame,
+      // and STOP the rAF loop. The useEffect on `settled` below restarts
+      // the loop if the prop ever flips back to false (e.g., logo-enter
+      // landing after the ripple phase, where this component first mounts
+      // with settled already true).
       function animate() {
         const delta = clock.getDelta();
 
@@ -276,6 +286,7 @@ export default function Logo3D({ settled, className, style, onReady }: Logo3DPro
         renderer.render(scene, camera);
         state.frameId = requestAnimationFrame(animate);
       }
+      state.animate = animate;
       animate();
 
       stateRef.current = state;
@@ -283,6 +294,17 @@ export default function Logo3D({ settled, className, style, onReady }: Logo3DPro
     },
     [onReady],
   );
+
+  // When `settled` flips back to false (e.g., transitioning from ripple
+  // to logo-enter), the rAF loop may have already halted itself. Re-kick
+  // it here so the spin resumes for the center-stage moments.
+  useEffect(() => {
+    const state = stateRef.current;
+    if (!state) return;
+    if (settled) return;          // settled=true: loop will halt itself
+    if (state.frameId !== 0) return; // already running
+    state.animate();
+  }, [settled]);
 
   useEffect(() => {
     const container = containerRef.current;
