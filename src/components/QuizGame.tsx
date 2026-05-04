@@ -21,6 +21,8 @@
  * ════════════════════════════════════════════════════════════════════════ */
 
 import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from "react";
+import { VideoPlayer } from "./VideoPlayer";
+import { useVideoPlayback } from "@/lib/VideoPlaybackContext";
 import { AnimatePresence, motion } from "framer-motion";
 import QuestionScreen from "./QuestionScreen";
 import CorrectAnswerPanel from "./CorrectAnswerPanel";
@@ -1482,6 +1484,84 @@ export default function QuizGame({
     return () => onRegisterBack?.(null);
   }, [onRegisterBack, handleQuizBack]);
 
+
+  // ─── Foreground video consolidation ─────────────────────────────────
+  // ONE VideoPlayer drives the intro, reaction, and final video roles.
+  // The element lives at the root of the foreground overlay and never
+  // unmounts during a phase-to-phase swap (intro → reaction → next
+  // intro). VideoPlayer's internal useEffect updates v.src + load() +
+  // play() in place, reusing the existing decoder. This eliminates the
+  // decoder remount + concurrent-decode contention that was the root
+  // cause of the mid-playback stutter on every video transition.
+  // ────────────────────────────────────────────────────────────────────
+  type ForegroundVideoMode = "intro" | "reaction" | "final" | null;
+  const foregroundMode: ForegroundVideoMode =
+    reactionVideoSrc != null ? "reaction" :
+    gameState.phase === "final-video" ? "final" :
+    (gameState.phase === "question-intro" && tourState === "done") ? "intro" :
+    null;
+  const foregroundActive = foregroundMode !== null;
+  const foregroundSrc =
+    foregroundMode === "intro" ? introVideoSrc :
+    foregroundMode === "reaction" ? (reactionVideoSrc ?? undefined) :
+    foregroundMode === "final" ? finalVideoSrc :
+    undefined;
+  const foregroundPoster = foregroundSrc ? posterForVideo(foregroundSrc) : undefined;
+  const foregroundOutroActive =
+    foregroundMode === "intro" ? introOutroActive :
+    foregroundMode === "reaction" ? reactionOutroActive :
+    foregroundMode === "final" ? finalVideoOutroActive :
+    false;
+  const foregroundVideoRef = useRef<HTMLVideoElement>(null);
+
+  const handleForegroundEnded = useCallback(() => {
+    if (foregroundMode === "intro") handleQuestionIntroEnd();
+    else if (foregroundMode === "reaction") handleReactionVideoEnd();
+    else if (foregroundMode === "final") handleFinalVideoEnd();
+  }, [foregroundMode, handleQuestionIntroEnd, handleReactionVideoEnd, handleFinalVideoEnd]);
+
+  const handleForegroundSkip = useCallback(() => {
+    if (foregroundMode === "intro") handleQuestionIntroEnd();
+    else if (foregroundMode === "reaction") handleSkipReactionVideo();
+    else if (foregroundMode === "final") handleFinalVideoEnd();
+  }, [foregroundMode, handleQuestionIntroEnd, handleSkipReactionVideo, handleFinalVideoEnd]);
+
+  const handleForegroundTimeUpdate = useCallback((currentTime: number, duration: number) => {
+    const remaining = duration - currentTime;
+    if (foregroundMode === "intro") {
+      if (introOutroArmedRef.current) return;
+      const qid = gameState.currentQuestion + 1;
+      const leadSec = qid === 6 ? 2.5 : qid === 10 ? 0.2 : 1.05;
+      if (remaining <= leadSec) {
+        introOutroArmedRef.current = true;
+        setIntroOutroActive(true);
+      }
+    } else if (foregroundMode === "reaction") {
+      if (reactionOutroArmedRef.current) return;
+      const qid = gameState.currentQuestion + 1;
+      const reactionLeadSec = qid === 2 ? 0.25 : 0.5;
+      if (remaining <= reactionLeadSec) {
+        reactionOutroArmedRef.current = true;
+        setReactionOutroActive(true);
+      }
+    } else if (foregroundMode === "final") {
+      if (finalVideoOutroArmedRef.current) return;
+      if (remaining <= 1.05) {
+        finalVideoOutroArmedRef.current = true;
+        setFinalVideoOutroActive(true);
+      }
+    }
+  }, [foregroundMode, gameState.currentQuestion]);
+
+  // Mirror foregroundActive into the global VideoPlayback context so
+  // GoldDustField / CursorGoldDust can pause their per-frame work
+  // while a video is playing. Set TRUE on entry, FALSE on cleanup.
+  const { setVideoPlaying } = useVideoPlayback();
+  useEffect(() => {
+    setVideoPlaying(foregroundActive);
+    return () => setVideoPlaying(false);
+  }, [foregroundActive, setVideoPlaying]);
+
   if (gameState.phase === "final-result") {
     const correct = gameState.playerCorrect.filter(Boolean).length;
     const lastCorrectIndex = gameState.playerCorrect.lastIndexOf(true);
@@ -1507,120 +1587,49 @@ export default function QuizGame({
       {/* ━━ Right-to-left wipe (between phases) ━━ */}
       <FadeWipe active={wipeActive} />
 
-      {/* ━━ Question Intro Video (plays before the question screen) ━━ */}
+      {/* ━━ Foreground video overlay — single VideoPlayer for intro / reaction / final ━━
+            ONE motion.div + ONE VideoPlayer. Mounted while ANY foreground
+            phase is active. Source switches in place via VideoPlayer's
+            useEffect (no decoder remount, no concurrent decode). Skip
+            button + outro wipe + (conditional) answer panel all share the
+            same overlay so we never have two overlays mounted simultaneously. */}
       <AnimatePresence>
-        {gameState.phase === "question-intro" && tourState === "done" && (
+        {foregroundActive && (
           <motion.div
-            key={`intro-${gameState.currentQuestion}`}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            className="fixed inset-0 z-[95] bg-black flex items-center justify-center"
-          >
-            <video
-              ref={introVideoRef}
-              key={introVideoSrc}
-              poster={posterForVideo(introVideoSrc)}
-              className="w-full h-full object-cover"
-              autoPlay
-              playsInline
-              preload="auto"
-              muted={muted}
-              onTimeUpdate={(e) => {
-                if (introOutroArmedRef.current) return;
-                const el = e.currentTarget;
-                if (!Number.isFinite(el.duration) || el.duration <= 0) return;
-                // Per-question outro lead time (seconds before video end at
-                // which the black wipe arms). Default 1.05s.
-                //   Q6 (40% transports): 2.5s — fade was felt too late.
-                //   Q10 (1% TNECREPE):    0.2s — fade was felt too early
-                //                                and ate the final beat of
-                //                                the clip.
-                // Easy to extend per-question by adding more entries here.
-                const qid = gameState.currentQuestion + 1;
-                const leadSec = qid === 6 ? 2.5 : qid === 10 ? 0.2 : 1.05;
-                if (el.duration - el.currentTime <= leadSec) {
-                  introOutroArmedRef.current = true;
-                  setIntroOutroActive(true);
-                }
-              }}
-              onEnded={handleQuestionIntroEnd}
-              onError={handleQuestionIntroEnd}
-              src={introVideoSrc}
-            />
-            <VideoOutroWipe active={introOutroActive} />
-            <button
-              onClick={handleQuestionIntroEnd}
-              className="absolute bottom-6 right-6 md:bottom-8 md:right-8 z-10 rounded-full bg-black/65 backdrop-blur-md border border-white/15 px-4 py-2 text-[10px] font-mono uppercase tracking-[0.25em] text-foreground/85 hover:text-foreground hover:border-brass/35 hover:bg-black/80 transition-colors"
-            >
-              Skip ▸
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ━━ Reaction Video Overlay (plays on correct/wrong/winner) ━━ */}
-      <AnimatePresence>
-        {reactionVideoSrc && (
-          <motion.div
-            key={`reaction-${reactionVideo}`}
+            key="foreground-video"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.45, ease: [0.23, 1, 0.32, 1] }}
             className="fixed inset-0 z-[95] bg-black flex items-center justify-center"
           >
-            <video
-              ref={reactionVideoRef}
-              key={reactionVideoSrc}
-              poster={posterForVideo(reactionVideoSrc)}
-              className="w-full h-full object-cover"
-              autoPlay
-              playsInline
-              preload="auto"
+            <VideoPlayer
+              externalRef={foregroundVideoRef}
+              src={foregroundSrc}
+              poster={foregroundPoster}
               muted={muted}
-              onTimeUpdate={(e) => {
-                if (reactionOutroArmedRef.current) return;
-                const el = e.currentTarget;
-                if (!Number.isFinite(el.duration) || el.duration <= 0) return;
-                // Per-question outro lead time (seconds before reaction-video
-                // end at which the panel slide-out + black wipe arm). Default
-                // 0.5s — panel stays visible longer so explanations get full
-                // reading time. Q2 (Gandhi) gets an even tighter 0.25s lead
-                // because its panel is image + caption (more to take in than
-                // a one-line text reasoning).
-                const qid = gameState.currentQuestion + 1;
-                const reactionLeadSec = qid === 2 ? 0.25 : 0.5;
-                if (el.duration - el.currentTime <= reactionLeadSec) {
-                  reactionOutroArmedRef.current = true;
-                  setReactionOutroActive(true);
-                }
-              }}
-              onEnded={handleReactionVideoEnd}
-              onError={handleReactionVideoEnd}
-              src={reactionVideoSrc}
+              onEnded={handleForegroundEnded}
+              onError={handleForegroundEnded}
+              onTimeUpdate={handleForegroundTimeUpdate}
+              className="w-full h-full object-cover"
             />
-            <VideoOutroWipe active={reactionOutroActive} />
+            <VideoOutroWipe active={foregroundOutroActive} />
 
-            {/* ━━ Answer-explanation panel — slides in from the right edge
-                    ~1.2s into ANY reaction (correct, winner, OR wrong). On
-                    wrong reactions the panel still teaches what the right
-                    answer was. Floats ABOVE the video at z-[5]; the video
-                    element above is untouched (its CSS dimensions, parent,
-                    and aspect ratio stay exactly as they were). The skip
-                    pill below sits at z-10 so it remains clickable on top
-                    of the panel. The panel auto-hides when the video arms
-                    its outro wipe so both fades run together. ━━ */}
-            <CorrectAnswerPanel
-              questionId={gameState.currentQuestion + 1}
-              visible={showCorrectPanel && reactionVideo != null}
-              reactionKind={reactionVideo}
-            />
+            {/* Answer-explanation panel — only during reaction mode.
+                Slides in 1.2s after reactionVideo is set; auto-hides
+                when reactionOutroActive arms (so the panel slide-out
+                and the video fade run together). */}
+            {foregroundMode === "reaction" && (
+              <CorrectAnswerPanel
+                questionId={gameState.currentQuestion + 1}
+                visible={showCorrectPanel && reactionVideo != null}
+                reactionKind={reactionVideo}
+              />
+            )}
 
-            {/* Skip button */}
+            {/* Skip button — picks the right handler based on mode */}
             <button
-              onClick={handleSkipReactionVideo}
+              onClick={handleForegroundSkip}
               className="absolute bottom-6 right-6 md:bottom-8 md:right-8 z-10 rounded-full bg-black/65 backdrop-blur-md border border-white/15 px-4 py-2 text-[10px] font-mono uppercase tracking-[0.25em] text-foreground/85 hover:text-foreground hover:border-brass/35 hover:bg-black/80 transition-colors"
             >
               Skip ▸
@@ -1640,50 +1649,7 @@ export default function QuizGame({
         />
       )}
 
-      {/* ━━ Ending Video Overlay (plays once after the user clicks "See end screen") ━━ */}
-      <AnimatePresence>
-        {gameState.phase === "final-video" && (
-          <motion.div
-            key="final-video"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.45, ease: [0.23, 1, 0.32, 1] }}
-            className="fixed inset-0 z-[95] bg-black flex items-center justify-center"
-          >
-            <video
-              ref={finalVideoRef}
-              key={finalVideoSrc}
-              poster={posterForVideo(finalVideoSrc)}
-              className="w-full h-full object-cover"
-              autoPlay
-              playsInline
-              preload="auto"
-              muted={muted}
-              onTimeUpdate={(e) => {
-                if (finalVideoOutroArmedRef.current) return;
-                const el = e.currentTarget;
-                if (!Number.isFinite(el.duration) || el.duration <= 0) return;
-                if (el.duration - el.currentTime <= 1.05) {
-                  finalVideoOutroArmedRef.current = true;
-                  setFinalVideoOutroActive(true);
-                }
-              }}
-              onEnded={handleFinalVideoEnd}
-              onError={handleFinalVideoEnd}
-              src={finalVideoSrc}
-            />
-            <VideoOutroWipe active={finalVideoOutroActive} />
-            {/* Skip → jump straight to the final-result summary screen */}
-            <button
-              onClick={handleFinalVideoEnd}
-              className="absolute bottom-6 right-6 md:bottom-8 md:right-8 z-10 rounded-full bg-black/65 backdrop-blur-md border border-white/15 px-4 py-2 text-[10px] font-mono uppercase tracking-[0.25em] text-foreground/85 hover:text-foreground hover:border-brass/35 hover:bg-black/80 transition-colors"
-            >
-              Skip ▸
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+
 
       {/* ━━ Guided Tour Prompt (shows before tour starts) ━━ */}
       <AnimatePresence>

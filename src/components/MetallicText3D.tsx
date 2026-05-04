@@ -11,6 +11,7 @@
 import { motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 
+import { useVideoPlayback as useVideoPlaybackForDust } from "@/lib/VideoPlaybackContext";
 /* ────────────────────────────────────────────────────────────────────────────
  *  Brass paint + shine — same gradients used by the rest of the brass UI so
  *  ZText3D reads as part of the same visual system.
@@ -281,8 +282,17 @@ export function CursorGoldDust() {
   const lastEmitRef = useRef(0);
   const idRef = useRef(0);
 
+  // Pause particle spawn while a foreground video is playing so the
+  // compositor + GPU aren't fighting blurred-shadow DOM nodes during
+  // decode. Mirror into a ref so the pointermove handler reads the
+  // latest value without re-binding on every context update.
+  const { isVideoPlaying: cgdVideoPlaying } = useVideoPlaybackForDust();
+  const cgdVideoPlayingRef = useRef(false);
+  useEffect(() => { cgdVideoPlayingRef.current = cgdVideoPlaying; }, [cgdVideoPlaying]);
+
   useEffect(() => {
     const handlePointerMove = (e: PointerEvent) => {
+      if (cgdVideoPlayingRef.current) return;
       const now = performance.now();
       // Throttle raised 35ms (~28Hz) -> 60ms (~16Hz). Each particle is a
       // DOM node with framer-motion + radial-gradient + mix-blend-mode at

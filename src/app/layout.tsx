@@ -5,6 +5,7 @@ import UiClickSound from "@/components/UiClickSound";
 import UiHoverSound from "@/components/UiHoverSound";
 import GoldDustField from "@/components/GoldDustField";
 import { CursorGoldDust } from "@/components/MetallicText3D";
+import { VideoPlaybackProvider } from "@/lib/VideoPlaybackContext";
 import { Fraunces, Outfit, JetBrains_Mono } from "next/font/google";
 
 const instructionsDisplay = Fraunces({
@@ -56,6 +57,7 @@ export default function RootLayout({
       </head>
       <body className="antialiased" style={{ fontFamily: "Arial, Helvetica, sans-serif" }}>
         <NarrationProvider>
+          <VideoPlaybackProvider>
           <UiClickSound />
           <UiHoverSound />
           {/* Ambient gold dust drifts across every screen — gives the
@@ -65,6 +67,7 @@ export default function RootLayout({
               wherever the user moves the pointer, on every page. */}
           <CursorGoldDust />
           {children}
+        </VideoPlaybackProvider>
         </NarrationProvider>
       </body>
     </html>

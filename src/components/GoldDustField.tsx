@@ -21,6 +21,7 @@
  */
 
 import { useEffect, useRef } from "react";
+import { useVideoPlayback } from "@/lib/VideoPlaybackContext";
 
 interface GoldDustFieldProps {
   /** How many particles to maintain. Default 60. */
@@ -53,6 +54,12 @@ export default function GoldDustField({
   disabled = false,
 }: GoldDustFieldProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { isVideoPlaying } = useVideoPlayback();
+  // Mirror the context flag into a ref so the long-lived RAF loop can
+  // read it every frame without restarting (which would happen if we
+  // added isVideoPlaying to the effect's dep array).
+  const isVideoPlayingRef = useRef(false);
+  useEffect(() => { isVideoPlayingRef.current = isVideoPlaying; }, [isVideoPlaying]);
 
   useEffect(() => {
     if (disabled) return;
@@ -153,7 +160,10 @@ export default function GoldDustField({
       if (cancelled) return;
       const delta = Math.min(0.05, (now - lastTime) / 1000);
       lastTime = now;
-      if (!visible) {
+      if (!visible || isVideoPlayingRef.current) {
+        // While a foreground video is playing, skip the per-frame draw
+        // entirely so the main thread + GPU stay free for video decoding.
+        // The RAF chain stays alive so we resume seamlessly on resume.
         raf = requestAnimationFrame(render);
         return;
       }
