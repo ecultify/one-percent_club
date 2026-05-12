@@ -809,7 +809,7 @@ export default function QuizGame({
   /** True for the first 10 seconds of the final-question (Q10) winner reaction
    *  video — drops metallic gold confetti from the top of the screen above the video. */
   const [lastQuestionConfettiActive, setLastQuestionConfettiActive] = useState(false);
-  /** Drives the right-side `CorrectAnswerPanel` slide-in. Flips true ~1.2s
+  /** Drives the left-side `CorrectAnswerPanel` slide-in. Flips true ~1.2s
    *  after ANY reaction (correct, wrong, or winner) starts — the panel
    *  always teaches what the right answer was. Flips false the moment the
    *  reaction ends, the video begins its outro wipe, or the phase
@@ -1273,7 +1273,7 @@ export default function QuizGame({
   // that was missing originally and Abhinav flagged it on Q5 wrong.
   // Cleanup hides the panel immediately on any change in reactionVideo
   // (skip, end, phase change, unmount), driving the AnimatePresence exit
-  // transition (slide-out to the right).
+  // transition (slide-out to the left).
   useEffect(() => {
     if (reactionVideo == null) {
       setShowCorrectPanel(false);
@@ -1532,8 +1532,16 @@ export default function QuizGame({
     if (foregroundMode === "intro") {
       if (introOutroArmedRef.current) return;
       const qid = gameState.currentQuestion + 1;
-      const leadSec = qid === 6 ? 2.5 : qid === 10 ? 0.2 : 1.05;
-      if (remaining <= leadSec) {
+      // Q4 & Q9 intros end with on-screen text/audio held to the final frame,
+      // so an early outro wipe leaves the audio bleeding into the next screen.
+      // For those questions, let the video play to its natural end (leadSec=0)
+      // and rely on onEnded → runWipeThen for the transition.
+      const leadSec =
+        qid === 6 ? 2.5 :
+        qid === 10 ? 0.2 :
+        (qid === 4 || qid === 9) ? 0 :
+        1.05;
+      if (leadSec > 0 && remaining <= leadSec) {
         introOutroArmedRef.current = true;
         setIntroOutroActive(true);
       }

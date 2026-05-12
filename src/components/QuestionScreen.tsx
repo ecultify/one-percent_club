@@ -1092,7 +1092,7 @@ export default function QuestionScreen({
               style={{
                 background: METALLIC_RIM_STRONG,
                 boxShadow:
-                  "0 0 0 1px rgba(0,0,0,0.75), 0 0 36px 4px rgba(196,160,53,0.35), 0 32px 90px -22px rgba(0,0,0,0.85)",
+                  "0 0 0 1px rgba(0,0,0,0.75), 0 32px 90px -22px rgba(0,0,0,0.85)",
               }}
             >
               <div

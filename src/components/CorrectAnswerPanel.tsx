@@ -3,7 +3,7 @@
 /* ─────────────────────────────────────────────────────────────────────────
  *  CorrectAnswerPanel
  *  ─────────────────────────────────────────────────────────────────────────
- *  Side overlay that slides in from the right edge while the answer-reaction
+ *  Side overlay that slides in from the left edge while the answer-reaction
  *  video plays — runs on correct, winner, AND wrong reactions so the audience
  *  always sees what the right answer was. Two visual variants per question:
  *
@@ -136,9 +136,9 @@ export default function CorrectAnswerPanel({
       {visible && (
         <motion.aside
           key={`correct-panel-${questionId}`}
-          initial={{ x: "100%" }}
+          initial={{ x: "-100%" }}
           animate={{ x: 0 }}
-          exit={{ x: "100%" }}
+          exit={{ x: "-100%" }}
           transition={{
             // Slide-in: 400ms ease-out per spec.
             // exit transition is read by AnimatePresence from the same prop;
@@ -150,16 +150,16 @@ export default function CorrectAnswerPanel({
           // desktop (≥ md) → 33% of viewport. Capped at 520px so it never
           // dominates an ultrawide display. Min of 320px protects very
           // narrow phones from collapsing too tight.
-          className="absolute right-0 top-0 h-full w-1/2 md:w-1/3 max-w-[520px] min-w-[320px] z-[5] flex flex-col"
+          className="absolute left-0 top-0 h-full w-1/2 md:w-1/3 max-w-[520px] min-w-[320px] z-[5] flex flex-col"
           style={{
             background: "rgba(0, 0, 0, 0.88)",
             backdropFilter: "blur(8px) saturate(120%)",
             WebkitBackdropFilter: "blur(8px) saturate(120%)",
-            // Thin gold border ON THE LEFT EDGE ONLY — separates the panel
+            // Thin gold border ON THE RIGHT EDGE ONLY — separates the panel
             // from the underlying video so the seam reads cleanly.
-            borderLeft: "1px solid rgba(228, 207, 106, 0.55)",
+            borderRight: "1px solid rgba(228, 207, 106, 0.55)",
             boxShadow:
-              "inset 18px 0 36px -18px rgba(0,0,0,0.6), -8px 0 24px -8px rgba(0,0,0,0.55)",
+              "inset -18px 0 36px -18px rgba(0,0,0,0.6), 8px 0 24px -8px rgba(0,0,0,0.55)",
           }}
           aria-label="Correct answer explanation"
         >
