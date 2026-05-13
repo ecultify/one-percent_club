@@ -124,12 +124,13 @@ function useLogoPositions() {
         scale: 1,
       },
       // Top-LEFT navbar brand mark. Visual width ≈ LOGO_SIZE * scale (LOGO_SIZE = 300).
-      // The 3D model is centered inside its 300×300 canvas, so the canvas top-left
-      // sits above/left of the visible glyphs. Negative x/y offsets pull the canvas
-      // outside the viewport so the *visible* logo lands flush in the corner.
+      // The 3D model is centered inside its 300×300 canvas; a small negative y
+      // offset trims the empty canvas padding above the glyphs so the visible
+      // logo sits at a standard "corner with small margin" position rather than
+      // floating an extra ~50 px below the navbar top.
       corner: {
-        x: -36,
-        y: -42,
+        x: 0,
+        y: -20,
         scale: 152 / LOGO_SIZE,
       },
     };
