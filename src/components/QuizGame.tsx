@@ -1174,11 +1174,9 @@ export default function QuizGame({
   const handleContinue = useCallback(() => {
     const nextQ = gameState.currentQuestion + 1;
     if (nextQ >= QUESTIONS.length) {
-      // Last question complete: wipe into the full-screen ending video. When
-      // the video finishes (handleFinalVideoEnd below) we transition to the
-      // `final-result` summary screen.
+      // Skip the ending video for now — land directly on the final-result screen.
       runWipeThen(() => {
-        setGameState(prev => ({ ...prev, phase: "final-video" }));
+        setGameState(prev => ({ ...prev, phase: "final-result" }));
       });
       const correct = gameState.playerCorrect.filter(Boolean).length;
       onGameEnd?.({ correct, total: QUESTIONS.length, potPrize: gameState.potPrize });
