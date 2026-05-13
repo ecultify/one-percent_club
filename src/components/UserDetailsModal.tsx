@@ -144,7 +144,6 @@ export default function UserDetailsModal({ onSubmit }: UserDetailsModalProps) {
                   className="relative w-full cursor-pointer appearance-none rounded-xl border border-brass/25 bg-black/45 px-4 py-3.5 pr-10 text-[15px] text-foreground outline-none transition-colors duration-200 focus:border-brass/40 focus:bg-black/55 focus:ring-1 focus:ring-brass/25"
                 >
                   <option value="A">Set A</option>
-                  <option value="B">Set B</option>
                 </select>
                 <div
                   className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-brass-bright/80"

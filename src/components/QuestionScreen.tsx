@@ -1732,11 +1732,11 @@ export default function QuestionScreen({
                         }}
                       >
                         <div
-                          className="relative rounded-[10px] px-6 py-4 md:px-10 md:py-6 flex items-center justify-center"
+                          className="relative rounded-[10px] px-4 py-3 md:px-8 md:py-5 flex items-center justify-center"
                           style={{ background: "rgba(8,5,2,0.92)" }}
                         >
                           <span
-                            className="font-mono font-bold tabular-nums leading-none tracking-[0.35em] md:tracking-[0.45em] text-2xl md:text-4xl lg:text-5xl"
+                            className="font-mono font-bold tabular-nums leading-none whitespace-nowrap tracking-[0.22em] md:tracking-[0.3em] text-lg md:text-3xl lg:text-4xl"
                             style={{
                               color: "#f9e89a",
                               textShadow:
@@ -2043,7 +2043,7 @@ export default function QuestionScreen({
                     ) : (
                       <div className="rounded-lg border border-red-500/60 bg-red-950/70 backdrop-blur-sm px-4 py-2 text-center shadow-[0_0_20px_rgba(217,74,92,0.25)]">
                         <p className="text-red-200/95 text-xs md:text-sm font-medium">
-                          Not quite. It was{" "}
+                          Wrong answer. It was{" "}
                           <span className="text-brass-bright font-semibold">{correctAnswerLabel(question)}</span>
                         </p>
                       </div>

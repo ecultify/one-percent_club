@@ -125,9 +125,11 @@ function useLogoPositions() {
       },
       // Top-LEFT navbar brand mark. Visual width ≈ LOGO_SIZE * scale (LOGO_SIZE = 300).
       // Slightly larger than the old 110px so the GLB stays legible on wide stages.
+      // y is nudged down so the visible model clears the Pot HUD chip (which sits
+      // at top-3/top-5 in QuestionScreen across all screens + questions).
       corner: {
         x: 16,
-        y: 10,
+        y: 56,
         scale: 152 / LOGO_SIZE,
       },
     };
