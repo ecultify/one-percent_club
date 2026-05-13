@@ -384,46 +384,14 @@ export default function GameFlow() {
 
     setPhase("ripple");
 
-    // After ripple has mostly filled, show logo at center (ripple animation is 4.5s).
-    // 2.4s keeps the beat without waiting so long that the GLB feels "stuck" if preload lagged.
+    // Skip the 3D-logo loading scene — once the ripple has mostly covered the
+    // viewport, mount the welcome video directly. The 3D logo's first visible
+    // state is now the navbar corner after the welcome video ends.
     setTimeout(() => {
       if (flowRunIdRef.current !== runId) return;
-      setPhase("logo-enter");
-
-      // After scale-up animation (1.2s), mark as centered
-      setTimeout(() => {
-        if (flowRunIdRef.current !== runId) return;
-        setPhase("logo-center");
-
-        // Check model readiness via ref
-        setTimeout(() => {
-          if (flowRunIdRef.current !== runId) return;
-          if (modelReadyRef.current) {
-            // Model already ready: hold at center for 3.5s then fly to corner
-            setTimeout(() => {
-              if (flowRunIdRef.current !== runId) return;
-              flyToCorner(runId);
-            }, 3500);
-          } else {
-            // Model still loading, will trigger via useEffect when ready.
-            pendingFlyToCorner.current = true;
-            // Safety net: if the GLB genuinely fails to load (network blip,
-            // decoder error, etc.) and Logo3D's own fallback doesn't trip,
-            // don't leave the user stuck on the loading screen. After 8s at
-            // logo-center we flip the flag ourselves so the flow advances.
-            setTimeout(() => {
-              if (flowRunIdRef.current !== runId) return;
-              if (!modelReadyRef.current && pendingFlyToCorner.current) {
-                console.warn("[GameFlow] 3D logo load timed out — advancing anyway");
-                pendingFlyToCorner.current = false;
-                setLogoModelReady(true); // will also trigger the fly-to-corner effect
-              }
-            }, 8000);
-          }
-        }, 200);
-      }, 1200);
-    }, 2400);
-  }, [flyToCorner, unlockAudio]);
+      setPhase("welcome-video");
+    }, 1500);
+  }, [unlockAudio]);
 
   const handleDetailsSubmit = useCallback(
     (data: PlayerData) => {
