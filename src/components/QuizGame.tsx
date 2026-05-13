@@ -138,7 +138,7 @@ const QUESTION_PATHS: Record<number, {
 }> = {
   1: {
     folder: "question1(findthemistake-90)",
-    intro: "q1intro.mp4",
+    intro: "q1intro-v2.mp4",
     vo: "q1VO(canyoufindthemistake).mp3",
     correct: "q1correct.mp4",
   },
