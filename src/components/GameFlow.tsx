@@ -129,8 +129,8 @@ function useLogoPositions() {
       // logo sits at a standard "corner with small margin" position rather than
       // floating an extra ~50 px below the navbar top.
       corner: {
-        x: 0,
-        y: -20,
+        x: 8,
+        y: -8,
         scale: 152 / LOGO_SIZE,
       },
     };
