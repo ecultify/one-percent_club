@@ -1117,7 +1117,7 @@ export default function QuestionScreen({
             stays visible during the elimination card — required for the
             CoinTrailToNavbar handoff to land on a visible target. ━━ */}
       <div className="absolute top-3 md:top-5 left-0 right-0 z-[70] px-4 md:px-8">
-        <div className="max-w-[1200px] mx-auto flex items-center justify-between">
+        <div className="max-w-[720px] mx-auto flex items-center justify-between">
           <motion.div
             initial={{ opacity: 0, x: -12 }}
             animate={{ opacity: 1, x: 0 }}
