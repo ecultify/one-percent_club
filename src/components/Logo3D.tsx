@@ -340,28 +340,17 @@ export default function Logo3D({ settled, className, style, onReady }: Logo3DPro
       {showLoadingShine && (
         <div
           aria-hidden
+          className="logo-loading-glow"
           style={{
             position: "absolute",
-            inset: 0,
+            inset: "-10%",
             pointerEvents: "none",
-            overflow: "hidden",
             mixBlendMode: "screen",
+            background:
+              "radial-gradient(circle at 50% 50%, rgba(255,220,130,0.65) 0%, rgba(255,190,80,0.32) 28%, rgba(255,160,50,0.12) 50%, transparent 72%)",
+            filter: "blur(6px)",
           }}
-        >
-          <div
-            className="logo-loading-shine"
-            style={{
-              position: "absolute",
-              top: 0,
-              bottom: 0,
-              left: 0,
-              width: "55%",
-              background:
-                "linear-gradient(115deg, transparent 0%, rgba(255,245,180,0.35) 35%, rgba(255,255,235,0.85) 50%, rgba(255,245,180,0.35) 65%, transparent 100%)",
-              willChange: "transform",
-            }}
-          />
-        </div>
+        />
       )}
     </div>
   );

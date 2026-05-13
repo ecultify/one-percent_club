@@ -218,26 +218,34 @@ body {
   }
 }
 
-/* Logo3D loading shine — a diagonal specular band sweeping across the
- * 3D logo while the model loads / displays at centre stage. Pure
- * transform animation so it lives on the compositor thread, no main-
- * thread JS work and no WebGL re-render needed. Hidden once the logo
- * settles in the navbar. */
-@keyframes logo-loading-shine {
-  0%   { transform: translateX(-110%) skewX(-12deg); }
-  60%  { transform: translateX(220%)  skewX(-12deg); }
-  100% { transform: translateX(220%)  skewX(-12deg); }
+/* Logo3D loading glow — a soft radial amber pulse centred on the model
+ * while the 3D logo sits at centre stage. Replaces the older diagonal
+ * sweep band, which revealed the rectangular bounding box of the canvas
+ * container. The radial gradient + blur fade smoothly to transparent
+ * before reaching the box edges, so the box shape stays invisible.
+ * Compositor-only (opacity + transform); no main-thread cost. Hidden
+ * once the logo settles in the navbar. */
+@keyframes logo-loading-glow {
+  0%, 100% {
+    opacity: 0.35;
+    transform: scale(0.88);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.06);
+  }
 }
 
-.logo-loading-shine {
-  animation: logo-loading-shine 2.4s ease-in-out infinite;
+.logo-loading-glow {
+  animation: logo-loading-glow 1.8s ease-in-out infinite;
+  will-change: opacity, transform;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .logo-loading-shine {
+  .logo-loading-glow {
     animation: none;
-    transform: translateX(40%) skewX(-12deg);
-    opacity: 0.5;
+    opacity: 0.55;
+    transform: scale(1);
   }
 }
 
