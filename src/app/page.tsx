@@ -1,6 +1,7 @@
 import HomeIntroVideo from "@/components/HomeIntroVideo";
 import GameFlow from "@/components/GameFlow";
 import AudioPrimingGate from "@/components/AudioPrimingGate";
+import LiveQuizNav from "@/components/live/LiveQuizNav";
 import { ScrollScrollyProvider } from "@/contexts/ScrollScrollyContext";
 import { PERF_FLAGS } from "@/lib/perfFlags";
 
@@ -41,6 +42,7 @@ export default function Home({ searchParams }: { searchParams?: HomeSearchParams
               To restore, set `liveQuizMode` to false in PERF_FLAGS. */}
           {!devJump && PERF_FLAGS.backgroundVideo && !PERF_FLAGS.liveQuizMode && <HomeIntroVideo />}
           <GameFlow />
+          {PERF_FLAGS.liveQuizMode && <LiveQuizNav />}
         </main>
       </ScrollScrollyProvider>
     </AudioPrimingGate>

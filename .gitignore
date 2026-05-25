@@ -41,6 +41,9 @@ env.txt
 *.aep
 video-encode-backup/
 
+# PartyKit local dev state (per-room durable-object SQLite files)
+.partykit/
+
 # R2 upload scripts contain secrets, never commit
 upload_to_r2.py
 r2_replace_videos.py

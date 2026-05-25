@@ -51,7 +51,10 @@ export function usePartyRoom(roomCode: string | null): {
     const socket = new PartySocket({
       host,
       room: roomCode,
-      party: "quiz",
+      // The PartyKit server file is registered as the default party
+      // (via partykit.json#main), which lives at /parties/main/<room>.
+      // partysocket defaults `party` to "main" when omitted, so we
+      // don't pass anything here.
     });
     socketRef.current = socket;
 
