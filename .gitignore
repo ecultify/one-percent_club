@@ -39,6 +39,7 @@ env.txt
 *-original-*.mp4
 *.dmg
 *.aep
+video-encode-backup/
 
 # R2 upload scripts contain secrets, never commit
 upload_to_r2.py

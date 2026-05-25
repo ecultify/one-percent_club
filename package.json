@@ -14,6 +14,7 @@
     "framer-motion": "^11.0.0",
     "lucide-react": "^0.360.0",
     "next": "14.2.0",
+    "partysocket": "^1.1.19",
     "react": "^18",
     "react-dom": "^18",
     "three": "^0.163.0",
