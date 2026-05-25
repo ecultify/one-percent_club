@@ -74,6 +74,14 @@ export interface StartQuizMessage {
 
 export interface RevealAnswerMessage {
   type: "reveal";
+  /** Correct option index for MCQ questions. */
+  correctIndex?: number;
+  /** Expected text/number for free-form questions (case-insensitive trim
+   *  match). For text-input questions, fall back to `correctIndex` is not
+   *  applicable. */
+  correctText?: string;
+  /** If true, any submitted answer counts as correct (subjective Qs). */
+  acceptAny?: boolean;
 }
 
 export interface NextQuestionMessage {

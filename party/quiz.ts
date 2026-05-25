@@ -85,7 +85,9 @@ export default class QuizServer implements Party.Server {
         this.requireHost(sender, () => this.startQuiz());
         return;
       case "reveal":
-        this.requireHost(sender, () => this.revealAnswer());
+        this.requireHost(sender, () =>
+          this.revealAnswer(msg.correctIndex, msg.correctText, msg.acceptAny ?? false),
+        );
         return;
       case "next-question":
         this.requireHost(sender, () => this.nextQuestion());
@@ -154,19 +156,44 @@ export default class QuizServer implements Party.Server {
     this.broadcastState();
   }
 
-  /** Host clicks "Reveal". Server marks the question revealed; clients
-   *  highlight the correct answer + show right/wrong feedback. The actual
-   *  correct value comes from the host's message intent — but to keep the
-   *  server source-of-truth we re-derive it from the client-supplied
-   *  protocol. Since the server doesn't import QUESTIONS, the host UI
-   *  sends along the correct index/text via a separate field in a future
-   *  iteration. For now, we just flip phase; the client knows the answer
-   *  from its own copy of QUESTIONS. */
-  private revealAnswer() {
+  /** Host clicks "Reveal". The host UI looks up the correct answer in
+   *  its local copy of QUESTIONS and ships it along — the server uses
+   *  that to grade each participant's submitted answer and update their
+   *  score. The server stays authoritative for scores even though the
+   *  question content lives client-side. */
+  private revealAnswer(correctIndex?: number, correctText?: string, acceptAny = false) {
     if (this.phase !== "question") return;
     this.phase = "reveal";
+    this.revealedCorrectIndex = correctIndex ?? null;
+    this.revealedCorrectText = correctText ?? null;
+    const idx = this.currentQuestionIdx;
+    for (const p of this.participants.values()) {
+      const answer = p.answers[idx];
+      if (answer == null) continue; // didn't submit → no points
+      const correct = this.gradeAnswer(answer, correctIndex, correctText, acceptAny);
+      if (correct) p.score += 1;
+    }
     this.touchPhase();
     this.broadcastState();
+  }
+
+  private gradeAnswer(
+    answer: number | string,
+    correctIndex: number | undefined,
+    correctText: string | undefined,
+    acceptAny: boolean,
+  ): boolean {
+    if (acceptAny) return true;
+    if (typeof answer === "number" && typeof correctIndex === "number") {
+      return answer === correctIndex;
+    }
+    if (typeof answer === "string" && typeof correctText === "string") {
+      const a = answer.trim().toLowerCase();
+      const b = correctText.trim().toLowerCase();
+      // Loose match: substring either way handles "the" vs "the the doubled".
+      return a === b || a.includes(b) || b.includes(a);
+    }
+    return false;
   }
 
   private nextQuestion() {
