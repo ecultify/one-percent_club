@@ -4,9 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:party": "partykit dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "party:deploy": "partykit deploy"
   },
   "dependencies": {
     "@types/three": "^0.163.0",
@@ -27,6 +29,7 @@
     "autoprefixer": "^10.0.1",
     "eslint": "^8",
     "eslint-config-next": "14.2.0",
+    "partykit": "^0.0.115",
     "postcss": "^8",
     "tailwindcss": "^3.3.0",
     "typescript": "^5"

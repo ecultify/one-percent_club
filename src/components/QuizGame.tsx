@@ -415,7 +415,7 @@ function rewindToPreviousRoundStart(prev: GameState): GameState {
 // declares the per-question CONTENT (text, options, scoring rules, inline
 // media references). Folder-pathed reaction/intro/VO files are resolved at
 // runtime by questionIntroVideoSrc / questionVoSrc / correctReactionSrc.
-const QUESTIONS: Question[] = [
+export const QUESTIONS: Question[] = [
   {
     // Q1 (90%) — Find the Mistake.
     // The intro video poses the question ("Can you find the mistake?"
