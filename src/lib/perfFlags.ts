@@ -26,4 +26,9 @@ export const PERF_FLAGS = {
   // background is commented out inside the component so a second decoder
   // is never alive while quiz videos play.
   backgroundVideo: true,
+  // LIVE-QUIZ MODE: when true, the per-question intro / reaction / final
+  // videos are skipped (only the teaser welcome video still plays) so the
+  // solo-quiz flow can be driven in lockstep by a PartyKit host. Set to
+  // false to restore the original cinematic single-player experience.
+  liveQuizMode: true,
 } as const;

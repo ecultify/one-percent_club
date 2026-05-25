@@ -289,9 +289,11 @@ export default function GameFlow() {
 
   // Perf-test fallback: when HomeIntroVideo is disabled it never dispatches
   // the enter / theme cues, so reveal the Enter CTA + arm the theme as soon
-  // as the user's audio gesture lands.
+  // as the user's audio gesture lands. liveQuizMode also disables the home
+  // intro video (see src/app/page.tsx) so this fallback fires in that case
+  // too.
   useEffect(() => {
-    if (PERF_FLAGS.backgroundVideo) return;
+    if (PERF_FLAGS.backgroundVideo && !PERF_FLAGS.liveQuizMode) return;
     if (phase !== "idle") return;
     if (!audioUnlocked) return;
     setShowButton(true);

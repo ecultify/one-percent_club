@@ -857,6 +857,9 @@ export default function QuizGame({
   // mount and let cache do the rest.
   // ──────────────────────────────────────────────────────────────────
   useEffect(() => {
+    // LIVE-QUIZ REFACTOR: no intro/reaction videos play in this mode, so
+    // don't burn bandwidth preloading them.
+    if (PERF_FLAGS.liveQuizMode) return;
     const nextIdx = gameState.currentQuestion + 1;
     if (nextIdx < QUESTIONS.length) {
       preloadVideo(questionIntroVideoSrc(nextIdx));
@@ -874,6 +877,7 @@ export default function QuizGame({
   // because that clip is large (12 MB) and used at the climax — no
   // budget for a cold fetch at that moment.
   useEffect(() => {
+    if (PERF_FLAGS.liveQuizMode) return;
     preloadVideo(questionIntroVideoSrc(0));
     preloadVideo(correctReactionSrc(0));
     preloadVideo("/questionscreenimages/wrongrxns/qwrong1.mp4");
@@ -1170,6 +1174,30 @@ export default function QuizGame({
       setGameState(prev => ({ ...prev, phase: "final-result" }));
     });
   }, [runWipeThen]);
+
+  // LIVE-QUIZ REFACTOR: short-circuit the intro / reaction / final video
+  // phases. With liveQuizMode on, the only video that still plays in the
+  // whole app is the teaser/welcome video in GameFlow. Each effect below
+  // fires the matching phase-transition handler the instant the phase
+  // (or reactionVideo) is set, so the user goes straight from one
+  // question-screen state to the next without a video overlay in between.
+  useEffect(() => {
+    if (!PERF_FLAGS.liveQuizMode) return;
+    if (gameState.phase !== "question-intro" || tourState !== "done") return;
+    handleQuestionIntroEnd();
+  }, [gameState.phase, gameState.currentQuestion, tourState, handleQuestionIntroEnd]);
+
+  useEffect(() => {
+    if (!PERF_FLAGS.liveQuizMode) return;
+    if (reactionVideo == null) return;
+    handleReactionVideoEnd();
+  }, [reactionVideo, handleReactionVideoEnd]);
+
+  useEffect(() => {
+    if (!PERF_FLAGS.liveQuizMode) return;
+    if (gameState.phase !== "final-video") return;
+    handleFinalVideoEnd();
+  }, [gameState.phase, handleFinalVideoEnd]);
 
   const handleContinue = useCallback(() => {
     const nextQ = gameState.currentQuestion + 1;
@@ -1494,7 +1522,10 @@ export default function QuizGame({
   // cause of the mid-playback stutter on every video transition.
   // ────────────────────────────────────────────────────────────────────
   type ForegroundVideoMode = "intro" | "reaction" | "final" | null;
-  const foregroundMode: ForegroundVideoMode =
+  // LIVE-QUIZ REFACTOR: force the foreground overlay off entirely. The
+  // skip effects above fire each phase's onEnded handler synchronously
+  // so the phase machine still progresses, but no <video> ever mounts.
+  const foregroundMode: ForegroundVideoMode = PERF_FLAGS.liveQuizMode ? null :
     reactionVideoSrc != null ? "reaction" :
     gameState.phase === "final-video" ? "final" :
     (gameState.phase === "question-intro" && tourState === "done") ? "intro" :
