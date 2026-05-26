@@ -215,7 +215,7 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
   }
 
   return (
-    <>
+    <main className="relative w-full h-screen overflow-hidden bg-black">
       <GameShowAudio
         playBgm={state.phase === "running"}
         suppressForVideo={false}
@@ -242,7 +242,7 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
         isCorrect={isCorrect}
         paused={narratingQuestion || validating}
       />
-    </>
+    </main>
   );
 }
 
