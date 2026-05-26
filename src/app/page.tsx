@@ -37,10 +37,11 @@ export default function Home({ searchParams }: { searchParams?: HomeSearchParams
     <AudioPrimingGate>
       <ScrollScrollyProvider>
         <main className="relative w-full h-screen">
-          {/* LIVE-QUIZ REFACTOR: HomeIntroVideo intentionally disabled.
-              Only the teaser/welcome video (rendered by GameFlow) plays now.
-              To restore, set `liveQuizMode` to false in PERF_FLAGS. */}
-          {!devJump && PERF_FLAGS.backgroundVideo && !PERF_FLAGS.liveQuizMode && <HomeIntroVideo />}
+          {/* LIVE-QUIZ REFACTOR: the landing HomeIntroVideo (FullVIDF2 +
+              LastVid2 loop) and the GameFlow welcome teaser are the only
+              two videos that still play. All q1–q10 intro / reaction /
+              final videos remain commented out via PERF_FLAGS.liveQuizMode. */}
+          {!devJump && PERF_FLAGS.backgroundVideo && <HomeIntroVideo />}
           <GameFlow />
           {PERF_FLAGS.liveQuizMode && <LiveQuizNav />}
         </main>
