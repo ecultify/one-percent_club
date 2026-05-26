@@ -90,14 +90,14 @@ function VideoOutroWipe({ active }: { active: boolean }) {
   );
 }
 
-function playQuizSfx(kind: "correct" | "wrong", muted: boolean) {
+export function playQuizSfx(kind: "correct" | "wrong", muted: boolean) {
   if (muted) return;
   const a = new Audio(kind === "correct" ? SFX_CORRECT : SFX_WRONG);
   a.volume = kind === "correct" ? 0.72 : 0.55;
   void a.play().catch(() => {});
 }
 
-async function checkAnswerWithOpenAI(
+export async function checkAnswerWithOpenAI(
   userAnswer: string,
   correctAnswer: string,
   question: string

@@ -1,47 +1,31 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
+import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { usePartyRoom } from "@/lib/usePartyRoom";
-import { QUESTIONS } from "@/components/QuizGame";
 
 /**
- * Host control panel for a single quiz room. The host claims the room
- * via a shared NEXT_PUBLIC_HOST_KEY passed in the URL (or the default
- * "DEV" in development), then drives phase transitions:
- *
- *   lobby → [Start] → question → [Reveal] → reveal → [Next] → question …
- *
- * Multiple rooms in parallel are first-class: each room lives at
- * /host/<CODE> in its own browser tab. A host can open several tabs
- * and run several rooms concurrently — the server keeps them isolated
- * because the room id (= the join code) is part of the WebSocket URL.
- *
- * The host's screen shows the same question content participants see
- * but with extra controls + per-participant scores.
+ * Focused single-room host view. Reachable from the dashboard via the
+ * "Focus" button on each room card. Same start / end / reset controls
+ * as the card, just with more screen real estate for the participants
+ * table — useful when one room has 50+ players and you want to keep
+ * an eye on it without the rest of the dashboard.
  */
 export default function HostRoomPage() {
   const params = useParams<{ code: string }>();
   const search = useSearchParams();
   const roomCode = (params?.code ?? "").toUpperCase();
-  const hostKey = search?.get("hostKey") ?? "";
+  const hostKey = search?.get("hostKey") ?? process.env.NEXT_PUBLIC_HOST_KEY ?? "";
 
   const { state, send, error, connected } = usePartyRoom(roomCode);
 
-  // Claim the host slot as soon as the socket connects. The server
-  // rejects the claim with reason "bad-host-key" if NEXT_PUBLIC_HOST_KEY
-  // doesn't match.
   useEffect(() => {
     if (!connected) return;
     if (!state) return;
     if (state.hostId) return;
     send({ type: "host-claim", hostKey });
   }, [connected, state, hostKey, send]);
-
-  const currentQ = useMemo(() => {
-    if (!state) return null;
-    return QUESTIONS[state.currentQuestionIdx] ?? null;
-  }, [state]);
 
   if (!connected || !state) {
     return (
@@ -54,43 +38,25 @@ export default function HostRoomPage() {
   const shareUrl = (path: "play" | "watch") =>
     typeof window !== "undefined" ? `${window.location.origin}/${path}/${roomCode}` : "";
 
+  const sortedParticipants = [...state.participants].sort((a, b) => b.score - a.score);
+  const activeCount = state.participants.filter((p) => p.finishedAt == null).length;
   const phaseLabel: Record<typeof state.phase, string> = {
     lobby: "Lobby",
-    question: "Question live",
-    reveal: "Answer revealed",
-    ended: "Finished",
+    running: "Live",
+    ended: "Ended",
   };
-
-  const primaryAction = (() => {
-    if (state.phase === "lobby") return { label: "Start quiz", onClick: () => send({ type: "start" }) };
-    if (state.phase === "question")
-      return {
-        label: "Reveal answer",
-        onClick: () => {
-          if (!currentQ) return;
-          send({
-            type: "reveal",
-            correctIndex: currentQ.correctIndex,
-            correctText: currentQ.correctAnswerText,
-            acceptAny: currentQ.acceptAny ?? false,
-          });
-        },
-      };
-    if (state.phase === "reveal") {
-      const isLast = state.currentQuestionIdx >= state.totalQuestions - 1;
-      return { label: isLast ? "End quiz" : "Next question", onClick: () => send({ type: "next-question" }) };
-    }
-    return { label: "Reset room", onClick: () => send({ type: "reset" }) };
-  })();
 
   return (
     <main className="min-h-screen bg-black text-foreground">
-      <div className="mx-auto max-w-6xl px-6 py-8 space-y-6">
-        {/* Header */}
+      <div className="mx-auto max-w-5xl px-6 py-8 space-y-6">
         <header className="flex flex-wrap items-end justify-between gap-4 border-b border-brass/20 pb-6">
           <div>
-            <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-brass/70">Host control</p>
-            <h1 className="mt-1 text-3xl font-semibold">Room <span className="font-mono tracking-widest text-brass">{roomCode}</span></h1>
+            <Link href="/host" className="text-[10px] font-mono uppercase tracking-[0.3em] text-foreground/40 hover:text-foreground/70">
+              ← back to dashboard
+            </Link>
+            <h1 className="mt-2 text-3xl font-semibold">
+              Room <span className="font-mono tracking-widest text-brass">{roomCode}</span>
+            </h1>
           </div>
           <div className="flex flex-wrap gap-3 text-xs font-mono">
             <button
@@ -112,107 +78,86 @@ export default function HostRoomPage() {
 
         {error === "bad-host-key" && (
           <div className="rounded-md border border-red-500/40 bg-red-950/40 px-4 py-3 text-sm text-red-200">
-            Host key rejected. Set <code className="font-mono">NEXT_PUBLIC_HOST_KEY</code> in .env.local and reload, or
-            pass it in the URL: <code className="font-mono">/host/{roomCode}?hostKey=&lt;YOUR_KEY&gt;</code>.
+            Host key rejected. Set <code className="font-mono">NEXT_PUBLIC_HOST_KEY</code> on Vercel and reload.
           </div>
         )}
         {error === "host-already-claimed" && (
           <div className="rounded-md border border-yellow-500/40 bg-yellow-950/40 px-4 py-3 text-sm text-yellow-200">
-            Another host already has this room. Close their tab or use a different room code.
+            Another host is already controlling this room from a different tab.
           </div>
         )}
 
-        {/* Phase + controls */}
         <section className="rounded-xl border border-brass/20 bg-neutral-950/80 p-6">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-foreground/55">{phaseLabel[state.phase]}</p>
+              <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-foreground/55">
+                {phaseLabel[state.phase]}
+              </p>
               <p className="mt-1 text-xl">
-                Question {state.currentQuestionIdx + 1} / {state.totalQuestions}
+                {state.participants.length} player{state.participants.length === 1 ? "" : "s"} ·{" "}
+                {activeCount} still playing · {state.viewers.length} viewer
+                {state.viewers.length === 1 ? "" : "s"}
               </p>
             </div>
-            <button
-              onClick={primaryAction.onClick}
-              className="rounded-lg bg-brass px-6 py-3 text-sm font-medium uppercase tracking-[0.2em] text-black hover:bg-brass/85"
-            >
-              {primaryAction.label}
-            </button>
-          </div>
-
-          {currentQ && state.phase !== "lobby" && (
-            <div className="mt-6 space-y-3 border-t border-brass/15 pt-4">
-              <p className="text-lg font-medium">{currentQ.question}</p>
-              <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {currentQ.options.map((opt, i) => {
-                  const isCorrect = i === currentQ.correctIndex;
-                  const showCorrect = state.phase === "reveal" && isCorrect;
-                  return (
-                    <li
-                      key={i}
-                      className={`rounded-md border px-3 py-2 text-sm ${
-                        showCorrect ? "border-emerald-500/60 bg-emerald-900/30" : "border-brass/20 bg-black/40"
-                      }`}
-                    >
-                      <span className="mr-2 font-mono text-foreground/50">{"ABCD"[i]}.</span>
-                      {opt}
-                      {showCorrect && <span className="ml-2 text-emerald-300">✓ correct</span>}
-                    </li>
-                  );
-                })}
-              </ul>
-              {state.phase === "reveal" && currentQ.acceptAny && (
-                <p className="text-xs text-foreground/55">Any selected answer is treated as correct for this question.</p>
+            <div className="flex flex-wrap gap-2">
+              {state.phase === "lobby" && (
+                <button
+                  onClick={() => send({ type: "start" })}
+                  disabled={state.participants.length === 0}
+                  className="rounded-lg bg-brass px-6 py-3 text-sm font-medium uppercase tracking-[0.2em] text-black hover:bg-brass/85 disabled:cursor-not-allowed disabled:bg-brass/25 disabled:text-foreground/40"
+                >
+                  Start quiz
+                </button>
+              )}
+              {state.phase === "running" && (
+                <button
+                  onClick={() => {
+                    if (confirm("End the quiz? All players freeze on their current question.")) {
+                      send({ type: "end" });
+                    }
+                  }}
+                  className="rounded-lg border border-red-500/40 bg-red-950/30 px-6 py-3 text-sm font-medium uppercase tracking-[0.2em] text-red-200 hover:bg-red-950/60"
+                >
+                  End quiz
+                </button>
+              )}
+              {state.phase === "ended" && (
+                <button
+                  onClick={() => send({ type: "reset" })}
+                  className="rounded-lg border border-brass/30 bg-black/40 px-6 py-3 text-sm font-medium uppercase tracking-[0.2em] text-foreground/80 hover:border-brass/60"
+                >
+                  Reset to lobby
+                </button>
               )}
             </div>
-          )}
-
-          {state.phase !== "ended" && (
-            <button
-              onClick={() => {
-                if (confirm("Reset the room? All scores will be cleared and everyone returns to the lobby.")) {
-                  send({ type: "reset" });
-                }
-              }}
-              className="mt-6 rounded-md border border-foreground/15 px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.25em] text-foreground/55 hover:border-red-500/40 hover:text-red-200"
-            >
-              Reset room
-            </button>
-          )}
+          </div>
         </section>
 
-        {/* Participants */}
         <section className="rounded-xl border border-brass/20 bg-neutral-950/80 p-6">
-          <div className="flex items-baseline justify-between">
-            <h2 className="text-lg font-semibold">Participants</h2>
-            <p className="text-xs font-mono text-foreground/55">{state.participants.length} joined · {state.viewers.length} viewer{state.viewers.length === 1 ? "" : "s"}</p>
-          </div>
-          {state.participants.length === 0 ? (
-            <p className="mt-3 text-sm text-foreground/55">
-              No one yet. Share the /play link to invite players.
-            </p>
+          <h2 className="text-lg font-semibold">Participants</h2>
+          {sortedParticipants.length === 0 ? (
+            <p className="mt-3 text-sm text-foreground/55">No one yet. Share the /play link.</p>
           ) : (
             <table className="mt-4 w-full text-sm">
               <thead>
                 <tr className="text-left text-[10px] font-mono uppercase tracking-[0.25em] text-foreground/45">
                   <th className="py-1">Name</th>
+                  <th className="py-1">Question</th>
                   <th className="py-1">Score</th>
                   <th className="py-1">Status</th>
                   <th className="py-1"></th>
                 </tr>
               </thead>
               <tbody>
-                {state.participants.map((p) => (
+                {sortedParticipants.map((p) => (
                   <tr key={p.id} className="border-t border-brass/10">
                     <td className="py-2 font-medium">{p.name}</td>
-                    <td className="py-2 font-mono">{p.score}</td>
+                    <td className="py-2 font-mono">
+                      {p.finishedAt ? "✓ done" : `${Math.min(p.currentQuestionIdx + 1, state.totalQuestions)} / ${state.totalQuestions}`}
+                    </td>
+                    <td className="py-2 font-mono text-brass">{p.score}</td>
                     <td className="py-2 text-foreground/65">
-                      {p.eliminated
-                        ? "Eliminated"
-                        : state.phase === "question"
-                          ? p.hasAnsweredThisRound
-                            ? "✓ Answered"
-                            : "…thinking"
-                          : "—"}
+                      {p.finishedAt ? "Finished" : state.phase === "running" ? "Playing" : "—"}
                     </td>
                     <td className="py-2 text-right">
                       <button
