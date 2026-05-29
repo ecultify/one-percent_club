@@ -19,7 +19,9 @@ const DETAILS_NARRATION =
 
 export default function UserDetailsModal({ onSubmit }: UserDetailsModalProps) {
   const [name, setName] = useState("");
-  const [quizSet, setQuizSet] = useState<QuizSet>("A");
+  // Only one quiz set ships, so the picker was removed from the form — every
+  // registration is implicitly Set A.
+  const quizSet: QuizSet = "A";
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const { narrate, stop } = useNarration();
 
@@ -113,48 +115,6 @@ export default function UserDetailsModal({ onSubmit }: UserDetailsModalProps) {
                 </div>
               </motion.div>
             ))}
-
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.22, duration: 0.45, ease: [0.23, 1, 0.32, 1] }}
-            >
-              <label
-                htmlFor="quiz-set"
-                className={`block text-[11px] font-semibold uppercase tracking-[0.12em] mb-2 transition-colors duration-200 ${
-                  focusedField === "set" ? "text-brass-bright" : "text-muted"
-                }`}
-              >
-                Choose your set
-              </label>
-              <div className="relative rounded-xl">
-                {focusedField === "set" && (
-                  <motion.div
-                    className="absolute -inset-px rounded-xl bg-brass/15 ring-1 ring-brass/40"
-                    layoutId="input-focus-set"
-                    transition={{ type: "spring", duration: 0.38, bounce: 0.12 }}
-                  />
-                )}
-                <select
-                  id="quiz-set"
-                  value={quizSet}
-                  onChange={(e) => setQuizSet(e.target.value as QuizSet)}
-                  onFocus={() => setFocusedField("set")}
-                  onBlur={() => setFocusedField(null)}
-                  className="relative w-full cursor-pointer appearance-none rounded-xl border border-brass/25 bg-black/45 px-4 py-3.5 pr-10 text-[15px] text-foreground outline-none transition-colors duration-200 focus:border-brass/40 focus:bg-black/55 focus:ring-1 focus:ring-brass/25"
-                >
-                  <option value="A">Set A</option>
-                </select>
-                <div
-                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-brass-bright/80"
-                  aria-hidden
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M6 9l6 6 6-6" />
-                  </svg>
-                </div>
-              </div>
-            </motion.div>
 
             <motion.div
               initial={{ opacity: 0, y: 10 }}
