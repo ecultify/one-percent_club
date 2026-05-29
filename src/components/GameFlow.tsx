@@ -299,6 +299,18 @@ export default function GameFlow() {
     themeUnlockRef.current?.();
   }, [phase, audioUnlocked]);
 
+  // BGM should come in as early as possible: the instant the user completes
+  // the "Continue with sound" gesture (audioUnlocked flips true), arm the
+  // idle theme so the beat starts right away — instead of waiting for the
+  // home video's 6s "homevideo:theme-cue". Runs regardless of the background
+  // video flag; the theme-cue listener below is now just a no-op redundancy.
+  useEffect(() => {
+    if (phase !== "idle") return;
+    if (!audioUnlocked) return;
+    setIdleScrollThemeArmed(true);
+    themeUnlockRef.current?.();
+  }, [phase, audioUnlocked]);
+
   // Theme cue: HomeIntroVideo dispatches "homevideo:theme-cue" at the
   // 6-second mark of the home video. We mirror what the legacy
   // scroll-frame trigger used to do — arm the idle theme + run the
