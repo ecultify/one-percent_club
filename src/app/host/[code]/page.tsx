@@ -4,13 +4,16 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { usePartyRoom } from "@/lib/usePartyRoom";
+import { rankParticipants, totalResponseMs } from "@/lib/quizProtocol";
 
 /**
  * Focused single-room host view. Reachable from the dashboard via the
- * "Focus" button on each room card. Same start / end / reset controls
- * as the card, just with more screen real estate for the participants
- * table — useful when one room has 50+ players and you want to keep
- * an eye on it without the rest of the dashboard.
+ * "Focus" button on each room card. Start / End / Reset / Kick controls
+ * plus a participants table — useful when one room has 50+ players.
+ *
+ * The quiz is server-synchronized: once started, the server drives the
+ * shared question and clock; the host just starts and ends. Players who
+ * answer wrong / time out are eliminated and shown as "out".
  */
 export default function HostRoomPage() {
   const params = useParams<{ code: string }>();
@@ -38,13 +41,16 @@ export default function HostRoomPage() {
   const shareUrl = (path: "play" | "watch") =>
     typeof window !== "undefined" ? `${window.location.origin}/${path}/${roomCode}` : "";
 
-  const sortedParticipants = [...state.participants].sort((a, b) => b.score - a.score);
-  const activeCount = state.participants.filter((p) => p.finishedAt == null).length;
+  const ranked = rankParticipants(state.participants);
+  const survivors = state.participants.filter((p) => !p.eliminated).length;
   const phaseLabel: Record<typeof state.phase, string> = {
     lobby: "Lobby",
     running: "Live",
     ended: "Ended",
   };
+
+  const primaryBtn = "lq-btn game-show-btn relative z-0 px-7";
+  const secondaryBtn = "lq-btn lq-btn--ghost";
 
   return (
     <main className="min-h-screen bg-black text-foreground">
@@ -58,19 +64,11 @@ export default function HostRoomPage() {
               Room <span className="font-mono tracking-widest text-brass">{roomCode}</span>
             </h1>
           </div>
-          <div className="flex flex-wrap gap-3 text-xs font-mono">
-            <button
-              onClick={() => navigator.clipboard?.writeText(shareUrl("play"))}
-              className="rounded-md border border-brass/30 bg-black/40 px-3 py-2 hover:border-brass/60"
-              title={shareUrl("play")}
-            >
+          <div className="flex flex-wrap gap-3">
+            <button onClick={() => navigator.clipboard?.writeText(shareUrl("play"))} className={secondaryBtn} title={shareUrl("play")}>
               Copy /play link
             </button>
-            <button
-              onClick={() => navigator.clipboard?.writeText(shareUrl("watch"))}
-              className="rounded-md border border-brass/30 bg-black/40 px-3 py-2 hover:border-brass/60"
-              title={shareUrl("watch")}
-            >
+            <button onClick={() => navigator.clipboard?.writeText(shareUrl("watch"))} className={secondaryBtn} title={shareUrl("watch")}>
               Copy /watch link
             </button>
           </div>
@@ -88,23 +86,24 @@ export default function HostRoomPage() {
         )}
 
         <section className="rounded-xl border border-brass/20 bg-neutral-950/80 p-6">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-foreground/55">
                 {phaseLabel[state.phase]}
+                {state.phase === "running" && ` · Q${state.currentQuestionIdx + 1}/${state.totalQuestions}`}
               </p>
               <p className="mt-1 text-xl">
                 {state.participants.length} player{state.participants.length === 1 ? "" : "s"} ·{" "}
-                {activeCount} still playing · {state.viewers.length} viewer
-                {state.viewers.length === 1 ? "" : "s"}
+                {state.phase === "running" ? `${survivors} still in` : `${state.participants.length} ready`} ·{" "}
+                {state.viewers.length} viewer{state.viewers.length === 1 ? "" : "s"}
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-5">
               {state.phase === "lobby" && (
                 <button
                   onClick={() => send({ type: "start" })}
                   disabled={state.participants.length === 0}
-                  className="rounded-lg bg-brass px-6 py-3 text-sm font-medium uppercase tracking-[0.2em] text-black hover:bg-brass/85 disabled:cursor-not-allowed disabled:bg-brass/25 disabled:text-foreground/40"
+                  className={primaryBtn}
                 >
                   Start quiz
                 </button>
@@ -112,20 +111,15 @@ export default function HostRoomPage() {
               {state.phase === "running" && (
                 <button
                   onClick={() => {
-                    if (confirm("End the quiz? All players freeze on their current question.")) {
-                      send({ type: "end" });
-                    }
+                    if (confirm("End the quiz now? The current standings are frozen.")) send({ type: "end" });
                   }}
-                  className="rounded-lg border border-red-500/40 bg-red-950/30 px-6 py-3 text-sm font-medium uppercase tracking-[0.2em] text-red-200 hover:bg-red-950/60"
+                  className="lq-btn lq-btn--danger px-7"
                 >
                   End quiz
                 </button>
               )}
               {state.phase === "ended" && (
-                <button
-                  onClick={() => send({ type: "reset" })}
-                  className="rounded-lg border border-brass/30 bg-black/40 px-6 py-3 text-sm font-medium uppercase tracking-[0.2em] text-foreground/80 hover:border-brass/60"
-                >
+                <button onClick={() => send({ type: "reset" })} className={primaryBtn}>
                   Reset to lobby
                 </button>
               )}
@@ -135,30 +129,38 @@ export default function HostRoomPage() {
 
         <section className="rounded-xl border border-brass/20 bg-neutral-950/80 p-6">
           <h2 className="text-lg font-semibold">Participants</h2>
-          {sortedParticipants.length === 0 ? (
+          {ranked.length === 0 ? (
             <p className="mt-3 text-sm text-foreground/55">No one yet. Share the /play link.</p>
           ) : (
             <table className="mt-4 w-full text-sm">
               <thead>
                 <tr className="text-left text-[10px] font-mono uppercase tracking-[0.25em] text-foreground/45">
                   <th className="py-1">Name</th>
-                  <th className="py-1">Question</th>
-                  <th className="py-1">Score</th>
                   <th className="py-1">Status</th>
+                  <th className="py-1">Score</th>
+                  <th className="py-1">Time</th>
                   <th className="py-1"></th>
                 </tr>
               </thead>
               <tbody>
-                {sortedParticipants.map((p) => (
+                {ranked.map((p) => (
                   <tr key={p.id} className="border-t border-brass/10">
                     <td className="py-2 font-medium">{p.name}</td>
-                    <td className="py-2 font-mono">
-                      {p.finishedAt ? "✓ done" : `${Math.min(p.currentQuestionIdx + 1, state.totalQuestions)} / ${state.totalQuestions}`}
+                    <td className="py-2">
+                      {p.lateJoin ? (
+                        <span className="text-foreground/45">Spectator</span>
+                      ) : p.eliminated ? (
+                        <span className="text-red-300/90">Out · Q{(p.eliminatedAtQuestion ?? 0) + 1}</span>
+                      ) : state.phase === "running" ? (
+                        <span className="text-emerald-300">In</span>
+                      ) : state.phase === "ended" ? (
+                        <span className="text-emerald-300">Survived</span>
+                      ) : (
+                        <span className="text-foreground/55">Ready</span>
+                      )}
                     </td>
                     <td className="py-2 font-mono text-brass">{p.score}</td>
-                    <td className="py-2 text-foreground/65">
-                      {p.finishedAt ? "Finished" : state.phase === "running" ? "Playing" : "—"}
-                    </td>
+                    <td className="py-2 font-mono text-foreground/55">{(totalResponseMs(p) / 1000).toFixed(1)}s</td>
                     <td className="py-2 text-right">
                       <button
                         onClick={() => {

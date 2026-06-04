@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePartyRoom } from "@/lib/usePartyRoom";
+import { rankParticipants } from "@/lib/quizProtocol";
 
 interface HostRoomCardProps {
   code: string;
@@ -44,10 +45,11 @@ export default function HostRoomCard({ code, hostKey, onRemove }: HostRoomCardPr
   const playLink = typeof window !== "undefined" ? `${window.location.origin}/play/${code}` : `/play/${code}`;
   const watchLink = typeof window !== "undefined" ? `${window.location.origin}/watch/${code}` : `/watch/${code}`;
 
-  const participantsActive = state?.participants.filter((p) => p.finishedAt == null).length ?? 0;
+  const participantsActive = state?.participants.filter((p) => !p.eliminated).length ?? 0;
   const participantsTotal = state?.participants.length ?? 0;
+  const activeLabel = state?.phase === "running" ? "still in" : "active";
 
-  const sortedParticipants = state ? [...state.participants].sort((a, b) => b.score - a.score) : [];
+  const sortedParticipants = state ? rankParticipants(state.participants) : [];
 
   return (
     <div className="rounded-xl border border-brass/25 bg-neutral-950/80 p-5 shadow">
@@ -61,7 +63,7 @@ export default function HostRoomCard({ code, hostKey, onRemove }: HostRoomCardPr
         </div>
         <div className="flex flex-col items-end gap-1 text-[10px] font-mono uppercase tracking-[0.2em] text-foreground/55">
           <span>{participantsTotal} joined</span>
-          <span>{participantsActive} active</span>
+          <span>{participantsActive} {activeLabel}</span>
           <span>{state?.viewers.length ?? 0} viewers</span>
         </div>
       </div>
@@ -73,30 +75,22 @@ export default function HostRoomCard({ code, hostKey, onRemove }: HostRoomCardPr
       )}
 
       {/* Quick links */}
-      <div className="mt-4 flex flex-wrap gap-2 text-[10px] font-mono">
-        <button
-          onClick={() => navigator.clipboard?.writeText(playLink)}
-          className="rounded-md border border-brass/25 bg-black/40 px-2 py-1 text-foreground/70 hover:border-brass/60"
-          title={playLink}
-        >
-          Copy /play link
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <button onClick={() => navigator.clipboard?.writeText(playLink)} className="lq-btn lq-btn--sm lq-btn--subtle" title={playLink}>
+          Copy /play
         </button>
-        <button
-          onClick={() => navigator.clipboard?.writeText(watchLink)}
-          className="rounded-md border border-brass/25 bg-black/40 px-2 py-1 text-foreground/70 hover:border-brass/60"
-          title={watchLink}
-        >
-          Copy /watch link
+        <button onClick={() => navigator.clipboard?.writeText(watchLink)} className="lq-btn lq-btn--sm lq-btn--subtle" title={watchLink}>
+          Copy /watch
         </button>
       </div>
 
-      {/* Primary action */}
-      <div className="mt-4 flex flex-wrap gap-2">
+      {/* Primary action — full width on its own row so the label never wraps. */}
+      <div className="mt-3">
         {state?.phase === "lobby" && (
           <button
             onClick={() => send({ type: "start" })}
             disabled={participantsTotal === 0}
-            className="flex-1 rounded-lg bg-brass px-4 py-2 text-xs font-medium uppercase tracking-[0.2em] text-black hover:bg-brass/85 disabled:cursor-not-allowed disabled:bg-brass/25 disabled:text-foreground/40"
+            className="lq-btn game-show-btn relative z-0 w-full"
           >
             Start quiz
           </button>
@@ -108,42 +102,38 @@ export default function HostRoomCard({ code, hostKey, onRemove }: HostRoomCardPr
                 send({ type: "end" });
               }
             }}
-            className="flex-1 rounded-lg border border-red-500/40 bg-red-950/30 px-4 py-2 text-xs font-medium uppercase tracking-[0.2em] text-red-200 hover:bg-red-950/60"
+            className="lq-btn lq-btn--danger w-full"
           >
             End quiz
           </button>
         )}
         {state?.phase === "ended" && (
-          <button
-            onClick={() => send({ type: "reset" })}
-            className="flex-1 rounded-lg border border-brass/30 bg-black/40 px-4 py-2 text-xs font-medium uppercase tracking-[0.2em] text-foreground/80 hover:border-brass/60"
-          >
+          <button onClick={() => send({ type: "reset" })} className="lq-btn game-show-btn relative z-0 w-full">
             Reset to lobby
           </button>
         )}
-        <button
-          onClick={() => setExpanded((v) => !v)}
-          className="rounded-lg border border-brass/20 bg-black/40 px-3 py-2 text-xs font-mono uppercase tracking-[0.2em] text-foreground/60 hover:border-brass/40"
-        >
-          {expanded ? "Hide" : "Show"} players
-        </button>
-        <Link
-          href={`/host/${code}?hostKey=${encodeURIComponent(hostKey)}`}
-          className="rounded-lg border border-brass/20 bg-black/40 px-3 py-2 text-xs font-mono uppercase tracking-[0.2em] text-foreground/60 hover:border-brass/40"
-        >
-          Focus
-        </Link>
-        <button
-          onClick={() => {
-            if (confirm(`Remove ${code} from your dashboard? The server room stays alive until everyone disconnects.`)) {
-              onRemove();
-            }
-          }}
-          className="rounded-lg border border-foreground/15 bg-black/40 px-3 py-2 text-[10px] font-mono uppercase tracking-[0.2em] text-foreground/40 hover:border-red-500/40 hover:text-red-200"
-        >
-          Remove
-        </button>
       </div>
+
+      {/* Secondary actions */}
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <button onClick={() => setExpanded((v) => !v)} className="lq-btn lq-btn--ghost w-full">
+          {expanded ? "Hide players" : "Show players"}
+        </button>
+        <Link href={`/host/${code}?hostKey=${encodeURIComponent(hostKey)}`} className="lq-btn lq-btn--ghost w-full">
+          Focus room
+        </Link>
+      </div>
+
+      <button
+        onClick={() => {
+          if (confirm(`Remove ${code} from your dashboard? The server room stays alive until everyone disconnects.`)) {
+            onRemove();
+          }
+        }}
+        className="lq-btn lq-btn--sm lq-btn--danger-quiet mt-2 w-full"
+      >
+        Remove from dashboard
+      </button>
 
       {/* Participant list */}
       {expanded && state && (
@@ -155,7 +145,7 @@ export default function HostRoomCard({ code, hostKey, onRemove }: HostRoomCardPr
               <thead>
                 <tr className="text-left font-mono uppercase tracking-[0.25em] text-foreground/40">
                   <th className="py-1">Name</th>
-                  <th className="py-1">Q</th>
+                  <th className="py-1">Status</th>
                   <th className="py-1">Score</th>
                   <th className="py-1"></th>
                 </tr>
@@ -165,9 +155,15 @@ export default function HostRoomCard({ code, hostKey, onRemove }: HostRoomCardPr
                   <tr key={p.id} className="border-t border-brass/5">
                     <td className="py-1.5 font-medium text-foreground/85">{p.name}</td>
                     <td className="py-1.5 font-mono text-foreground/70">
-                      {p.finishedAt
-                        ? "✓"
-                        : `${Math.min(p.currentQuestionIdx + 1, state.totalQuestions)}/${state.totalQuestions}`}
+                      {p.lateJoin ? (
+                        <span className="text-foreground/40">spectator</span>
+                      ) : p.eliminated ? (
+                        <span className="text-red-300/80">out Q{(p.eliminatedAtQuestion ?? 0) + 1}</span>
+                      ) : state.phase === "lobby" ? (
+                        "ready"
+                      ) : (
+                        <span className="text-emerald-300/90">in</span>
+                      )}
                     </td>
                     <td className="py-1.5 font-mono text-brass">{p.score}</td>
                     <td className="py-1.5 text-right">

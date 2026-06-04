@@ -70,15 +70,12 @@ export default function HostDashboardPage() {
         <header className="flex flex-wrap items-end justify-between gap-4 border-b border-brass/15 pb-6">
           <div>
             <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-brass/70">Host dashboard</p>
-            <h1 className="mt-1 text-3xl font-semibold">The 1% Club — live quiz rooms</h1>
+            <h1 className="mt-1 text-3xl font-semibold">The 1% Club - live quiz rooms</h1>
             <p className="mt-2 text-sm text-foreground/55">
               Each card is an independent room. Start or end them individually.
             </p>
           </div>
-          <button
-            onClick={addRoom}
-            className="rounded-lg bg-brass px-5 py-3 text-sm font-medium uppercase tracking-[0.2em] text-black hover:bg-brass/85"
-          >
+          <button onClick={addRoom} className="lq-btn game-show-btn relative z-0 px-7">
             + Create new room
           </button>
         </header>

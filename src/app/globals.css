@@ -380,6 +380,117 @@ body {
     mix-blend-mode: screen;
   }
 
+  /* ─── Live-quiz control buttons ───────────────────────────────────────
+     One consistent button system for the host dashboard / room pages and
+     the join landings. Every variant shares the same base (fixed height,
+     centered label, no wrapping) so rows of buttons line up cleanly. The
+     gold primary reuses .game-show-btn for its metallic face; the rest are
+     metal-on-dark so they read as part of the same brass language instead
+     of flat outline boxes. */
+  .lq-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+    height: 2.75rem;
+    padding: 0 1.25rem;
+    border-radius: 0.75rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    cursor: pointer;
+    user-select: none;
+    transition:
+      background-image 0.2s ease,
+      background-position 0.35s ease,
+      border-color 0.2s ease,
+      box-shadow 0.25s ease,
+      color 0.2s ease,
+      transform 0.15s ease;
+  }
+  .lq-btn:active {
+    transform: translateY(1px);
+  }
+  .lq-btn:disabled,
+  .lq-btn[aria-disabled="true"] {
+    opacity: 0.4;
+    pointer-events: none;
+  }
+  /* Compact variant for tertiary actions (copy link, remove). */
+  .lq-btn--sm {
+    height: 2.25rem;
+    padding: 0 0.9rem;
+    font-size: 0.65rem;
+    letter-spacing: 0.16em;
+    border-radius: 0.6rem;
+  }
+
+  /* Secondary — refined metal-on-dark with a brass rim + top highlight. */
+  .lq-btn--ghost {
+    color: rgba(232, 222, 194, 0.82);
+    background-image: linear-gradient(180deg, rgba(64, 50, 22, 0.4) 0%, rgba(20, 16, 9, 0.55) 100%);
+    border: 1px solid rgba(224, 160, 43, 0.3);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 232, 170, 0.14),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.4),
+      0 1px 2px rgba(0, 0, 0, 0.45);
+  }
+  .lq-btn--ghost:hover {
+    color: #f4e8c4;
+    border-color: rgba(224, 160, 43, 0.62);
+    background-image: linear-gradient(180deg, rgba(86, 66, 26, 0.55) 0%, rgba(28, 22, 11, 0.6) 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 232, 170, 0.22),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.4),
+      0 3px 14px rgba(196, 160, 53, 0.22);
+  }
+
+  /* Tertiary — quiet, for copy-link chips. */
+  .lq-btn--subtle {
+    color: rgba(224, 214, 192, 0.6);
+    background-image: linear-gradient(180deg, rgba(44, 36, 20, 0.3) 0%, rgba(16, 12, 7, 0.45) 100%);
+    border: 1px solid rgba(224, 160, 43, 0.18);
+    box-shadow: inset 0 1px 0 rgba(255, 232, 170, 0.08);
+  }
+  .lq-btn--subtle:hover {
+    color: rgba(238, 228, 204, 0.9);
+    border-color: rgba(224, 160, 43, 0.42);
+  }
+
+  /* Destructive — End quiz / remove. */
+  .lq-btn--danger {
+    color: #fecaca;
+    background-image: linear-gradient(180deg, rgba(127, 29, 29, 0.5) 0%, rgba(55, 12, 12, 0.55) 100%);
+    border: 1px solid rgba(248, 113, 113, 0.4);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 190, 190, 0.12),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.4),
+      0 1px 2px rgba(0, 0, 0, 0.45);
+  }
+  .lq-btn--danger:hover {
+    color: #fee2e2;
+    border-color: rgba(248, 113, 113, 0.72);
+    background-image: linear-gradient(180deg, rgba(153, 27, 27, 0.6) 0%, rgba(70, 14, 14, 0.6) 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 190, 190, 0.18),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.4),
+      0 3px 16px rgba(220, 38, 38, 0.28);
+  }
+  /* Quiet danger — remove-from-dashboard: neutral until hover. */
+  .lq-btn--danger-quiet {
+    color: rgba(224, 214, 192, 0.55);
+    background-image: linear-gradient(180deg, rgba(40, 34, 20, 0.28) 0%, rgba(14, 11, 6, 0.42) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .lq-btn--danger-quiet:hover {
+    color: #fecaca;
+    border-color: rgba(248, 113, 113, 0.5);
+    background-image: linear-gradient(180deg, rgba(90, 22, 22, 0.4) 0%, rgba(40, 10, 10, 0.45) 100%);
+  }
+
   /* ─── Circular Enter CTA — same rim + cast shadow language as .game-show-btn ─── */
   .enter-cta-metallic-ring {
     position: relative;
