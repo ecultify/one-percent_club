@@ -1,12 +1,17 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { useNarration } from "./NarrationProvider";
 import MuteButton from "./MuteButton";
 import { METALLIC_RIM_GRADIENT, PANEL_INNER_FILL } from "./QuestionScreen";
 
 export type QuizSet = "A" | "B";
+
+/** Single-player runs the normal solo journey; multiplayer routes the
+ *  player into a live host room via an invite code. */
+export type GameMode = "single" | "multi";
 
 interface UserDetailsModalProps {
   onSubmit: (data: { name: string; quizSet: QuizSet }) => void;
@@ -18,8 +23,11 @@ const DETAILS_NARRATION =
   "Sirf ek chhoti si formality, phir asli game shuroo karte hain.";
 
 export default function UserDetailsModal({ onSubmit }: UserDetailsModalProps) {
+  const router = useRouter();
   const [name, setName] = useState("");
   const [quizSet, setQuizSet] = useState<QuizSet>("A");
+  const [mode, setMode] = useState<GameMode>("single");
+  const [inviteCode, setInviteCode] = useState("");
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const { narrate, stop } = useNarration();
 
@@ -32,6 +40,15 @@ export default function UserDetailsModal({ onSubmit }: UserDetailsModalProps) {
   const handleSubmit = (e?: FormEvent) => {
     if (e) e.preventDefault();
     if (!name.trim()) return;
+    if (mode === "multi") {
+      // Multiplayer: hand off to the live host room. The lobby socket is
+      // opened on /play/[code], so we just need the code + name here.
+      const c = inviteCode.trim().toUpperCase();
+      if (!c) return;
+      router.push(`/play/${c}?name=${encodeURIComponent(name.trim())}`);
+      return;
+    }
+    // Single-player: continue the normal solo journey.
     onSubmit({ name: name.trim(), quizSet });
   };
 
@@ -39,7 +56,10 @@ export default function UserDetailsModal({ onSubmit }: UserDetailsModalProps) {
     { id: "name", label: "Your name", type: "text", value: name, setter: setName, placeholder: "Full name", delay: 0.12 },
   ];
 
-  const isValid = Boolean(name.trim());
+  const isValid =
+    mode === "single"
+      ? Boolean(name.trim())
+      : Boolean(name.trim() && inviteCode.trim());
 
   return (
     <div className="w-full max-w-md mx-4 relative max-h-[90vh] flex flex-col">
@@ -118,6 +138,7 @@ export default function UserDetailsModal({ onSubmit }: UserDetailsModalProps) {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.22, duration: 0.45, ease: [0.23, 1, 0.32, 1] }}
+              className={mode === "multi" ? "hidden" : undefined}
             >
               <label
                 htmlFor="quiz-set"
@@ -159,6 +180,80 @@ export default function UserDetailsModal({ onSubmit }: UserDetailsModalProps) {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.27, duration: 0.45, ease: [0.23, 1, 0.32, 1] }}
+            >
+              <span className="block text-[11px] font-semibold uppercase tracking-[0.12em] mb-2 text-muted">
+                Game mode
+              </span>
+              <div className="grid grid-cols-2 gap-1.5 rounded-xl border border-brass/25 bg-black/45 p-1">
+                {([
+                  { id: "single", label: "Single player" },
+                  { id: "multi", label: "Multiplayer" },
+                ] as const).map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setMode(opt.id)}
+                    className={`relative cursor-pointer rounded-lg py-3 text-[12px] font-semibold uppercase tracking-[0.14em] transition-colors duration-200 ${
+                      mode === opt.id
+                        ? "bg-brass text-[#14110a]"
+                        : "text-muted hover:text-foreground"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+
+            <AnimatePresence initial={false}>
+              {mode === "multi" && (
+                <motion.div
+                  key="invite-code"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.35, ease: [0.23, 1, 0.32, 1] }}
+                  className="overflow-hidden"
+                >
+                  <label
+                    htmlFor="invite-code"
+                    className={`block text-[11px] font-semibold uppercase tracking-[0.12em] mb-2 mt-1 transition-colors duration-200 ${
+                      focusedField === "invite" ? "text-brass-bright" : "text-muted"
+                    }`}
+                  >
+                    Invite code
+                  </label>
+                  <div className="relative rounded-xl">
+                    {focusedField === "invite" && (
+                      <motion.div
+                        className="absolute -inset-px rounded-xl bg-brass/15 ring-1 ring-brass/40"
+                        layoutId="input-focus-invite"
+                        transition={{ type: "spring", duration: 0.38, bounce: 0.12 }}
+                      />
+                    )}
+                    <input
+                      id="invite-code"
+                      type="text"
+                      value={inviteCode}
+                      onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                      onFocus={() => setFocusedField("invite")}
+                      onBlur={() => setFocusedField(null)}
+                      placeholder="ABCDEF"
+                      maxLength={8}
+                      className="relative w-full px-4 py-3.5 rounded-xl bg-black/45 border border-brass/25 text-foreground placeholder:text-muted/70 text-[15px] tracking-[0.35em] font-mono uppercase outline-none transition-colors duration-200 focus:border-brass/40 focus:bg-black/55 focus:ring-1 focus:ring-brass/25"
+                    />
+                  </div>
+                  <p className="mt-2 text-[11px] text-foreground/55 leading-relaxed">
+                    Ask the host for the room code to join their live lobby.
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.32, duration: 0.45, ease: [0.23, 1, 0.32, 1] }}
               className="pt-2"
             >
@@ -173,11 +268,11 @@ export default function UserDetailsModal({ onSubmit }: UserDetailsModalProps) {
                   whileTap={{ scale: 0.98 }}
                   className="game-show-btn relative z-0 w-full cursor-pointer rounded-xl bg-brass py-4 text-center text-[13px] font-semibold uppercase tracking-[0.2em] text-[#14110a] transition-colors hover:bg-brass-bright"
                 >
-                  <span className="relative z-10">Continue</span>
+                  <span className="relative z-10">{mode === "multi" ? "Join lobby" : "Continue"}</span>
                 </motion.button>
               ) : (
                 <div className="w-full py-4 rounded-xl bg-black/25 border-2 border-brass/15 text-center cursor-not-allowed">
-                  <span className="text-[13px] font-semibold uppercase tracking-[0.2em] text-muted/45">Continue</span>
+                  <span className="text-[13px] font-semibold uppercase tracking-[0.2em] text-muted/45">{mode === "multi" ? "Join lobby" : "Continue"}</span>
                 </div>
               )}
             </motion.div>
