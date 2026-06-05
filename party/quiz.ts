@@ -268,6 +268,8 @@ export default class QuizServer implements Party.Server {
     connection.setState({ role: "host" } satisfies ConnState);
     this.sendTo(connection, { type: "identity", id: connection.id, role: "host" });
     this.broadcastState();
+    // Register the room in the lobby history the moment a host takes it.
+    void this.reportRoomEvent(this.phase);
   }
 
   private startQuiz() {
@@ -288,6 +290,7 @@ export default class QuizServer implements Party.Server {
     }
     this.currentQuestionIdx = 0;
     this.beginRound();
+    void this.reportRoomEvent("running");
   }
 
   private endQuiz() {
@@ -297,6 +300,7 @@ export default class QuizServer implements Party.Server {
     this.roundPhase = "revealing";
     this.questionStartedAt = null;
     this.broadcastState();
+    void this.reportRoomEvent("ended");
   }
 
   private resetRoom() {
@@ -318,6 +322,7 @@ export default class QuizServer implements Party.Server {
       p.scoring = true;
     }
     this.broadcastState();
+    void this.reportRoomEvent("lobby");
   }
 
   private kickParticipant(participantId: string) {
@@ -624,5 +629,53 @@ export default class QuizServer implements Party.Server {
 
   private sendTo(connection: Party.Connection, msg: ServerMessage) {
     connection.send(JSON.stringify(msg));
+  }
+
+  /**
+   * Records this room's lifecycle into the lobby registry (Postgres now /
+   * MySQL on Hostinger later) by POSTing to the Next.js app's
+   * /api/rooms/event. Server-to-server so the history is authoritative
+   * regardless of which host browser is connected. Fire-and-forget and fully
+   * optional: if APP_ORIGIN isn't configured, or the call fails, gameplay is
+   * never affected.
+   */
+  private async reportRoomEvent(status: "lobby" | "running" | "ended") {
+    const origin = this.room.env.APP_ORIGIN as string | undefined;
+    if (!origin) return; // registry not wired up — skip silently
+    const secret = this.room.env.ROOMS_EVENT_SECRET as string | undefined;
+    const scored = Array.from(this.participants.values()).filter((p) => p.scoring);
+    const finalStandings =
+      status === "ended"
+        ? scored
+            .map((p) => ({
+              name: p.name,
+              score: p.score,
+              eliminated: p.eliminated,
+              eliminatedAtQuestion: p.eliminatedAtQuestion,
+            }))
+            .sort((a, b) => {
+              const aSurv = a.eliminated ? 0 : 1;
+              const bSurv = b.eliminated ? 0 : 1;
+              if (aSurv !== bSurv) return bSurv - aSurv;
+              return b.score - a.score;
+            })
+        : undefined;
+    try {
+      await fetch(`${origin.replace(/\/$/, "")}/api/rooms/event`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(secret ? { "x-rooms-secret": secret } : {}),
+        },
+        body: JSON.stringify({
+          code: this.room.id,
+          status,
+          playerCount: scored.length,
+          finalStandings,
+        }),
+      });
+    } catch {
+      /* registry write failed — ignore, never block the room */
+    }
   }
 }
