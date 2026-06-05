@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { usePartyRoom } from "@/lib/usePartyRoom";
 import LiveQuizPlayer from "@/components/live/LiveQuizPlayer";
+import LiveAudioGate from "@/components/live/LiveAudioGate";
+import { useNarration } from "@/components/NarrationProvider";
 
 /**
  * Participant view of a live quiz room. Connects to the PartyKit room,
@@ -18,14 +20,24 @@ export default function PlayRoomPage() {
   const name = search?.get("name") ?? "";
 
   const { state, send, error, kicked, connected, myId } = usePartyRoom(roomCode);
+  const { audioUnlocked } = useNarration();
 
   const [joined, setJoined] = useState(false);
+  const [soundReady, setSoundReady] = useState(false);
 
   useEffect(() => {
     if (!connected || joined) return;
     send({ type: "join-participant", name: name || "Player" });
     setJoined(true);
   }, [connected, joined, name, send]);
+
+  // Prime audio with one tap before the game starts, so the host voice-over
+  // (which fires during "narrating") isn't blocked by the browser autoplay
+  // policy. Skipped when audio is already unlocked (in-app registration flow).
+  // The socket still connects/joins behind this gate via the effects above.
+  if (!audioUnlocked && !soundReady) {
+    return <LiveAudioGate onReady={() => setSoundReady(true)} />;
+  }
 
   if (kicked) {
     return (

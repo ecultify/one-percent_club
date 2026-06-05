@@ -6,6 +6,8 @@ import { usePartyRoom } from "@/lib/usePartyRoom";
 import SpectatorView from "@/components/live/SpectatorView";
 import FinalStandings from "@/components/live/FinalStandings";
 import LiveQuizPlayer from "@/components/live/LiveQuizPlayer";
+import LiveAudioGate from "@/components/live/LiveAudioGate";
+import { useNarration } from "@/components/NarrationProvider";
 
 /**
  * Viewer (spectator) view for a single room.
@@ -23,7 +25,9 @@ export default function WatchRoomPage() {
   const name = search?.get("name") ?? undefined;
 
   const { state, send, connected, myId } = usePartyRoom(roomCode);
+  const { audioUnlocked } = useNarration();
   const [joined, setJoined] = useState(false);
+  const [soundReady, setSoundReady] = useState(false);
   /** Viewer opted to play along (unscored). Once set we join as a
    *  scoring:false participant and defer to LiveQuizPlayer. */
   const [playAlong, setPlayAlong] = useState(false);
@@ -40,6 +44,13 @@ export default function WatchRoomPage() {
     send({ type: "join-participant", name: name ?? "Viewer", scoring: false });
     setPlayAlong(true);
   };
+
+  // Prime audio with one tap so the synced question voice-over plays from the
+  // first question (browsers block autoplay until a gesture). Skipped if audio
+  // is already unlocked. The socket connects behind this gate via the effect.
+  if (!audioUnlocked && !soundReady) {
+    return <LiveAudioGate onReady={() => setSoundReady(true)} />;
+  }
 
   if (!connected || !state) {
     return (
