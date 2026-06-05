@@ -66,7 +66,32 @@ interface ConnState {
   name?: string;
 }
 
-function freshParticipant(id: string, name: string, lateJoin = false): ParticipantState {
+/** Serializable snapshot persisted to PartyKit durable storage so a room
+ *  survives a restart / hibernation / redeploy. Maps are stored as arrays;
+ *  the round timestamps let us reconstruct the pending timer on rehydrate
+ *  (setTimeout state itself is not persisted). */
+interface PersistedRoom {
+  phase: RoomPhase;
+  hostId: string | null;
+  participants: ParticipantState[];
+  viewers: ViewerState[];
+  startedAt: number | null;
+  currentQuestionIdx: number;
+  roundPhase: RoundPhase;
+  questionStartedAt: number | null;
+  narratingStartedAt: number | null;
+  revealStartedAt: number | null;
+  savedAt: number;
+}
+
+const STORAGE_KEY = "room";
+
+function freshParticipant(
+  id: string,
+  name: string,
+  lateJoin = false,
+  scoring = true,
+): ParticipantState {
   return {
     id,
     name,
@@ -74,9 +99,12 @@ function freshParticipant(id: string, name: string, lateJoin = false): Participa
     answers: [],
     correctness: [],
     times: [],
-    eliminated: lateJoin,
+    // Unscored play-along viewers are never "eliminated" — they just play
+    // along. Scored late-joiners spectate immediately (eliminated).
+    eliminated: scoring ? lateJoin : false,
     eliminatedAtQuestion: null,
     lateJoin,
+    scoring,
   };
 }
 
@@ -91,12 +119,53 @@ export default class QuizServer implements Party.Server {
   private currentQuestionIdx = 0;
   private roundPhase: RoundPhase = "asking";
   private questionStartedAt: number | null = null;
+  /** When the current "narrating" / "revealing" sub-phase started — used to
+   *  reconstruct the pending timer after a restart. */
+  private narratingStartedAt: number | null = null;
+  private revealStartedAt: number | null = null;
   /** Connection ids that have submitted an answer for the current round. */
   private answeredThisRound = new Set<string>();
   /** Pending round transition (reveal / advance). */
   private roundTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(readonly room: Party.Room) {}
+
+  /** PartyKit lifecycle: runs once before any connection. Rehydrate the room
+   *  from durable storage so a redeploy / hibernation mid-event doesn't wipe
+   *  the lobby, scores or analytics. */
+  async onStart() {
+    let snap: PersistedRoom | undefined;
+    try {
+      snap = await this.room.storage.get<PersistedRoom>(STORAGE_KEY);
+    } catch {
+      snap = undefined;
+    }
+    if (!snap) return;
+    this.phase = snap.phase;
+    this.startedAt = snap.startedAt;
+    this.currentQuestionIdx = snap.currentQuestionIdx;
+    this.roundPhase = snap.roundPhase;
+    this.questionStartedAt = snap.questionStartedAt;
+    this.narratingStartedAt = snap.narratingStartedAt ?? null;
+    this.revealStartedAt = snap.revealStartedAt ?? null;
+    // The previous host socket is gone after a restart; null hostId so a
+    // reconnecting host re-claims cleanly (scores/standings still restored).
+    this.hostId = null;
+    // Backfill `scoring` for snapshots written before that field existed.
+    this.participants = new Map(
+      snap.participants.map((p) => [p.id, { ...p, scoring: p.scoring ?? true }]),
+    );
+    this.viewers = new Map(snap.viewers.map((v) => [v.id, v]));
+    // Rebuild the answered-this-round set from per-question logs so the round
+    // still gates correctly (scored players who already answered this Q).
+    const idx = snap.currentQuestionIdx;
+    this.answeredThisRound = new Set(
+      snap.participants
+        .filter((p) => p.scoring && p.correctness.length > idx && p.correctness[idx] != null)
+        .map((p) => p.id),
+    );
+    this.recoverTimer();
+  }
 
   onConnect(connection: Party.Connection) {
     connection.setState({ role: "unclaimed" } satisfies ConnState);
@@ -130,13 +199,16 @@ export default class QuizServer implements Party.Server {
         this.requireHost(sender, () => this.kickParticipant(msg.participantId));
         return;
       case "join-participant":
-        this.joinParticipant(sender, msg.name);
+        this.joinParticipant(sender, msg.name, msg.scoring ?? true);
         return;
       case "report-answer":
         this.reportAnswer(sender, msg.questionIdx, msg.answer, msg.correct, msg.elapsedMs);
         return;
       case "join-viewer":
         this.joinViewer(sender, msg.name);
+        return;
+      case "continue-as-viewer":
+        this.continueAsViewer(sender);
         return;
       default: {
         const _exhaustive: never = msg;
@@ -186,7 +258,8 @@ export default class QuizServer implements Party.Server {
     if (this.phase !== "lobby") return;
     this.phase = "running";
     this.startedAt = Date.now();
-    // Reset everyone to a clean slate at Q1.
+    // Reset everyone to a clean slate at Q1. A new game makes everyone a
+    // scored player again (prior play-along viewers are promoted).
     for (const p of this.participants.values()) {
       p.score = 0;
       p.answers = [];
@@ -195,6 +268,7 @@ export default class QuizServer implements Party.Server {
       p.eliminated = false;
       p.eliminatedAtQuestion = null;
       p.lateJoin = false;
+      p.scoring = true;
     }
     this.currentQuestionIdx = 0;
     this.beginRound();
@@ -225,6 +299,7 @@ export default class QuizServer implements Party.Server {
       p.eliminated = false;
       p.eliminatedAtQuestion = null;
       p.lateJoin = false;
+      p.scoring = true;
     }
     this.broadcastState();
   }
@@ -250,6 +325,8 @@ export default class QuizServer implements Party.Server {
     if (this.phase !== "running") return;
     this.roundPhase = "narrating";
     this.questionStartedAt = null;
+    this.narratingStartedAt = Date.now();
+    this.revealStartedAt = null;
     this.answeredThisRound.clear();
     this.clearRoundTimer();
     const voMs = VO_DURATION_MS[this.currentQuestionIdx] ?? DEFAULT_VO_MS;
@@ -275,7 +352,7 @@ export default class QuizServer implements Party.Server {
     if (this.phase !== "running" || this.roundPhase !== "asking") return;
     const idx = this.currentQuestionIdx;
     for (const p of this.participants.values()) {
-      if (p.eliminated) continue;
+      if (!p.scoring || p.eliminated) continue; // unscored players are never auto-eliminated
       if (!this.answeredThisRound.has(p.id)) {
         // Ran out the clock without answering → out.
         this.padTo(p, idx);
@@ -287,9 +364,35 @@ export default class QuizServer implements Party.Server {
       }
     }
     this.roundPhase = "revealing";
+    this.revealStartedAt = Date.now();
     this.clearRoundTimer();
     this.roundTimer = setTimeout(() => this.advanceRound(), REVEAL_HOLD_MS);
     this.broadcastState();
+  }
+
+  /** Rebuild the pending round timer after a rehydrate. setTimeout state is
+   *  not persisted, so we derive the remaining time from the stored sub-phase
+   *  timestamp and fire immediately if it already expired during downtime. */
+  private recoverTimer() {
+    if (this.phase !== "running") return;
+    const now = Date.now();
+    this.clearRoundTimer();
+    if (this.roundPhase === "asking" && this.questionStartedAt != null) {
+      const remaining = QUESTION_TIME_MS + ANSWER_GRACE_MS - (now - this.questionStartedAt);
+      if (remaining <= 0) this.beginReveal();
+      else this.roundTimer = setTimeout(() => this.beginReveal(), remaining);
+    } else if (this.roundPhase === "narrating") {
+      const voMs = VO_DURATION_MS[this.currentQuestionIdx] ?? DEFAULT_VO_MS;
+      const elapsed = this.narratingStartedAt != null ? now - this.narratingStartedAt : voMs;
+      const remaining = voMs - elapsed;
+      if (remaining <= 0) this.beginAsking();
+      else this.roundTimer = setTimeout(() => this.beginAsking(), remaining);
+    } else if (this.roundPhase === "revealing") {
+      const elapsed = this.revealStartedAt != null ? now - this.revealStartedAt : REVEAL_HOLD_MS;
+      const remaining = REVEAL_HOLD_MS - elapsed;
+      if (remaining <= 0) this.advanceRound();
+      else this.roundTimer = setTimeout(() => this.advanceRound(), remaining);
+    }
   }
 
   /** Move everyone to the next question, or end the quiz. */
@@ -305,30 +408,42 @@ export default class QuizServer implements Party.Server {
     this.beginRound();
   }
 
-  /** If every surviving player has already answered, reveal immediately
-   *  instead of waiting out the clock. */
+  /** If every scored survivor has already answered, reveal immediately
+   *  instead of waiting out the clock. Unscored play-along viewers never
+   *  gate the round (a room of only unscored players just runs the clock,
+   *  and advanceRound ends the game). */
   private maybeRevealEarly() {
     if (this.phase !== "running" || this.roundPhase !== "asking") return;
-    if (this.participants.size === 0) return;
+    let scoredActive = 0;
     for (const p of this.participants.values()) {
-      // A survivor who hasn't answered yet — keep the clock running.
-      if (!p.eliminated && !this.answeredThisRound.has(p.id)) return;
+      if (!p.scoring || p.eliminated) continue;
+      scoredActive += 1;
+      // A scored survivor who hasn't answered yet — keep the clock running.
+      if (!this.answeredThisRound.has(p.id)) return;
     }
+    if (scoredActive === 0) return; // nobody scored to gate on — let the clock run
     this.beginReveal();
   }
 
   // ─── Participant / viewer actions ─────────────────────────────────────
 
-  private joinParticipant(connection: Party.Connection, name: string) {
+  private joinParticipant(connection: Party.Connection, name: string, scoring = true) {
     const trimmed = (name || "").trim().slice(0, 32) || "Player";
+    // Promote a passive viewer who chose to play along.
+    this.viewers.delete(connection.id);
     const existing = this.participants.get(connection.id);
     if (existing) {
       existing.name = trimmed;
+    } else if (!scoring) {
+      // Pure viewer-player: unscored from the start. Always answerable
+      // regardless of when they joined; eliminatedAtQuestion stays null so
+      // analytics can tell them apart from continued-after-elimination.
+      this.participants.set(connection.id, freshParticipant(connection.id, trimmed, false, false));
     } else {
       // Joining after the quiz already started → spectate (out from the
       // start). In the lobby they join as a full player.
       const lateJoin = this.phase !== "lobby";
-      const p = freshParticipant(connection.id, trimmed, lateJoin);
+      const p = freshParticipant(connection.id, trimmed, lateJoin, true);
       // -1 marks "never in the running" so they sort below everyone who
       // actually played a round.
       if (lateJoin) p.eliminatedAtQuestion = -1;
@@ -336,6 +451,18 @@ export default class QuizServer implements Party.Server {
     }
     connection.setState({ role: "participant", name: trimmed } satisfies ConnState);
     this.sendTo(connection, { type: "identity", id: connection.id, role: "participant" });
+    this.broadcastState();
+  }
+
+  /** An eliminated scored player opts to keep playing unscored. Retain
+   *  their elimination point (so analytics shows how far they got while
+   *  scored) but flip scoring off so future answers are recorded only. */
+  private continueAsViewer(connection: Party.Connection) {
+    const p = this.participants.get(connection.id);
+    if (!p) return;
+    if (!p.eliminated) return; // only an eliminated player may opt in
+    p.scoring = false;
+    this.answeredThisRound.delete(connection.id);
     this.broadcastState();
   }
 
@@ -364,29 +491,41 @@ export default class QuizServer implements Party.Server {
       this.sendTo(connection, { type: "error", reason: "not-a-participant" });
       return;
     }
-    if (p.eliminated) return; // out — spectating
+    // Two paths: a live scored player (counts), or an unscored play-along
+    // viewer (recorded only). A scored-but-eliminated player who hasn't
+    // opted to continue is ignored.
+    const scoredPath = p.scoring && !p.eliminated;
+    const unscoredPath = !p.scoring;
+    if (!scoredPath && !unscoredPath) return; // eliminated, not playing along
     if (questionIdx !== this.currentQuestionIdx) {
       this.sendTo(connection, { type: "error", reason: "wrong-question-idx" });
       return;
     }
-    if (this.answeredThisRound.has(connection.id)) return; // already answered
+    if (this.answeredThisRound.has(connection.id)) return; // already answered (scored)
+    if (p.correctness.length > this.currentQuestionIdx && p.correctness[this.currentQuestionIdx] != null) {
+      return; // unscored player already answered this round
+    }
 
     const idx = this.currentQuestionIdx;
     this.padTo(p, idx);
     p.answers[idx] = answer;
     p.correctness[idx] = correct;
     p.times[idx] = Number.isFinite(elapsedMs) ? Math.max(0, Math.round(elapsedMs)) : null;
-    this.answeredThisRound.add(connection.id);
 
-    if (correct) {
-      p.score += 1;
-    } else {
-      p.eliminated = true;
-      p.eliminatedAtQuestion = idx;
+    if (scoredPath) {
+      // Only scored players gate the round and affect score/elimination.
+      this.answeredThisRound.add(connection.id);
+      if (correct) {
+        p.score += 1;
+      } else {
+        p.eliminated = true;
+        p.eliminatedAtQuestion = idx;
+      }
     }
+    // Unscored: answer recorded above; no score, no elimination, no gating.
 
     this.broadcastState();
-    this.maybeRevealEarly();
+    if (scoredPath) this.maybeRevealEarly();
   }
 
   // ─── Helpers ───────────────────────────────────────────────────────────
@@ -397,9 +536,11 @@ export default class QuizServer implements Party.Server {
     while (p.times.length <= idx) p.times.push(null);
   }
 
+  /** Scored players still in the running. Unscored play-along viewers
+   *  never count toward survival or the end-of-game condition. */
   private survivorCount(): number {
     let n = 0;
-    for (const p of this.participants.values()) if (!p.eliminated) n += 1;
+    for (const p of this.participants.values()) if (p.scoring && !p.eliminated) n += 1;
     return n;
   }
 
@@ -434,6 +575,31 @@ export default class QuizServer implements Party.Server {
 
   private broadcastState() {
     this.room.broadcast(JSON.stringify({ type: "state", state: this.snapshot() } satisfies ServerMessage));
+    // Persist on every mutation (broadcastState is called after each one) so
+    // the room survives a restart. Fire-and-forget — a failed write must not
+    // break gameplay.
+    void this.saveState();
+  }
+
+  private async saveState() {
+    const snap: PersistedRoom = {
+      phase: this.phase,
+      hostId: this.hostId,
+      participants: Array.from(this.participants.values()),
+      viewers: Array.from(this.viewers.values()),
+      startedAt: this.startedAt,
+      currentQuestionIdx: this.currentQuestionIdx,
+      roundPhase: this.roundPhase,
+      questionStartedAt: this.questionStartedAt,
+      narratingStartedAt: this.narratingStartedAt,
+      revealStartedAt: this.revealStartedAt,
+      savedAt: Date.now(),
+    };
+    try {
+      await this.room.storage.put(STORAGE_KEY, snap);
+    } catch {
+      /* ignore transient storage errors */
+    }
   }
 
   private sendTo(connection: Party.Connection, msg: ServerMessage) {

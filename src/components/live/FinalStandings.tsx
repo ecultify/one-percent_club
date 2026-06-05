@@ -1,16 +1,21 @@
 "use client";
 
-import { rankParticipants, totalResponseMs } from "@/lib/quizProtocol";
+import { rankParticipants, scoredParticipants, unscoredParticipants, totalResponseMs } from "@/lib/quizProtocol";
 import type { ParticipantState, RoomState } from "@/lib/quizProtocol";
+import { continuedAsViewer } from "@/lib/quizAnalytics";
 
 /**
  * End-of-quiz standings, shared by the player view (LiveQuizPlayer) and
- * the spectator /watch page. Survivors are the winners; everyone else is
- * ranked by how far they got, then score, then speed.
+ * the spectator /watch page. Only SCORED players appear in the competitive
+ * standings; unscored play-along viewers are listed separately. Survivors
+ * are the winners; everyone else is ranked by how far they got, then score,
+ * then speed.
  */
 export default function FinalStandings({ state, myId }: { state: RoomState; myId?: string | null }) {
-  const ranked = rankParticipants(state.participants);
+  const ranked = rankParticipants(scoredParticipants(state.participants));
   const survivors = ranked.filter((p) => !p.eliminated);
+  const unscored = unscoredParticipants(state.participants);
+  const continued = continuedAsViewer(state);
   const me = myId ? state.participants.find((p) => p.id === myId) ?? null : null;
   const myRank = myId ? ranked.findIndex((p) => p.id === myId) + 1 : 0;
 
@@ -24,7 +29,10 @@ export default function FinalStandings({ state, myId }: { state: RoomState; myId
               ? `${survivors.length} survivor${survivors.length === 1 ? "" : "s"}`
               : "Everyone was eliminated"}
           </h1>
-          {me && (
+          {me && !me.scoring && (
+            <p className="mt-3 text-foreground/70">You played along (unscored). Thanks for joining in!</p>
+          )}
+          {me && me.scoring && (
             <p className="mt-3 text-foreground/70">
               {me.eliminated
                 ? `You were eliminated on Q${(me.eliminatedAtQuestion ?? 0) + 1}`
@@ -63,6 +71,37 @@ export default function FinalStandings({ state, myId }: { state: RoomState; myId
             ))}
           </ol>
         </section>
+
+        {unscored.length > 0 && (
+          <section className="mt-8">
+            <h2 className="text-lg font-semibold">
+              Played along <span className="text-sm font-normal text-foreground/45">· unscored</span>
+            </h2>
+            <ul className="mt-4 space-y-1 text-sm">
+              {continued.map((r) => (
+                <li
+                  key={r.id}
+                  className={`flex items-center justify-between gap-3 border-b border-brass/10 py-1.5 last:border-b-0 ${
+                    r.id === myId ? "text-brass" : "text-foreground/80"
+                  }`}
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate">{r.name}</span>
+                    <span className="shrink-0 rounded-full bg-neutral-800 px-2 py-0.5 text-[9px] font-mono uppercase tracking-[0.2em] text-foreground/50">
+                      {r.origin === "continued" ? `out Q${(r.continuedAtQ ?? 0) + 1}` : "viewer"}
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-4 font-mono text-xs">
+                    {r.virtualDepth != null && (
+                      <span className="text-foreground/45">reached Q{r.virtualDepth + 1}</span>
+                    )}
+                    <span className="text-brass">{r.unscoredCorrect}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </div>
     </main>
   );

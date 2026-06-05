@@ -36,7 +36,15 @@ interface QuestionScreenProps {
   onTimerVoCue?: () => void;
   /** Notifies when async text/number validation is in progress (stops parent timer SFX). */
   onAnswerValidationPendingChange?: (pending: boolean) => void;
+  /** True once the player has locked an answer (or time ran out): inputs
+   *  disabled, local timer stops. Does NOT reveal correctness on its own. */
   answered: boolean;
+  /** True only when correctness should be shown to everyone simultaneously
+   *  (server flipped the round to "revealing"). Drives the green/red rim,
+   *  the feedback banner and the reveal SFX. In the solo flow this tracks
+   *  `answered` so behaviour is unchanged. Defaults to `answered` when
+   *  omitted. */
+  revealed?: boolean;
   selectedAnswer: number | null;
   isCorrect: boolean;
   paused?: boolean;
@@ -348,11 +356,14 @@ function answerChromeStyles(
   question: Question,
   selected: number | null,
   selectedAnswer: number | null,
-  answered: boolean,
+  revealed: boolean,
 ) {
   const isSelected = selected === i || selectedAnswer === i;
   const isCorrectOption = i === question.correctIndex;
-  const showResult = answered;
+  // Green/red correctness only shows on the shared reveal. While a player is
+  // locked-and-waiting (revealed === false) their pick keeps the neutral gold
+  // "isSelected" rim, so right vs wrong is indistinguishable until reveal.
+  const showResult = revealed;
   let rimBg: string = METALLIC_RIM_GRADIENT;
   let glow = `0 0 18px ${GOLD_GLOW}, 0 10px 28px -12px rgba(0,0,0,0.7)`;
   let textColor = GOLD_BRIGHT;
@@ -756,11 +767,19 @@ export default function QuestionScreen({
   onTimerVoCue,
   onAnswerValidationPendingChange,
   answered,
+  revealed: revealedProp,
   selectedAnswer,
   isCorrect,
   paused = false,
   afterRoundOverlay,
 }: QuestionScreenProps) {
+  // In the solo flow `revealed` is omitted, so correctness shows the moment
+  // the answer is locked (revealed tracks answered). In the live flow the
+  // parent passes `revealed` explicitly so the green/red reveal is held until
+  // the server flips the whole room to "revealing".
+  const revealed = revealedProp ?? answered;
+  /** Player has locked an answer but the shared reveal hasn't happened yet. */
+  const awaitingReveal = answered && !revealed;
   const isThreeImageOptions =
     question.imagesAreOptions === true &&
     question.images?.length === 3 &&
@@ -1477,7 +1496,7 @@ export default function QuestionScreen({
                             {question.images.map((src, i) => {
                               if (question.imagesAreOptions) {
                                 const { rimBg, glow, innerBg, showResult, isCorrectOption, isSelected } =
-                                  answerChromeStyles(i, question, selected, selectedAnswer, answered);
+                                  answerChromeStyles(i, question, selected, selectedAnswer, revealed);
                                 const imgH = question.compactImageRow
                                   ? "h-[92px] sm:h-[108px] md:h-[120px] w-auto max-w-[min(22vw,120px)] md:max-w-[min(20vw,140px)]"
                                   : isThreeImageOptions
@@ -1906,7 +1925,7 @@ export default function QuestionScreen({
                   >
                     {question.options.map((option, i) => {
                       const { isSelected, isCorrectOption, showResult, rimBg, glow, textColor, innerBg } =
-                        answerChromeStyles(i, question, selected, selectedAnswer, answered);
+                        answerChromeStyles(i, question, selected, selectedAnswer, revealed);
 
                       return (
                         <motion.button
@@ -2009,8 +2028,26 @@ export default function QuestionScreen({
 
               {/* ───────── FEEDBACK BANNER ───────── */}
               <AnimatePresence>
-                {answered && (
+                {awaitingReveal && (
                   <motion.div
+                    key="locked-waiting"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ delay: 0.1, duration: 0.3, ease: EASE_OUT }}
+                    className="flex justify-center"
+                  >
+                    <div className="flex items-center gap-2 rounded-lg border border-brass/45 bg-black/70 backdrop-blur-sm px-4 py-2 text-center shadow-[0_0_20px_rgba(228,207,106,0.18)]">
+                      <span className="inline-block h-2 w-2 rounded-full bg-brass-bright motion-safe:animate-pulse" aria-hidden />
+                      <p className="text-brass-bright/95 text-xs md:text-sm font-medium tracking-wide">
+                        Answer locked — waiting for the timer…
+                      </p>
+                    </div>
+                  </motion.div>
+                )}
+                {revealed && (
+                  <motion.div
+                    key="reveal-banner"
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0 }}

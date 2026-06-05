@@ -7,7 +7,7 @@ import MuteButton from "@/components/MuteButton";
 import { QUESTIONS } from "@/components/QuizGame";
 import { useNarration } from "@/components/NarrationProvider";
 import { questionVoSrc } from "@/components/live/questionVo";
-import { rankParticipants } from "@/lib/quizProtocol";
+import { rankParticipants, scoredParticipants, unscoredParticipants } from "@/lib/quizProtocol";
 import type { RoomState } from "@/lib/quizProtocol";
 
 /**
@@ -30,16 +30,19 @@ interface SpectatorViewProps {
   name?: string;
   /** Banner shown top-left, e.g. "You're out — spectating". */
   banner?: string;
+  /** When provided, shows a "Play as viewer" CTA — an eliminated player can
+   *  opt to keep playing the rest of the quiz unscored. */
+  onPlayAlong?: () => void;
 }
 
-export default function SpectatorView({ state, name, banner }: SpectatorViewProps) {
+export default function SpectatorView({ state, name, banner, onPlayAlong }: SpectatorViewProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const idx = state.currentQuestionIdx;
   const currentQ = QUESTIONS[idx];
   const narrating = state.roundPhase === "narrating";
   const revealing = state.roundPhase === "revealing";
-  const survivors = state.participants.filter((p) => !p.eliminated).length;
+  const survivors = state.participants.filter((p) => p.scoring && !p.eliminated).length;
 
   // Play the question VO in sync with the room while the server holds the
   // "narrating" sub-phase, so spectators hear the question read aloud too.
@@ -64,6 +67,15 @@ export default function SpectatorView({ state, name, banner }: SpectatorViewProp
         </div>
       )}
 
+      {onPlayAlong && (
+        <button
+          onClick={onPlayAlong}
+          className="absolute left-1/2 top-14 z-40 -translate-x-1/2 rounded-full border border-brass/50 bg-brass px-5 py-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#14110a] shadow-[0_8px_22px_-8px_rgba(0,0,0,0.7)] transition-colors hover:bg-brass-bright"
+        >
+          Play as viewer ›
+        </button>
+      )}
+
       {/* Streaming question (read-only). pointer-events-none stops the
           spectator from clicking answers / pausing; the timer still ticks
           and the reveal is driven by the server's roundPhase. */}
@@ -82,6 +94,7 @@ export default function SpectatorView({ state, name, banner }: SpectatorViewProp
               onAnswer={noop}
               onTimeUp={noop}
               answered={revealing}
+              revealed={revealing}
               selectedAnswer={null}
               isCorrect={false}
               // Clock frozen during the VO; ticks once the room is asking.
@@ -111,13 +124,17 @@ export default function SpectatorView({ state, name, banner }: SpectatorViewProp
 function ParticipantsSidebar({ state }: { state: RoomState }) {
   const idx = state.currentQuestionIdx;
   const revealing = state.roundPhase === "revealing";
-  const ranked = rankParticipants(state.participants);
+  // Standings + round tallies are about the scored game only; unscored
+  // play-along viewers are surfaced separately in the footer.
+  const scored = scoredParticipants(state.participants);
+  const playingAlong = unscoredParticipants(state.participants).length;
+  const ranked = rankParticipants(scored);
 
-  const total = state.participants.length;
-  const survivors = state.participants.filter((p) => !p.eliminated).length;
-  const passedThisRound = state.participants.filter((p) => p.correctness[idx] === true).length;
-  const eliminatedThisRound = state.participants.filter((p) => p.eliminatedAtQuestion === idx).length;
-  const answeredThisRound = state.participants.filter(
+  const total = scored.length;
+  const survivors = scored.filter((p) => !p.eliminated).length;
+  const passedThisRound = scored.filter((p) => p.correctness[idx] === true).length;
+  const eliminatedThisRound = scored.filter((p) => p.eliminatedAtQuestion === idx).length;
+  const answeredThisRound = scored.filter(
     (p) => p.correctness.length > idx && p.correctness[idx] != null,
   ).length;
 
@@ -204,6 +221,7 @@ function ParticipantsSidebar({ state }: { state: RoomState }) {
 
       <div className="border-t border-brass/15 px-5 py-3 text-[10px] font-mono uppercase tracking-[0.2em] text-foreground/40">
         {state.viewers.length} watching
+        {playingAlong > 0 && <span className="text-brass/70"> · {playingAlong} playing along</span>}
       </div>
     </aside>
   );

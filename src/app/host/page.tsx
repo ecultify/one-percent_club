@@ -2,6 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 import HostRoomCard from "@/components/live/HostRoomCard";
+import type { RoomPhase } from "@/lib/quizProtocol";
+
+type RoomFilter = "all" | "lobby" | "running" | "ended";
+
+const FILTERS: { id: RoomFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "lobby", label: "Open" },
+  { id: "running", label: "Running" },
+  { id: "ended", label: "Finished" },
+];
 
 /** Six-char A-Z 0-9 code (omitting visually-confusable chars). */
 function generateRoomCode(): string {
@@ -29,7 +39,14 @@ const STORAGE_KEY = "1pc-host-rooms";
 export default function HostDashboardPage() {
   const [rooms, setRooms] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  /** Phase reported by each room card's socket, used for the filter chips. */
+  const [phaseByCode, setPhaseByCode] = useState<Record<string, RoomPhase>>({});
+  const [filter, setFilter] = useState<RoomFilter>("all");
   const hostKey = process.env.NEXT_PUBLIC_HOST_KEY || "DEV";
+
+  const handlePhaseChange = useCallback((code: string, phase: RoomPhase) => {
+    setPhaseByCode((prev) => (prev[code] === phase ? prev : { ...prev, [code]: phase }));
+  }, []);
 
   // Hydrate from localStorage on mount.
   useEffect(() => {
@@ -80,6 +97,29 @@ export default function HostDashboardPage() {
           </button>
         </header>
 
+        {/* Filter chips — segregate rooms by lifecycle. */}
+        {hydrated && rooms.length > 0 && (
+          <div className="mt-6 inline-flex gap-1.5 rounded-xl border border-brass/25 bg-black/45 p-1">
+            {FILTERS.map((f) => {
+              const count =
+                f.id === "all"
+                  ? rooms.length
+                  : rooms.filter((c) => phaseByCode[c] === f.id).length;
+              return (
+                <button
+                  key={f.id}
+                  onClick={() => setFilter(f.id)}
+                  className={`cursor-pointer rounded-lg px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors duration-200 ${
+                    filter === f.id ? "bg-brass text-[#14110a]" : "text-muted hover:text-foreground"
+                  }`}
+                >
+                  {f.label} <span className="opacity-60">{count}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {!hydrated ? (
           <p className="mt-12 text-center text-foreground/50">Loading…</p>
         ) : rooms.length === 0 ? (
@@ -92,16 +132,31 @@ export default function HostDashboardPage() {
             </p>
           </div>
         ) : (
-          <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {rooms.map((code) => (
-              <HostRoomCard
-                key={code}
-                code={code}
-                hostKey={hostKey}
-                onRemove={() => removeRoom(code)}
-              />
-            ))}
-          </div>
+          <>
+            <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {rooms.map((code) => {
+                // Keep every card mounted so its socket stays live and its
+                // phase keeps reporting; just hide the ones that don't match
+                // the active filter.
+                const visible = filter === "all" || phaseByCode[code] === filter;
+                return (
+                  <div key={code} className={visible ? undefined : "hidden"}>
+                    <HostRoomCard
+                      code={code}
+                      hostKey={hostKey}
+                      onRemove={() => removeRoom(code)}
+                      onPhaseChange={handlePhaseChange}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            {rooms.every((code) => !(filter === "all" || phaseByCode[code] === filter)) && (
+              <p className="mt-12 text-center text-foreground/50">
+                No {FILTERS.find((f) => f.id === filter)?.label.toLowerCase()} rooms right now.
+              </p>
+            )}
+          </>
         )}
       </div>
     </main>

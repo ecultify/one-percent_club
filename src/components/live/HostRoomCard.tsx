@@ -3,12 +3,16 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePartyRoom } from "@/lib/usePartyRoom";
-import { rankParticipants } from "@/lib/quizProtocol";
+import { rankParticipants, scoredParticipants, unscoredParticipants } from "@/lib/quizProtocol";
+import type { RoomPhase } from "@/lib/quizProtocol";
 
 interface HostRoomCardProps {
   code: string;
   hostKey: string;
   onRemove: () => void;
+  /** Lifts this room's phase to the dashboard so it can filter cards by
+   *  open / running / finished. */
+  onPhaseChange?: (code: string, phase: RoomPhase) => void;
 }
 
 /**
@@ -18,7 +22,7 @@ interface HostRoomCardProps {
  * simultaneously — each maintains its own socket so the host can run
  * 10+ concurrent rooms from a single browser tab.
  */
-export default function HostRoomCard({ code, hostKey, onRemove }: HostRoomCardProps) {
+export default function HostRoomCard({ code, hostKey, onRemove, onPhaseChange }: HostRoomCardProps) {
   const { state, send, error, connected } = usePartyRoom(code);
   const [claimed, setClaimed] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -34,6 +38,12 @@ export default function HostRoomCard({ code, hostKey, onRemove }: HostRoomCardPr
     setClaimed(true);
   }, [connected, claimed, state, hostKey, send]);
 
+  // Report phase up to the dashboard for filtering.
+  const phase = state?.phase;
+  useEffect(() => {
+    if (phase) onPhaseChange?.(code, phase);
+  }, [phase, code, onPhaseChange]);
+
   const phaseLabel = state?.phase ?? "—";
   const phaseColor =
     state?.phase === "running"
@@ -45,11 +55,15 @@ export default function HostRoomCard({ code, hostKey, onRemove }: HostRoomCardPr
   const playLink = typeof window !== "undefined" ? `${window.location.origin}/play/${code}` : `/play/${code}`;
   const watchLink = typeof window !== "undefined" ? `${window.location.origin}/watch/${code}` : `/watch/${code}`;
 
-  const participantsActive = state?.participants.filter((p) => !p.eliminated).length ?? 0;
-  const participantsTotal = state?.participants.length ?? 0;
+  const scored = state ? scoredParticipants(state.participants) : [];
+  const playingAlong = state ? unscoredParticipants(state.participants).length : 0;
+  const participantsActive = scored.filter((p) => !p.eliminated).length;
+  const participantsTotal = scored.length;
   const activeLabel = state?.phase === "running" ? "still in" : "active";
 
-  const sortedParticipants = state ? rankParticipants(state.participants) : [];
+  // Standings table shows the scored game; play-along viewers are summarised
+  // in the header count and the full analytics modal (Focus room → stats).
+  const sortedParticipants = rankParticipants(scored);
 
   return (
     <div className="rounded-xl border border-brass/25 bg-neutral-950/80 p-5 shadow">
@@ -65,6 +79,7 @@ export default function HostRoomCard({ code, hostKey, onRemove }: HostRoomCardPr
           <span>{participantsTotal} joined</span>
           <span>{participantsActive} {activeLabel}</span>
           <span>{state?.viewers.length ?? 0} viewers</span>
+          {playingAlong > 0 && <span className="text-brass/70">{playingAlong} playing along</span>}
         </div>
       </div>
 

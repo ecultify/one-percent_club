@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { usePartyRoom } from "@/lib/usePartyRoom";
 import SpectatorView from "@/components/live/SpectatorView";
 import FinalStandings from "@/components/live/FinalStandings";
+import LiveQuizPlayer from "@/components/live/LiveQuizPlayer";
 
 /**
  * Viewer (spectator) view for a single room.
@@ -21,14 +22,24 @@ export default function WatchRoomPage() {
   const roomCode = (params?.code ?? "").toUpperCase();
   const name = search?.get("name") ?? undefined;
 
-  const { state, send, connected } = usePartyRoom(roomCode);
+  const { state, send, connected, myId } = usePartyRoom(roomCode);
   const [joined, setJoined] = useState(false);
+  /** Viewer opted to play along (unscored). Once set we join as a
+   *  scoring:false participant and defer to LiveQuizPlayer. */
+  const [playAlong, setPlayAlong] = useState(false);
 
   useEffect(() => {
     if (!connected || joined) return;
     send({ type: "join-viewer", name });
     setJoined(true);
   }, [connected, joined, name, send]);
+
+  const startPlayAlong = () => {
+    // Promote this viewer to an unscored participant. connection.id is
+    // unchanged, so myId stays valid and LiveQuizPlayer finds "me".
+    send({ type: "join-participant", name: name ?? "Viewer", scoring: false });
+    setPlayAlong(true);
+  };
 
   if (!connected || !state) {
     return (
@@ -38,8 +49,13 @@ export default function WatchRoomPage() {
     );
   }
 
+  // Opted into unscored play-along — LiveQuizPlayer self-detects scoring:false.
+  if (playAlong && (state.phase === "running" || state.phase === "ended")) {
+    return <LiveQuizPlayer roomCode={roomCode} state={state} send={send} name={name ?? "Viewer"} myId={myId} />;
+  }
+
   if (state.phase === "running") {
-    return <SpectatorView state={state} name={name} />;
+    return <SpectatorView state={state} name={name} onPlayAlong={startPlayAlong} />;
   }
 
   if (state.phase === "ended") {
@@ -55,7 +71,9 @@ export default function WatchRoomPage() {
           <h1 className="mt-1 text-2xl font-semibold">
             Room <span className="font-mono text-brass">{roomCode}</span>
           </h1>
-          <p className="mt-2 text-sm text-foreground/55">Lobby — waiting for the host to start.</p>
+          <p className="mt-2 text-sm text-foreground/55">
+            Lobby — waiting for the host to start. You can jump in to play along once it begins.
+          </p>
         </header>
 
         <section className="mt-6 rounded-xl border border-brass/20 bg-neutral-950/80 p-5">

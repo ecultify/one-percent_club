@@ -50,6 +50,10 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
   const roundPhase = state.roundPhase;
   const eliminated = me?.eliminated ?? false;
   const eliminatedAt = me?.eliminatedAtQuestion ?? null;
+  /** false → unscored play-along (eliminated-then-continued, or a /watch
+   *  viewer who opted to play). Such players answer along but never score,
+   *  eliminate or gate the round. */
+  const scoring = me?.scoring ?? true;
 
   // Local per-question UI state, reset whenever the shared question changes.
   const [answered, setAnswered] = useState(false);
@@ -62,12 +66,27 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
 
   const { narrateUrl, stop: stopNarration, muted } = useNarration();
 
+  /** Guards the reveal SFX so it fires exactly once per question. */
+  const sfxPlayedRef = useRef(false);
+
   useEffect(() => {
     setAnswered(false);
     setSelectedAnswer(null);
     setIsCorrect(false);
     setValidating(false);
+    sfxPlayedRef.current = false;
   }, [globalIdx]);
+
+  // Play the correct/wrong sting only on the shared reveal, so a fast
+  // answerer doesn't hear the outcome before the rest of the room. A player
+  // who locked the right answer hears "correct"; everyone else (wrong answer
+  // or timed out) hears "wrong".
+  useEffect(() => {
+    if (roundPhase !== "revealing" || sfxPlayedRef.current) return;
+    sfxPlayedRef.current = true;
+    const wonRound = answered && selectedAnswer !== null && isCorrect;
+    playQuizSfx(wonRound ? "correct" : "wrong", muted);
+  }, [roundPhase, answered, selectedAnswer, isCorrect, muted]);
 
   // The answer clock starts when the server flips to "asking" (after the
   // VO). Anchor the speed measurement there so we record how fast they
@@ -82,7 +101,10 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
   // "narrating" sub-phase while this plays, then flips to "asking" and
   // starts the clock — so the VO is synchronized across the whole room
   // and the timer only begins once it has finished.
-  const spectating = eliminated && (eliminatedAt == null || globalIdx > eliminatedAt);
+  // Show the passive elimination screen only for a SCORED player who is out
+  // and hasn't opted to play along. Unscored players (scoring === false) keep
+  // an interactive screen so they can play for fun.
+  const spectating = scoring && eliminated && (eliminatedAt == null || globalIdx > eliminatedAt);
   useEffect(() => {
     if (state.phase !== "running" || spectating) return;
     if (roundPhase !== "narrating") return;
@@ -97,7 +119,10 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
 
   const handleAnswer = useCallback(
     async (selectedIndex: number, typedAnswer?: string) => {
-      if (eliminated || roundPhase !== "asking" || answered) return;
+      // Unscored play-along players (scoring === false) may answer even
+      // though they're flagged eliminated; only a scored-and-out player is
+      // blocked here.
+      if ((eliminated && scoring) || roundPhase !== "asking" || answered) return;
       const q = QUESTIONS[globalIdx];
       if (!q) return;
       let correct: boolean;
@@ -135,12 +160,13 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
       setSelectedAnswer(selectedIndex);
       setIsCorrect(correct);
       setAnswered(true);
-      playQuizSfx(correct ? "correct" : "wrong", muted);
+      // SFX is deferred to the shared reveal (see the roundPhase effect below)
+      // so a fast answerer doesn't get an audio spoiler before everyone else.
 
       const answerValue: number | string | null = typedAnswer ?? selectedIndex;
       send({ type: "report-answer", questionIdx: globalIdx, answer: answerValue, correct, elapsedMs });
     },
-    [eliminated, roundPhase, answered, globalIdx, muted, stopNarration, send],
+    [eliminated, scoring, roundPhase, answered, globalIdx, stopNarration, send],
   );
 
   const handleTimeUp = useCallback(() => {
@@ -149,10 +175,10 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
     setSelectedAnswer(null);
     setIsCorrect(false);
     setAnswered(true);
-    playQuizSfx("wrong", muted);
-    // No report — the server eliminates players who didn't answer when its
-    // own clock runs out, and drives the reveal for everyone.
-  }, [answered, muted, stopNarration]);
+    // SFX deferred to the shared reveal. No report — the server eliminates
+    // players who didn't answer when its own clock runs out, and drives the
+    // reveal for everyone.
+  }, [answered, stopNarration]);
 
   // ─── Render ────────────────────────────────────────────────────────────
 
@@ -166,9 +192,19 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
     );
   }
 
-  // Eliminated and the round they went out on has passed → spectate.
+  // Scored player who is out and hasn't opted to continue → elimination
+  // screen with a "Play as viewer" button. Clicking it flips them to an
+  // unscored play-along player (server sets scoring=false), and on the next
+  // render `spectating` is false so they get the interactive screen back.
   if (spectating) {
-    return <SpectatorView state={state} name={name || me.name} banner="You're out — spectating" />;
+    return (
+      <SpectatorView
+        state={state}
+        name={name || me.name}
+        banner="You're out — spectating"
+        onPlayAlong={() => send({ type: "continue-as-viewer" })}
+      />
+    );
   }
 
   const currentQ = QUESTIONS[globalIdx];
@@ -180,12 +216,17 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
     );
   }
 
-  const survivors = state.participants.filter((p) => !p.eliminated).length;
+  const survivors = state.participants.filter((p) => p.scoring && !p.eliminated).length;
 
   return (
     <main className="relative w-full h-screen overflow-hidden bg-black">
       <GameShowAudio playBgm={state.phase === "running"} suppressForVideo={false} slowMode={false} />
       <MuteButton />
+      {!scoring && (
+        <div className="pointer-events-none absolute left-1/2 top-4 z-40 -translate-x-1/2 rounded-full border border-brass/40 bg-black/70 px-4 py-1.5 text-[10px] font-mono uppercase tracking-[0.3em] text-brass-bright backdrop-blur">
+          Playing along · unscored
+        </div>
+      )}
       <QuestionScreen
         key={`q-${globalIdx}`}
         question={currentQ}
@@ -198,10 +239,12 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
         onAnswer={handleAnswer}
         onTimeUp={handleTimeUp}
         onAnswerValidationPendingChange={setValidating}
-        // Force the reveal once the server closes the round, so a player
-        // who answered wrong (or timed out) still sees the correct answer
-        // before flipping to the spectator view.
+        // `answered` locks the inputs the moment the player picks (gold
+        // "locked — waiting" state). `revealed` holds the green/red reveal
+        // until the server flips the whole room to "revealing", so everyone
+        // sees correctness simultaneously.
         answered={answered || roundPhase === "revealing"}
+        revealed={roundPhase === "revealing"}
         selectedAnswer={selectedAnswer}
         isCorrect={isCorrect}
         // Freeze the clock while the VO narrates; it starts only once the

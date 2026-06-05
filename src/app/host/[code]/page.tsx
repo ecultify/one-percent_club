@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { usePartyRoom } from "@/lib/usePartyRoom";
-import { rankParticipants, totalResponseMs } from "@/lib/quizProtocol";
+import { rankParticipants, scoredParticipants, unscoredParticipants, totalResponseMs } from "@/lib/quizProtocol";
+import AnalyticsModal from "@/components/live/AnalyticsModal";
 
 /**
  * Focused single-room host view. Reachable from the dashboard via the
@@ -22,6 +23,7 @@ export default function HostRoomPage() {
   const hostKey = search?.get("hostKey") ?? process.env.NEXT_PUBLIC_HOST_KEY ?? "";
 
   const { state, send, error, connected } = usePartyRoom(roomCode);
+  const [showStats, setShowStats] = useState(false);
 
   useEffect(() => {
     if (!connected) return;
@@ -41,8 +43,10 @@ export default function HostRoomPage() {
   const shareUrl = (path: "play" | "watch") =>
     typeof window !== "undefined" ? `${window.location.origin}/${path}/${roomCode}` : "";
 
-  const ranked = rankParticipants(state.participants);
-  const survivors = state.participants.filter((p) => !p.eliminated).length;
+  const scored = scoredParticipants(state.participants);
+  const ranked = rankParticipants(scored);
+  const survivors = scored.filter((p) => !p.eliminated).length;
+  const playingAlong = unscoredParticipants(state.participants).length;
   const phaseLabel: Record<typeof state.phase, string> = {
     lobby: "Lobby",
     running: "Live",
@@ -93,12 +97,16 @@ export default function HostRoomPage() {
                 {state.phase === "running" && ` · Q${state.currentQuestionIdx + 1}/${state.totalQuestions}`}
               </p>
               <p className="mt-1 text-xl">
-                {state.participants.length} player{state.participants.length === 1 ? "" : "s"} ·{" "}
-                {state.phase === "running" ? `${survivors} still in` : `${state.participants.length} ready`} ·{" "}
+                {scored.length} player{scored.length === 1 ? "" : "s"} ·{" "}
+                {state.phase === "running" ? `${survivors} still in` : `${scored.length} ready`} ·{" "}
                 {state.viewers.length} viewer{state.viewers.length === 1 ? "" : "s"}
+                {playingAlong > 0 && <span className="text-brass/70"> · {playingAlong} playing along</span>}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-5">
+              <button onClick={() => setShowStats(true)} className={secondaryBtn}>
+                Show stats
+              </button>
               {state.phase === "lobby" && (
                 <button
                   onClick={() => send({ type: "start" })}
@@ -178,6 +186,8 @@ export default function HostRoomPage() {
           )}
         </section>
       </div>
+
+      {showStats && <AnalyticsModal state={state} onClose={() => setShowStats(false)} />}
     </main>
   );
 }

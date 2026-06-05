@@ -182,7 +182,7 @@ export default function ReadyToPlayGate({ onStart }: ReadyToPlayGateProps) {
             className="text-[11px] font-semibold uppercase tracking-[0.5em] text-brass-bright sm:text-[13px] md:text-[18px] lg:text-[22px] md:tracking-[0.45em] lg:tracking-[0.42em]"
             style={arial}
           >
-            Tonight's Stage
+            Tonight&apos;s Stage
           </span>
           <DiamondOrnament />
           <div

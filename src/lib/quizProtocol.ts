@@ -63,6 +63,15 @@ export interface ParticipantState {
   /** True if they joined after the quiz had already started — they
    *  never got to play and spectate immediately. */
   lateJoin: boolean;
+  /** Whether this player's answers count. true = a normal scored player
+   *  (counts toward score, survival, elimination and round-gating).
+   *  false = an unscored "play-along" viewer: their answers are recorded
+   *  for analytics but never scored, never eliminate them, and never gate
+   *  the round. Two origins, distinguished via eliminatedAtQuestion:
+   *    null / -1 → joined as a pure viewer-player (unscored from the start)
+   *    >= 0      → was a scored player eliminated at that question who then
+   *                opted to keep playing unscored. */
+  scoring: boolean;
 }
 
 export interface ViewerState {
@@ -117,6 +126,17 @@ export interface KickMessage {
 export interface JoinParticipantMessage {
   type: "join-participant";
   name: string;
+  /** When false, join as an unscored play-along viewer (answers recorded
+   *  for analytics but never scored). Defaults to true (normal player). */
+  scoring?: boolean;
+}
+
+/** Sent by an eliminated participant who chooses "Play as viewer" — they
+ *  keep playing the rest of the quiz unscored. The server sets their
+ *  scoring flag to false (retaining their elimination point) so their
+ *  subsequent answers are recorded but never counted. */
+export interface ContinueAsViewerMessage {
+  type: "continue-as-viewer";
 }
 
 /** Sent by the participant when they answer on a question. The client
@@ -148,7 +168,8 @@ export type ClientMessage =
   | KickMessage
   | JoinParticipantMessage
   | ReportAnswerMessage
-  | JoinViewerMessage;
+  | JoinViewerMessage
+  | ContinueAsViewerMessage;
 
 // ─── Server → Client messages ────────────────────────────────────────────
 
@@ -182,6 +203,17 @@ export type ServerMessage =
   | KickedMessage;
 
 // ─── Shared ranking helpers (client-side display) ─────────────────────────
+
+/** Scored players only (their answers count toward the standings). */
+export function scoredParticipants(participants: ParticipantState[]): ParticipantState[] {
+  return participants.filter((p) => p.scoring);
+}
+
+/** Unscored "play-along" viewers — recorded for analytics, excluded from
+ *  the competitive standings. */
+export function unscoredParticipants(participants: ParticipantState[]): ParticipantState[] {
+  return participants.filter((p) => !p.scoring);
+}
 
 /** Total correct-answer response time for a participant, in ms. Used as
  *  the final tiebreak — fewer ms (faster) ranks higher. */
