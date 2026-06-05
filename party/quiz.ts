@@ -125,6 +125,10 @@ export default class QuizServer implements Party.Server {
   private revealStartedAt: number | null = null;
   /** Connection ids that have submitted an answer for the current round. */
   private answeredThisRound = new Set<string>();
+  /** Currently-connected connection ids. Used so a disconnected survivor
+   *  doesn't block the early-reveal check (we only wait on connected players),
+   *  while their row is retained for standings/persistence. */
+  private connectedIds = new Set<string>();
   /** Pending round transition (reveal / advance). */
   private roundTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -169,6 +173,7 @@ export default class QuizServer implements Party.Server {
 
   onConnect(connection: Party.Connection) {
     connection.setState({ role: "unclaimed" } satisfies ConnState);
+    this.connectedIds.add(connection.id);
     this.sendTo(connection, { type: "state", state: this.snapshot() });
   }
 
@@ -219,6 +224,7 @@ export default class QuizServer implements Party.Server {
   }
 
   onClose(connection: Party.Connection) {
+    this.connectedIds.delete(connection.id);
     if (connection.id === this.hostId) {
       // Host disconnected — leave the room intact so they can reconnect
       // with the same hostKey. Null hostId so a fresh claim can take.
@@ -226,14 +232,24 @@ export default class QuizServer implements Party.Server {
       this.broadcastState();
       return;
     }
-    if (this.participants.delete(connection.id)) {
-      this.answeredThisRound.delete(connection.id);
-      // A departure might mean every remaining survivor has answered.
-      this.maybeRevealEarly();
+    // Viewers carry no standings — always drop them.
+    if (this.viewers.delete(connection.id)) {
       this.broadcastState();
-    } else if (this.viewers.delete(connection.id)) {
-      this.broadcastState();
+      return;
     }
+    if (!this.participants.has(connection.id)) return;
+    if (this.phase === "lobby") {
+      // In the lobby a leaver is simply gone (no scores to preserve).
+      this.participants.delete(connection.id);
+      this.answeredThisRound.delete(connection.id);
+      this.broadcastState();
+      return;
+    }
+    // Running / ended: KEEP the participant row so their score / elimination
+    // survives a disconnect (or a server restart that closes all sockets).
+    // They no longer block the early-reveal check (connectedIds gates that).
+    this.maybeRevealEarly();
+    this.broadcastState();
   }
 
   // ─── Host actions ──────────────────────────────────────────────────────
@@ -417,11 +433,15 @@ export default class QuizServer implements Party.Server {
     let scoredActive = 0;
     for (const p of this.participants.values()) {
       if (!p.scoring || p.eliminated) continue;
+      // Only wait on players who are still connected — a disconnected
+      // survivor keeps their row for standings but the clock (not them)
+      // decides their fate.
+      if (!this.connectedIds.has(p.id)) continue;
       scoredActive += 1;
-      // A scored survivor who hasn't answered yet — keep the clock running.
+      // A connected scored survivor who hasn't answered yet — keep waiting.
       if (!this.answeredThisRound.has(p.id)) return;
     }
-    if (scoredActive === 0) return; // nobody scored to gate on — let the clock run
+    if (scoredActive === 0) return; // nobody connected to gate on — let the clock run
     this.beginReveal();
   }
 
