@@ -20,15 +20,20 @@ export async function GET(req: Request) {
     const url = process.env.DATABASE_URL || "";
     const host = url ? (url.split("@")[1] || "").split("/")[0] : "(none)";
     let count = -1;
+    let selectLen = -1;
+    let viaListRooms = -1;
     let derr: string | null = null;
     try {
       const sql = neon(url);
       const r = (await sql`SELECT count(*)::int AS n FROM rooms`) as { n: number }[];
       count = r[0]?.n ?? -1;
+      const sel = (await sql`SELECT code FROM rooms ORDER BY updated_at DESC LIMIT 500`) as unknown[];
+      selectLen = sel.length;
+      viaListRooms = (await listRooms()).length;
     } catch (e) {
       derr = e instanceof Error ? e.message : String(e);
     }
-    return NextResponse.json({ host, urlLen: url.length, count, derr });
+    return NextResponse.json({ host, urlLen: url.length, count, selectLen, viaListRooms, derr });
   }
 
   if (!isDbConfigured()) {
