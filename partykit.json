@@ -2,8 +2,5 @@
   "$schema": "https://www.partykit.io/schema.json",
   "name": "one-percent-club-quiz",
   "main": "party/quiz.ts",
-  "compatibilityDate": "2025-01-01",
-  "vars": {
-    "APP_ORIGIN": "https://one-percent-club-git-live-quiz-ecultify-gmailcoms-projects.vercel.app"
-  }
+  "compatibilityDate": "2025-01-01"
 }

@@ -640,9 +640,9 @@ export default class QuizServer implements Party.Server {
    * never affected.
    */
   private async reportRoomEvent(status: "lobby" | "running" | "ended") {
-    const origin = this.room.env.APP_ORIGIN as string | undefined;
+    const origin = (this.room.env.APP_ORIGIN as string | undefined)?.trim();
     if (!origin) return; // registry not wired up — skip silently
-    const secret = this.room.env.ROOMS_EVENT_SECRET as string | undefined;
+    const secret = (this.room.env.ROOMS_EVENT_SECRET as string | undefined)?.trim();
     const scored = Array.from(this.participants.values()).filter((p) => p.scoring);
     const finalStandings =
       status === "ended"
@@ -661,7 +661,7 @@ export default class QuizServer implements Party.Server {
             })
         : undefined;
     try {
-      await fetch(`${origin.replace(/\/$/, "")}/api/rooms/event`, {
+      await fetch(`${origin.replace(/\/+$/, "")}/api/rooms/event`, {
         method: "POST",
         headers: {
           "content-type": "application/json",

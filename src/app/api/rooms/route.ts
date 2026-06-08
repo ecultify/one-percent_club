@@ -3,50 +3,53 @@
  *
  * Returns the lobby registry — every room and its lifecycle status — so the
  * host dashboard can show past/closed lobbies across devices and days.
- * Reads from Postgres (Neon now / MySQL on Hostinger later) via roomsDb.
  *
- * Degrades gracefully: if no DATABASE_URL is configured it returns an empty
- * list with db:false, so the dashboard's localStorage view still works.
+ * The query is run inline here (rather than via roomsDb.listRooms) and the
+ * route is force-dynamic + no-store, so every request reflects the live DB.
+ * Degrades gracefully: no DATABASE_URL → db:false with an empty list, and the
+ * dashboard's localStorage view still works.
  */
 import { NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
-import { isDbConfigured, listRooms } from "@/lib/roomsDb";
+import type { RoomRecord } from "@/lib/roomsDb";
 
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
-export async function GET(req: Request) {
-  // TEMP debug: reveal what the deployed function actually connects to.
-  if (new URL(req.url).searchParams.get("debug") === "1") {
-    const url = process.env.DATABASE_URL || "";
-    const host = url ? (url.split("@")[1] || "").split("/")[0] : "(none)";
-    let count = -1;
-    let selectLen = -1;
-    let selectFullLen = -1;
-    let viaListRooms = -1;
-    let derr: string | null = null;
-    try {
-      const sql = neon(url);
-      const r = (await sql`SELECT count(*)::int AS n FROM rooms`) as { n: number }[];
-      count = r[0]?.n ?? -1;
-      const sel = (await sql`SELECT code FROM rooms ORDER BY updated_at DESC LIMIT 500`) as unknown[];
-      selectLen = sel.length;
-      const full = (await sql`SELECT code, status, player_count, host_name, final_standings, created_at, started_at, ended_at, updated_at FROM rooms ORDER BY updated_at DESC LIMIT 500`) as unknown[];
-      selectFullLen = full.length;
-      viaListRooms = (await listRooms()).length;
-    } catch (e) {
-      derr = e instanceof Error ? e.message : String(e);
-    }
-    return NextResponse.json({ host, urlLen: url.length, count, selectLen, selectFullLen, viaListRooms, derr });
-  }
-
-  if (!isDbConfigured()) {
+export async function GET() {
+  const url = process.env.DATABASE_URL;
+  if (!url) {
     return NextResponse.json({ db: false, rooms: [] });
   }
   try {
-    const rooms = await listRooms();
+    const sql = neon(url);
+    await sql`
+      CREATE TABLE IF NOT EXISTS rooms (
+        code TEXT PRIMARY KEY, status TEXT NOT NULL, player_count INTEGER NOT NULL DEFAULT 0,
+        host_name TEXT, final_standings JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(), started_at TIMESTAMPTZ,
+        ended_at TIMESTAMPTZ, updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `;
+    const rows = (await sql`
+      SELECT code, status, player_count, host_name, final_standings,
+             created_at, started_at, ended_at, updated_at
+      FROM rooms ORDER BY updated_at DESC LIMIT 500
+    `) as Record<string, unknown>[];
+    const rooms: RoomRecord[] = rows.map((r) => ({
+      code: String(r.code),
+      status: r.status as RoomRecord["status"],
+      playerCount: Number(r.player_count ?? 0),
+      hostName: (r.host_name as string | null) ?? null,
+      finalStandings: r.final_standings ?? null,
+      createdAt: String(r.created_at),
+      startedAt: r.started_at ? String(r.started_at) : null,
+      endedAt: r.ended_at ? String(r.ended_at) : null,
+      updatedAt: String(r.updated_at),
+    }));
     return NextResponse.json({ db: true, rooms });
   } catch (err) {
-    console.error("[/api/rooms] list failed:", err);
-    return NextResponse.json({ db: true, rooms: [], error: "query-failed" }, { status: 200 });
+    console.error("[/api/rooms] query failed:", err);
+    return NextResponse.json({ db: true, rooms: [], error: "query-failed" });
   }
 }
