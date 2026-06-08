@@ -9,11 +9,28 @@
  * list with db:false, so the dashboard's localStorage view still works.
  */
 import { NextResponse } from "next/server";
+import { neon } from "@neondatabase/serverless";
 import { isDbConfigured, listRooms } from "@/lib/roomsDb";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
+  // TEMP debug: reveal what the deployed function actually connects to.
+  if (new URL(req.url).searchParams.get("debug") === "1") {
+    const url = process.env.DATABASE_URL || "";
+    const host = url ? (url.split("@")[1] || "").split("/")[0] : "(none)";
+    let count = -1;
+    let derr: string | null = null;
+    try {
+      const sql = neon(url);
+      const r = (await sql`SELECT count(*)::int AS n FROM rooms`) as { n: number }[];
+      count = r[0]?.n ?? -1;
+    } catch (e) {
+      derr = e instanceof Error ? e.message : String(e);
+    }
+    return NextResponse.json({ host, urlLen: url.length, count, derr });
+  }
+
   if (!isDbConfigured()) {
     return NextResponse.json({ db: false, rooms: [] });
   }
