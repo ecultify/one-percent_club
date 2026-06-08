@@ -21,6 +21,7 @@ export async function GET(req: Request) {
     const host = url ? (url.split("@")[1] || "").split("/")[0] : "(none)";
     let count = -1;
     let selectLen = -1;
+    let selectFullLen = -1;
     let viaListRooms = -1;
     let derr: string | null = null;
     try {
@@ -29,11 +30,13 @@ export async function GET(req: Request) {
       count = r[0]?.n ?? -1;
       const sel = (await sql`SELECT code FROM rooms ORDER BY updated_at DESC LIMIT 500`) as unknown[];
       selectLen = sel.length;
+      const full = (await sql`SELECT code, status, player_count, host_name, final_standings, created_at, started_at, ended_at, updated_at FROM rooms ORDER BY updated_at DESC LIMIT 500`) as unknown[];
+      selectFullLen = full.length;
       viaListRooms = (await listRooms()).length;
     } catch (e) {
       derr = e instanceof Error ? e.message : String(e);
     }
-    return NextResponse.json({ host, urlLen: url.length, count, selectLen, viaListRooms, derr });
+    return NextResponse.json({ host, urlLen: url.length, count, selectLen, selectFullLen, viaListRooms, derr });
   }
 
   if (!isDbConfigured()) {
