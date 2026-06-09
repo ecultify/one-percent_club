@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePartyRoom } from "@/lib/usePartyRoom";
 import { rankParticipants, scoredParticipants, unscoredParticipants } from "@/lib/quizProtocol";
 import type { RoomPhase } from "@/lib/quizProtocol";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 interface HostRoomCardProps {
   code: string;
@@ -24,6 +25,7 @@ interface HostRoomCardProps {
  */
 export default function HostRoomCard({ code, hostKey, onRemove, onPhaseChange }: HostRoomCardProps) {
   const { state, send, error, connected } = usePartyRoom(code);
+  const confirm = useConfirm();
   const [claimed, setClaimed] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
@@ -112,8 +114,15 @@ export default function HostRoomCard({ code, hostKey, onRemove, onPhaseChange }:
         )}
         {state?.phase === "running" && (
           <button
-            onClick={() => {
-              if (confirm(`End room ${code}? All players freeze on their current question.`)) {
+            onClick={async () => {
+              if (
+                await confirm({
+                  title: `End room ${code}?`,
+                  message: "All players freeze on their current question.",
+                  confirmLabel: "End quiz",
+                  danger: true,
+                })
+              ) {
                 send({ type: "end" });
               }
             }}
@@ -140,8 +149,15 @@ export default function HostRoomCard({ code, hostKey, onRemove, onPhaseChange }:
       </div>
 
       <button
-        onClick={() => {
-          if (confirm(`Remove ${code} from your dashboard? The server room stays alive until everyone disconnects.`)) {
+        onClick={async () => {
+          if (
+            await confirm({
+              title: `Remove ${code} from your dashboard?`,
+              message: "The server room stays alive until everyone disconnects.",
+              confirmLabel: "Remove",
+              danger: true,
+            })
+          ) {
             onRemove();
           }
         }}
@@ -183,8 +199,9 @@ export default function HostRoomCard({ code, hostKey, onRemove, onPhaseChange }:
                     <td className="py-1.5 font-mono text-brass">{p.score}</td>
                     <td className="py-1.5 text-right">
                       <button
-                        onClick={() => {
-                          if (confirm(`Remove ${p.name}?`)) send({ type: "kick", participantId: p.id });
+                        onClick={async () => {
+                          if (await confirm({ title: `Remove ${p.name}?`, confirmLabel: "Remove", danger: true }))
+                            send({ type: "kick", participantId: p.id });
                         }}
                         className="text-[10px] font-mono uppercase tracking-[0.2em] text-foreground/35 hover:text-red-300"
                       >

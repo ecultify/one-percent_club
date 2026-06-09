@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { NarrationProvider } from "@/components/NarrationProvider";
+import { ConfirmProvider } from "@/components/ConfirmDialog";
 import UiClickSound from "@/components/UiClickSound";
 import UiHoverSound from "@/components/UiHoverSound";
 import GoldDustField from "@/components/GoldDustField";
@@ -58,6 +59,7 @@ export default function RootLayout({
       </head>
       <body className="antialiased" style={{ fontFamily: "Arial, Helvetica, sans-serif" }}>
         <NarrationProvider>
+          <ConfirmProvider>
           <VideoPlaybackProvider>
           <UiClickSound />
           <UiHoverSound />
@@ -69,6 +71,7 @@ export default function RootLayout({
           {PERF_FLAGS.cursorParticles && <CursorGoldDust />}
           {children}
         </VideoPlaybackProvider>
+          </ConfirmProvider>
         </NarrationProvider>
       </body>
     </html>

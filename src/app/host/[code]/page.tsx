@@ -6,6 +6,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { usePartyRoom } from "@/lib/usePartyRoom";
 import { rankParticipants, scoredParticipants, unscoredParticipants, totalResponseMs } from "@/lib/quizProtocol";
 import AnalyticsModal from "@/components/live/AnalyticsModal";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 /**
  * Focused single-room host view. Reachable from the dashboard via the
@@ -23,6 +24,7 @@ export default function HostRoomPage() {
   const hostKey = search?.get("hostKey") ?? process.env.NEXT_PUBLIC_HOST_KEY ?? "";
 
   const { state, send, error, connected } = usePartyRoom(roomCode);
+  const confirm = useConfirm();
   const [showStats, setShowStats] = useState(false);
 
   useEffect(() => {
@@ -118,8 +120,16 @@ export default function HostRoomPage() {
               )}
               {state.phase === "running" && (
                 <button
-                  onClick={() => {
-                    if (confirm("End the quiz now? The current standings are frozen.")) send({ type: "end" });
+                  onClick={async () => {
+                    if (
+                      await confirm({
+                        title: "End the quiz now?",
+                        message: "The current standings are frozen.",
+                        confirmLabel: "End quiz",
+                        danger: true,
+                      })
+                    )
+                      send({ type: "end" });
                   }}
                   className="lq-btn lq-btn--danger px-7"
                 >
@@ -171,8 +181,9 @@ export default function HostRoomPage() {
                     <td className="py-2 font-mono text-foreground/55">{(totalResponseMs(p) / 1000).toFixed(1)}s</td>
                     <td className="py-2 text-right">
                       <button
-                        onClick={() => {
-                          if (confirm(`Remove ${p.name}?`)) send({ type: "kick", participantId: p.id });
+                        onClick={async () => {
+                          if (await confirm({ title: `Remove ${p.name}?`, confirmLabel: "Remove", danger: true }))
+                            send({ type: "kick", participantId: p.id });
                         }}
                         className="text-[10px] font-mono uppercase tracking-[0.2em] text-foreground/40 hover:text-red-300"
                       >
