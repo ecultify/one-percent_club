@@ -7,6 +7,7 @@ import { usePartyRoom } from "@/lib/usePartyRoom";
 import { rankParticipants, scoredParticipants, unscoredParticipants, totalResponseMs } from "@/lib/quizProtocol";
 import AnalyticsModal from "@/components/live/AnalyticsModal";
 import { useConfirm } from "@/components/ConfirmDialog";
+import { Button } from "@/components/ui/button";
 
 /**
  * Focused single-room host view. Reachable from the dashboard via the
@@ -36,7 +37,7 @@ export default function HostRoomPage() {
 
   if (!connected || !state) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-black text-foreground/70">
+      <main className="min-h-screen flex items-center justify-center bg-black text-white/70">
         Connecting to room <span className="ml-2 font-mono">{roomCode}</span>…
       </main>
     );
@@ -55,28 +56,25 @@ export default function HostRoomPage() {
     ended: "Ended",
   };
 
-  const primaryBtn = "lq-btn game-show-btn relative z-0 px-7";
-  const secondaryBtn = "lq-btn lq-btn--ghost";
-
   return (
-    <main className="min-h-screen bg-black text-foreground">
+    <main className="min-h-screen bg-black text-white">
       <div className="mx-auto max-w-5xl px-6 py-8 space-y-6">
-        <header className="flex flex-wrap items-end justify-between gap-4 border-b border-brass/20 pb-6">
+        <header className="flex flex-wrap items-end justify-between gap-4 border-b border-white/10 pb-6">
           <div>
-            <Link href="/host" className="text-[10px] font-mono uppercase tracking-[0.3em] text-foreground/40 hover:text-foreground/70">
+            <Link href="/host" className="text-[10px] font-mono uppercase tracking-[0.3em] text-white/40 hover:text-white/70">
               ← back to dashboard
             </Link>
-            <h1 className="mt-2 text-3xl font-semibold">
-              Room <span className="font-mono tracking-widest text-brass">{roomCode}</span>
+            <h1 className="mt-2 text-3xl font-semibold text-white">
+              Room <span className="font-mono tracking-widest text-white">{roomCode}</span>
             </h1>
           </div>
           <div className="flex flex-wrap gap-3">
-            <button onClick={() => navigator.clipboard?.writeText(shareUrl("play"))} className={secondaryBtn} title={shareUrl("play")}>
+            <Button variant="outline" size="sm" onClick={() => navigator.clipboard?.writeText(shareUrl("play"))} title={shareUrl("play")}>
               Copy /play link
-            </button>
-            <button onClick={() => navigator.clipboard?.writeText(shareUrl("watch"))} className={secondaryBtn} title={shareUrl("watch")}>
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => navigator.clipboard?.writeText(shareUrl("watch"))} title={shareUrl("watch")}>
               Copy /watch link
-            </button>
+            </Button>
           </div>
         </header>
 
@@ -91,35 +89,32 @@ export default function HostRoomPage() {
           </div>
         )}
 
-        <section className="rounded-xl border border-brass/20 bg-neutral-950/80 p-6">
+        <section className="rounded-xl border border-white/10 bg-neutral-950 p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-foreground/55">
+              <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-white/55">
                 {phaseLabel[state.phase]}
                 {state.phase === "running" && ` · Q${state.currentQuestionIdx + 1}/${state.totalQuestions}`}
               </p>
-              <p className="mt-1 text-xl">
+              <p className="mt-1 text-xl text-white">
                 {scored.length} player{scored.length === 1 ? "" : "s"} ·{" "}
                 {state.phase === "running" ? `${survivors} still in` : `${scored.length} ready`} ·{" "}
                 {state.viewers.length} viewer{state.viewers.length === 1 ? "" : "s"}
-                {playingAlong > 0 && <span className="text-brass/70"> · {playingAlong} playing along</span>}
+                {playingAlong > 0 && <span className="text-white/70"> · {playingAlong} playing along</span>}
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-5">
-              <button onClick={() => setShowStats(true)} className={secondaryBtn}>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button variant="outline" onClick={() => setShowStats(true)}>
                 Show stats
-              </button>
+              </Button>
               {state.phase === "lobby" && (
-                <button
-                  onClick={() => send({ type: "start" })}
-                  disabled={state.participants.length === 0}
-                  className={primaryBtn}
-                >
+                <Button variant="gold" disabled={state.participants.length === 0} onClick={() => send({ type: "start" })}>
                   Start quiz
-                </button>
+                </Button>
               )}
               {state.phase === "running" && (
-                <button
+                <Button
+                  variant="destructive"
                   onClick={async () => {
                     if (
                       await confirm({
@@ -131,28 +126,27 @@ export default function HostRoomPage() {
                     )
                       send({ type: "end" });
                   }}
-                  className="lq-btn lq-btn--danger px-7"
                 >
                   End quiz
-                </button>
+                </Button>
               )}
               {state.phase === "ended" && (
-                <button onClick={() => send({ type: "reset" })} className={primaryBtn}>
+                <Button variant="gold" onClick={() => send({ type: "reset" })}>
                   Reset to lobby
-                </button>
+                </Button>
               )}
             </div>
           </div>
         </section>
 
-        <section className="rounded-xl border border-brass/20 bg-neutral-950/80 p-6">
-          <h2 className="text-lg font-semibold">Participants</h2>
+        <section className="rounded-xl border border-white/10 bg-neutral-950 p-6">
+          <h2 className="text-lg font-semibold text-white">Participants</h2>
           {ranked.length === 0 ? (
-            <p className="mt-3 text-sm text-foreground/55">No one yet. Share the /play link.</p>
+            <p className="mt-3 text-sm text-white/55">No one yet. Share the /play link.</p>
           ) : (
             <table className="mt-4 w-full text-sm">
               <thead>
-                <tr className="text-left text-[10px] font-mono uppercase tracking-[0.25em] text-foreground/45">
+                <tr className="text-left text-[10px] font-mono uppercase tracking-[0.25em] text-white/45">
                   <th className="py-1">Name</th>
                   <th className="py-1">Status</th>
                   <th className="py-1">Score</th>
@@ -162,11 +156,11 @@ export default function HostRoomPage() {
               </thead>
               <tbody>
                 {ranked.map((p) => (
-                  <tr key={p.id} className="border-t border-brass/10">
-                    <td className="py-2 font-medium">{p.name}</td>
+                  <tr key={p.id} className="border-t border-white/10">
+                    <td className="py-2 font-medium text-white">{p.name}</td>
                     <td className="py-2">
                       {p.lateJoin ? (
-                        <span className="text-foreground/45">Spectator</span>
+                        <span className="text-white/45">Spectator</span>
                       ) : p.eliminated ? (
                         <span className="text-red-300/90">Out · Q{(p.eliminatedAtQuestion ?? 0) + 1}</span>
                       ) : state.phase === "running" ? (
@@ -174,18 +168,18 @@ export default function HostRoomPage() {
                       ) : state.phase === "ended" ? (
                         <span className="text-emerald-300">Survived</span>
                       ) : (
-                        <span className="text-foreground/55">Ready</span>
+                        <span className="text-white/55">Ready</span>
                       )}
                     </td>
-                    <td className="py-2 font-mono text-brass">{p.score}</td>
-                    <td className="py-2 font-mono text-foreground/55">{(totalResponseMs(p) / 1000).toFixed(1)}s</td>
+                    <td className="py-2 font-mono text-white">{p.score}</td>
+                    <td className="py-2 font-mono text-white/55">{(totalResponseMs(p) / 1000).toFixed(1)}s</td>
                     <td className="py-2 text-right">
                       <button
                         onClick={async () => {
                           if (await confirm({ title: `Remove ${p.name}?`, confirmLabel: "Remove", danger: true }))
                             send({ type: "kick", participantId: p.id });
                         }}
-                        className="text-[10px] font-mono uppercase tracking-[0.2em] text-foreground/40 hover:text-red-300"
+                        className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/40 hover:text-red-300"
                       >
                         Kick
                       </button>

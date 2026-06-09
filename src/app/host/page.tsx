@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import HostRoomCard from "@/components/live/HostRoomCard";
+import { Button } from "@/components/ui/button";
 import type { RoomPhase } from "@/lib/quizProtocol";
 import type { RoomRecord } from "@/lib/roomsDb";
 
@@ -115,24 +115,24 @@ export default function HostDashboardPage() {
   }, []);
 
   return (
-    <main className="min-h-screen bg-black text-foreground">
+    <main className="min-h-screen bg-black text-white">
       <div className="mx-auto max-w-6xl px-6 py-8">
-        <header className="flex flex-wrap items-end justify-between gap-4 border-b border-brass/15 pb-6">
+        <header className="flex flex-wrap items-end justify-between gap-4 border-b border-white/10 pb-6">
           <div>
-            <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-brass/70">Host dashboard</p>
-            <h1 className="mt-1 text-3xl font-semibold">The 1% Club - live quiz rooms</h1>
-            <p className="mt-2 text-sm text-foreground/55">
+            <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-white/50">Host dashboard</p>
+            <h1 className="mt-1 text-3xl font-semibold text-white">The 1% Club — live quiz rooms</h1>
+            <p className="mt-2 text-sm text-white/55">
               Each card is an independent room. Start or end them individually.
             </p>
           </div>
-          <button onClick={addRoom} className="lq-btn game-show-btn relative z-0 px-7">
+          <Button variant="gold" size="lg" onClick={addRoom}>
             + Create new room
-          </button>
+          </Button>
         </header>
 
         {/* Filter chips — segregate rooms by lifecycle. */}
         {hydrated && rooms.length > 0 && (
-          <div className="mt-6 inline-flex gap-1.5 rounded-xl border border-brass/25 bg-black/45 p-1">
+          <div className="mt-6 inline-flex gap-1 rounded-xl border border-white/10 bg-white/5 p-1">
             {FILTERS.map((f) => {
               const count =
                 f.id === "all"
@@ -143,10 +143,10 @@ export default function HostDashboardPage() {
                   key={f.id}
                   onClick={() => setFilter(f.id)}
                   className={`cursor-pointer rounded-lg px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors duration-200 ${
-                    filter === f.id ? "bg-brass text-[#14110a]" : "text-muted hover:text-foreground"
+                    filter === f.id ? "bg-white/15 text-white" : "text-white/45 hover:text-white"
                   }`}
                 >
-                  {f.label} <span className="opacity-60">{count}</span>
+                  {f.label} <span className="opacity-50">{count}</span>
                 </button>
               );
             })}
@@ -154,13 +154,13 @@ export default function HostDashboardPage() {
         )}
 
         {!hydrated ? (
-          <p className="mt-12 text-center text-foreground/50">Loading…</p>
+          <p className="mt-12 text-center text-white/50">Loading…</p>
         ) : rooms.length === 0 ? (
-          <div className="mt-12 rounded-xl border border-dashed border-brass/30 px-6 py-16 text-center">
-            <p className="text-foreground/65">
-              No rooms yet. Click <span className="font-mono text-brass">+ Create new room</span> to spin up your first room.
+          <div className="mt-12 rounded-xl border border-dashed border-white/15 px-6 py-16 text-center">
+            <p className="text-white/65">
+              No rooms yet. Click <span className="font-mono text-white">+ Create new room</span> to spin up your first room.
             </p>
-            <p className="mt-3 text-xs font-mono text-foreground/40">
+            <p className="mt-3 text-xs font-mono text-white/40">
               Each room can hold ~100 players. Open as many as you need.
             </p>
           </div>
@@ -185,7 +185,7 @@ export default function HostDashboardPage() {
               })}
             </div>
             {rooms.every((code) => !(filter === "all" || phaseByCode[code] === filter)) && (
-              <p className="mt-12 text-center text-foreground/50">
+              <p className="mt-12 text-center text-white/50">
                 No {FILTERS.find((f) => f.id === filter)?.label.toLowerCase()} rooms right now.
               </p>
             )}
@@ -194,17 +194,17 @@ export default function HostDashboardPage() {
 
         {/* ── Saved lobby registry (cross-device, survives days) ── */}
         {dbOn && history.length > 0 && (
-          <section className="mt-12 border-t border-brass/15 pt-6">
-            <h2 className="text-lg font-semibold">
-              All lobbies <span className="text-sm font-normal text-foreground/45">· saved history</span>
+          <section className="mt-12 border-t border-white/10 pt-6">
+            <h2 className="text-lg font-semibold text-white">
+              All lobbies <span className="text-sm font-normal text-white/45">· saved history</span>
             </h2>
-            <p className="mt-1 text-xs text-foreground/45">
+            <p className="mt-1 text-xs text-white/45">
               Every room ever created, from any device. Open one to view it (closed rooms show their final standings).
             </p>
             <div className="mt-4 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-[10px] font-mono uppercase tracking-[0.2em] text-foreground/40">
+                  <tr className="text-left text-[10px] font-mono uppercase tracking-[0.2em] text-white/40">
                     <th className="py-1.5">Code</th>
                     <th className="py-1.5">Status</th>
                     <th className="py-1.5">Players</th>
@@ -217,40 +217,42 @@ export default function HostDashboardPage() {
                   {history
                     .filter((r) => filter === "all" || r.status === filter)
                     .map((r) => (
-                      <tr key={r.code} className="border-t border-brass/10">
-                        <td className="py-2 font-mono tracking-widest text-brass">{r.code}</td>
+                      <tr key={r.code} className="border-t border-white/10">
+                        <td className="py-2 font-mono tracking-widest text-white">{r.code}</td>
                         <td className="py-2">
                           <span
                             className={`rounded-full px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.15em] ${
                               r.status === "running"
                                 ? "bg-emerald-950/40 text-emerald-300"
                                 : r.status === "ended"
-                                  ? "bg-neutral-800 text-foreground/55"
-                                  : "bg-brass/10 text-brass"
+                                  ? "bg-white/10 text-white/55"
+                                  : "bg-white/10 text-white/80"
                             }`}
                           >
                             {r.status === "lobby" ? "open" : r.status === "ended" ? "finished" : "running"}
                           </span>
                         </td>
-                        <td className="py-2 font-mono text-foreground/70">{r.playerCount}</td>
-                        <td className="py-2 text-foreground/55">{formatWhen(r.createdAt)}</td>
-                        <td className="py-2 text-foreground/55">{r.endedAt ? formatWhen(r.endedAt) : "—"}</td>
+                        <td className="py-2 font-mono text-white/70">{r.playerCount}</td>
+                        <td className="py-2 text-white/55">{formatWhen(r.createdAt)}</td>
+                        <td className="py-2 text-white/55">{r.endedAt ? formatWhen(r.endedAt) : "—"}</td>
                         <td className="py-2 text-right">
                           <div className="flex justify-end gap-3">
                             {!rooms.includes(r.code) && (
                               <button
                                 onClick={() => addRoomCode(r.code)}
-                                className="text-[10px] font-mono uppercase tracking-[0.2em] text-foreground/40 hover:text-brass"
+                                className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/40 hover:text-white"
                               >
                                 + Dashboard
                               </button>
                             )}
-                            <Link
+                            <a
                               href={`/host/${r.code}?hostKey=${encodeURIComponent(hostKey)}`}
-                              className="text-[10px] font-mono uppercase tracking-[0.2em] text-brass/80 hover:text-brass"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/70 hover:text-white"
                             >
-                              Open ›
-                            </Link>
+                              Open ↗
+                            </a>
                           </div>
                         </td>
                       </tr>

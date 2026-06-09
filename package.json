@@ -12,14 +12,18 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
+    "@radix-ui/react-slot": "^1.2.5",
     "@types/three": "^0.163.0",
     "cannon-es": "^0.20.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "framer-motion": "^11.0.0",
     "lucide-react": "^0.360.0",
     "next": "14.2.0",
     "partysocket": "^1.1.19",
     "react": "^18",
     "react-dom": "^18",
+    "tailwind-merge": "^3.6.0",
     "three": "^0.163.0",
     "unicornstudio-react": "^1.5.2"
   },
