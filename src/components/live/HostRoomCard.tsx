@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Copy, Play, Square, RotateCcw, ArrowRight, Trash2 } from "lucide-react";
+import { Play, Square, RotateCcw, ArrowRight, Trash2 } from "lucide-react";
 import { usePartyRoom } from "@/lib/usePartyRoom";
 import { scoredParticipants, unscoredParticipants } from "@/lib/quizProtocol";
 import type { RoomPhase } from "@/lib/quizProtocol";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
+import { CopyButton } from "@/components/live/CopyButton";
 
 interface HostRoomCardProps {
   code: string;
@@ -82,12 +83,8 @@ export default function HostRoomCard({ code, hostKey, onRemove, canRemove = true
 
       {/* Share links */}
       <div className="mt-4 grid grid-cols-2 gap-2">
-        <Button variant="outline" size="sm" onClick={() => navigator.clipboard?.writeText(playLink)} title={playLink}>
-          <Copy className="size-3.5" /> Play link
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => navigator.clipboard?.writeText(watchLink)} title={watchLink}>
-          <Copy className="size-3.5" /> Watch link
-        </Button>
+        <CopyButton variant="outline" size="sm" value={playLink} label="Play link" />
+        <CopyButton variant="outline" size="sm" value={watchLink} label="Watch link" />
       </div>
 
       {/* Primary action */}

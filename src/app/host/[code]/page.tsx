@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { usePartyRoom } from "@/lib/usePartyRoom";
 import { rankParticipants, scoredParticipants, unscoredParticipants, totalResponseMs } from "@/lib/quizProtocol";
-import { ArrowLeft, Copy, Play, Square, RotateCcw, BarChart3, UserPlus } from "lucide-react";
-import AnalyticsModal from "@/components/live/AnalyticsModal";
+import { ArrowLeft, Play, Square, RotateCcw, UserPlus } from "lucide-react";
+import AnalyticsPanel from "@/components/live/AnalyticsPanel";
+import { CopyButton } from "@/components/live/CopyButton";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 
@@ -27,7 +28,6 @@ export default function HostRoomPage() {
 
   const { state, send, error, connected } = usePartyRoom(roomCode);
   const confirm = useConfirm();
-  const [showStats, setShowStats] = useState(false);
   const [cohostEmail, setCohostEmail] = useState("");
   const [cohostMsg, setCohostMsg] = useState<string | null>(null);
   const [cohostBusy, setCohostBusy] = useState(false);
@@ -108,12 +108,8 @@ export default function HostRoomPage() {
             </h1>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={() => navigator.clipboard?.writeText(shareUrl("play"))} title={shareUrl("play")}>
-              <Copy className="size-3.5" /> Play link
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => navigator.clipboard?.writeText(shareUrl("watch"))} title={shareUrl("watch")}>
-              <Copy className="size-3.5" /> Watch link
-            </Button>
+            <CopyButton variant="outline" size="sm" value={shareUrl("play")} label="Play link" />
+            <CopyButton variant="outline" size="sm" value={shareUrl("watch")} label="Watch link" />
           </div>
         </header>
 
@@ -143,9 +139,6 @@ export default function HostRoomPage() {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" onClick={() => setShowStats(true)}>
-                <BarChart3 className="size-4" /> Stats
-              </Button>
               {state.phase === "lobby" && (
                 <Button variant="gold" disabled={state.participants.length === 0} onClick={() => send({ type: "start" })}>
                   <Play className="size-4" /> Start quiz
@@ -175,6 +168,34 @@ export default function HostRoomPage() {
             </div>
           </div>
         </section>
+
+        {/* Co-hosts — kept near the top so it's reachable without scrolling. */}
+        <section className="rounded-xl border border-white/10 bg-neutral-950 p-6">
+          <h2 className="text-lg font-semibold text-white">Co-hosts</h2>
+          <p className="mt-1 text-sm text-white/55">
+            Add another host by email — they&apos;ll see this lobby on their own dashboard. They must have a
+            host account (sign up at <span className="font-mono text-white/70">/host</span>) first.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <input
+              value={cohostEmail}
+              onChange={(e) => setCohostEmail(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void inviteCohost();
+              }}
+              type="email"
+              placeholder="cohost@email.com"
+              className="min-w-0 flex-1 rounded-lg border border-white/15 bg-black/60 px-4 py-2.5 text-sm text-white placeholder:text-white/35 outline-none focus:border-white/35"
+            />
+            <Button variant="outline" disabled={cohostBusy} onClick={inviteCohost}>
+              <UserPlus className="size-4" /> {cohostBusy ? "Adding…" : "Add co-host"}
+            </Button>
+          </div>
+          {cohostMsg && <p className="mt-3 text-sm text-white/70">{cohostMsg}</p>}
+        </section>
+
+        {/* Live analytics — shown inline (no modal). */}
+        <AnalyticsPanel state={state} />
 
         <section className="rounded-xl border border-white/10 bg-neutral-950 p-6">
           <h2 className="text-lg font-semibold text-white">Participants</h2>
@@ -212,10 +233,14 @@ export default function HostRoomPage() {
                     <td className="py-2 font-mono text-white/55">{(totalResponseMs(p) / 1000).toFixed(1)}s</td>
                     <td className="py-2 text-right">
                       <button
-                        onClick={async () => {
-                          if (await confirm({ title: `Remove ${p.name}?`, confirmLabel: "Remove", danger: true }))
-                            send({ type: "kick", participantId: p.id });
-                        }}
+                        onClick={() =>
+                          confirm({
+                            title: `Remove ${p.name}?`,
+                            confirmLabel: "Remove",
+                            danger: true,
+                            action: () => send({ type: "kick", participantId: p.id }),
+                          })
+                        }
                         className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/40 hover:text-red-300"
                       >
                         Kick
@@ -227,32 +252,7 @@ export default function HostRoomPage() {
             </table>
           )}
         </section>
-        <section className="rounded-xl border border-white/10 bg-neutral-950 p-6">
-          <h2 className="text-lg font-semibold text-white">Co-hosts</h2>
-          <p className="mt-1 text-sm text-white/55">
-            Add another host by email — they&apos;ll see this lobby on their own dashboard. They must have a
-            host account (sign up at <span className="font-mono text-white/70">/host</span>) first.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <input
-              value={cohostEmail}
-              onChange={(e) => setCohostEmail(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void inviteCohost();
-              }}
-              type="email"
-              placeholder="cohost@email.com"
-              className="min-w-0 flex-1 rounded-lg border border-white/15 bg-black/60 px-4 py-2.5 text-sm text-white placeholder:text-white/35 outline-none focus:border-white/35"
-            />
-            <Button variant="outline" disabled={cohostBusy} onClick={inviteCohost}>
-              <UserPlus className="size-4" /> {cohostBusy ? "Adding…" : "Add co-host"}
-            </Button>
-          </div>
-          {cohostMsg && <p className="mt-3 text-sm text-white/70">{cohostMsg}</p>}
-        </section>
       </div>
-
-      {showStats && <AnalyticsModal state={state} onClose={() => setShowStats(false)} />}
     </main>
   );
 }
