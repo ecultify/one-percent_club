@@ -2,15 +2,16 @@
 
 import { createContext, useCallback, useContext, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { METALLIC_RIM_GRADIENT, PANEL_INNER_FILL } from "./QuestionScreen";
+import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 /**
- * App-styled replacement for the browser's native confirm() dialog. Provides
- * a promise-based useConfirm() hook so call sites read almost the same:
+ * App-styled (shadcn) replacement for the browser's native confirm().
  *
- *   if (await confirm({ title: "End quiz?", message: "…", danger: true })) { … }
+ *   if (await confirm({ title: "End quiz?", danger: true })) { … }
  *
- * The provider lives in the root layout, so any client component can use it.
+ * Pass `action` to run an async task on confirm — the button shows a spinner
+ * and the dialog stays open until it resolves (e.g. deleting a lobby).
  */
 export interface ConfirmOptions {
   title: string;
@@ -19,6 +20,8 @@ export interface ConfirmOptions {
   cancelLabel?: string;
   /** Red styling for destructive actions (end / remove / kick). */
   danger?: boolean;
+  /** Optional async work; dialog keeps a spinner until it resolves. */
+  action?: () => Promise<unknown> | unknown;
 }
 
 type ConfirmFn = (opts: ConfirmOptions) => Promise<boolean>;
@@ -35,6 +38,7 @@ const EASE = [0.23, 1, 0.32, 1] as const;
 
 export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   const [opts, setOpts] = useState<ConfirmOptions | null>(null);
+  const [busy, setBusy] = useState(false);
   const resolverRef = useRef<((v: boolean) => void) | null>(null);
 
   const confirm = useCallback<ConfirmFn>((options) => {
@@ -44,11 +48,28 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const settle = useCallback((value: boolean) => {
+  const close = useCallback((value: boolean) => {
     resolverRef.current?.(value);
     resolverRef.current = null;
+    setBusy(false);
     setOpts(null);
   }, []);
+
+  const onConfirm = useCallback(async () => {
+    if (!opts) return;
+    if (opts.action) {
+      setBusy(true);
+      try {
+        await opts.action();
+      } catch {
+        /* surfaced by the caller; close regardless */
+      } finally {
+        close(true);
+      }
+    } else {
+      close(true);
+    }
+  }, [opts, close]);
 
   return (
     <ConfirmContext.Provider value={confirm}>
@@ -61,46 +82,34 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            onClick={() => settle(false)}
+            transition={{ duration: 0.18 }}
+            onClick={() => !busy && close(false)}
             role="dialog"
             aria-modal="true"
           >
             <motion.div
               onClick={(e) => e.stopPropagation()}
-              initial={{ opacity: 0, y: 14, scale: 0.97 }}
+              initial={{ opacity: 0, y: 12, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 8, scale: 0.98 }}
-              transition={{ duration: 0.24, ease: EASE }}
-              className="relative w-full max-w-sm overflow-hidden rounded-2xl p-[2.5px] shadow-[0_36px_90px_-28px_rgba(0,0,0,0.75)]"
-              style={{ background: METALLIC_RIM_GRADIENT }}
+              transition={{ duration: 0.2, ease: EASE }}
+              className="w-full max-w-sm rounded-xl border border-white/10 bg-neutral-950 p-6 shadow-2xl"
             >
-              <div className="relative overflow-hidden rounded-[13px] px-7 py-7" style={PANEL_INNER_FILL}>
-                <h2 className="font-display text-lg font-semibold text-foreground">{opts.title}</h2>
-                {opts.message && (
-                  <p className="mt-2 text-sm leading-relaxed text-foreground/65">{opts.message}</p>
-                )}
-                <div className="mt-7 flex justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => settle(false)}
-                    className="rounded-xl border border-brass/25 bg-black/40 px-5 py-2.5 text-[12px] font-semibold uppercase tracking-[0.16em] text-foreground/70 transition-colors hover:border-brass/45 hover:text-foreground"
-                  >
-                    {opts.cancelLabel || "Cancel"}
-                  </button>
-                  <button
-                    type="button"
-                    autoFocus
-                    onClick={() => settle(true)}
-                    className={
-                      opts.danger
-                        ? "rounded-xl px-5 py-2.5 text-[12px] font-semibold uppercase tracking-[0.16em] text-red-50 bg-red-600/90 hover:bg-red-600 transition-colors border border-red-400/40"
-                        : "game-show-btn relative z-0 rounded-xl px-5 py-2.5 text-[12px] font-semibold uppercase tracking-[0.16em] text-[#14110a]"
-                    }
-                  >
-                    <span className="relative z-10">{opts.confirmLabel || "Confirm"}</span>
-                  </button>
-                </div>
+              <h2 className="text-base font-semibold text-white">{opts.title}</h2>
+              {opts.message && <p className="mt-2 text-sm leading-relaxed text-white/60">{opts.message}</p>}
+              <div className="mt-6 flex justify-end gap-2.5">
+                <Button variant="outline" size="sm" disabled={busy} onClick={() => close(false)}>
+                  {opts.cancelLabel || "Cancel"}
+                </Button>
+                <Button
+                  variant={opts.danger ? "destructive" : "gold"}
+                  size="sm"
+                  disabled={busy}
+                  onClick={onConfirm}
+                >
+                  {busy && <Loader2 className="size-4 animate-spin" />}
+                  {busy ? "Working…" : opts.confirmLabel || "Confirm"}
+                </Button>
               </div>
             </motion.div>
           </motion.div>

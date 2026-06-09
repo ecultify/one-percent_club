@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { Copy, Play, Square, RotateCcw, ArrowRight, Trash2 } from "lucide-react";
 import { usePartyRoom } from "@/lib/usePartyRoom";
 import { scoredParticipants, unscoredParticipants } from "@/lib/quizProtocol";
 import type { RoomPhase } from "@/lib/quizProtocol";
@@ -10,7 +12,7 @@ import { Button } from "@/components/ui/button";
 interface HostRoomCardProps {
   code: string;
   hostKey: string;
-  onRemove: () => void;
+  onRemove: () => void | Promise<void>;
   /** Whether to show "Remove from dashboard" (owners only). */
   canRemove?: boolean;
   /** Lifts this room's phase to the dashboard so it can filter cards. */
@@ -81,10 +83,10 @@ export default function HostRoomCard({ code, hostKey, onRemove, canRemove = true
       {/* Share links */}
       <div className="mt-4 grid grid-cols-2 gap-2">
         <Button variant="outline" size="sm" onClick={() => navigator.clipboard?.writeText(playLink)} title={playLink}>
-          Copy /play
+          <Copy className="size-3.5" /> Play link
         </Button>
         <Button variant="outline" size="sm" onClick={() => navigator.clipboard?.writeText(watchLink)} title={watchLink}>
-          Copy /watch
+          <Copy className="size-3.5" /> Watch link
         </Button>
       </div>
 
@@ -92,41 +94,38 @@ export default function HostRoomCard({ code, hostKey, onRemove, canRemove = true
       <div className="mt-3">
         {state?.phase === "lobby" && (
           <Button variant="gold" size="full" disabled={total === 0} onClick={() => send({ type: "start" })}>
-            Start quiz
+            <Play className="size-4" /> Start quiz
           </Button>
         )}
         {state?.phase === "running" && (
           <Button
             variant="destructive"
             size="full"
-            onClick={async () => {
-              if (
-                await confirm({
-                  title: `End room ${code}?`,
-                  message: "All players freeze on their current question.",
-                  confirmLabel: "End quiz",
-                  danger: true,
-                })
-              ) {
-                send({ type: "end" });
-              }
-            }}
+            onClick={() =>
+              confirm({
+                title: `End room ${code}?`,
+                message: "All players freeze on their current question.",
+                confirmLabel: "End quiz",
+                danger: true,
+                action: () => send({ type: "end" }),
+              })
+            }
           >
-            End quiz
+            <Square className="size-4" /> End quiz
           </Button>
         )}
         {state?.phase === "ended" && (
           <Button variant="gold" size="full" onClick={() => send({ type: "reset" })}>
-            Reset to lobby
+            <RotateCcw className="size-4" /> Reset to lobby
           </Button>
         )}
       </div>
 
-      {/* Open the full lobby view in a new tab — player management lives there. */}
-      <Button asChild variant="outline" size="full" className="mt-2">
-        <a href={focusUrl} target="_blank" rel="noopener noreferrer">
-          Open lobby ↗
-        </a>
+      {/* Open the full lobby view (same tab; it has a back-to-dashboard link). */}
+      <Button asChild variant="secondary" size="full" className="mt-2">
+        <Link href={focusUrl}>
+          Open lobby <ArrowRight className="size-4" />
+        </Link>
       </Button>
 
       {canRemove && (
@@ -134,20 +133,18 @@ export default function HostRoomCard({ code, hostKey, onRemove, canRemove = true
           variant="ghost"
           size="full"
           className="mt-2 text-white/40 hover:text-red-300"
-          onClick={async () => {
-            if (
-              await confirm({
-                title: `Remove ${code}?`,
-                message: "Deletes this lobby and its co-hosts from your dashboard. The live room stays alive until everyone disconnects.",
-                confirmLabel: "Remove",
-                danger: true,
-              })
-            ) {
-              onRemove();
-            }
-          }}
+          onClick={() =>
+            confirm({
+              title: `Remove ${code}?`,
+              message:
+                "Deletes this lobby from your dashboard. The live room stays alive until everyone disconnects.",
+              confirmLabel: "Remove",
+              danger: true,
+              action: () => onRemove(),
+            })
+          }
         >
-          Remove from dashboard
+          <Trash2 className="size-3.5" /> Remove from dashboard
         </Button>
       )}
     </div>

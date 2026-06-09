@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { usePartyRoom } from "@/lib/usePartyRoom";
 import { rankParticipants, scoredParticipants, unscoredParticipants, totalResponseMs } from "@/lib/quizProtocol";
+import { ArrowLeft, Copy, Play, Square, RotateCcw, BarChart3, UserPlus } from "lucide-react";
 import AnalyticsModal from "@/components/live/AnalyticsModal";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
@@ -96,19 +97,22 @@ export default function HostRoomPage() {
       <div className="mx-auto max-w-5xl px-6 py-8 space-y-6">
         <header className="flex flex-wrap items-end justify-between gap-4 border-b border-white/10 pb-6">
           <div>
-            <Link href="/host" className="text-[10px] font-mono uppercase tracking-[0.3em] text-white/40 hover:text-white/70">
-              ← back to dashboard
+            <Link
+              href="/host"
+              className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-[0.3em] text-white/40 hover:text-white/70"
+            >
+              <ArrowLeft className="size-3.5" /> back to dashboard
             </Link>
             <h1 className="mt-2 text-3xl font-semibold text-white">
               Room <span className="font-mono tracking-widest text-white">{roomCode}</span>
             </h1>
           </div>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={() => navigator.clipboard?.writeText(shareUrl("play"))} title={shareUrl("play")}>
-              Copy /play link
+              <Copy className="size-3.5" /> Play link
             </Button>
             <Button variant="outline" size="sm" onClick={() => navigator.clipboard?.writeText(shareUrl("watch"))} title={shareUrl("watch")}>
-              Copy /watch link
+              <Copy className="size-3.5" /> Watch link
             </Button>
           </div>
         </header>
@@ -138,36 +142,34 @@ export default function HostRoomPage() {
                 {playingAlong > 0 && <span className="text-white/70"> · {playingAlong} playing along</span>}
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2">
               <Button variant="outline" onClick={() => setShowStats(true)}>
-                Show stats
+                <BarChart3 className="size-4" /> Stats
               </Button>
               {state.phase === "lobby" && (
                 <Button variant="gold" disabled={state.participants.length === 0} onClick={() => send({ type: "start" })}>
-                  Start quiz
+                  <Play className="size-4" /> Start quiz
                 </Button>
               )}
               {state.phase === "running" && (
                 <Button
                   variant="destructive"
-                  onClick={async () => {
-                    if (
-                      await confirm({
-                        title: "End the quiz now?",
-                        message: "The current standings are frozen.",
-                        confirmLabel: "End quiz",
-                        danger: true,
-                      })
-                    )
-                      send({ type: "end" });
-                  }}
+                  onClick={() =>
+                    confirm({
+                      title: "End the quiz now?",
+                      message: "The current standings are frozen.",
+                      confirmLabel: "End quiz",
+                      danger: true,
+                      action: () => send({ type: "end" }),
+                    })
+                  }
                 >
-                  End quiz
+                  <Square className="size-4" /> End quiz
                 </Button>
               )}
               {state.phase === "ended" && (
                 <Button variant="gold" onClick={() => send({ type: "reset" })}>
-                  Reset to lobby
+                  <RotateCcw className="size-4" /> Reset to lobby
                 </Button>
               )}
             </div>
@@ -243,7 +245,7 @@ export default function HostRoomPage() {
               className="min-w-0 flex-1 rounded-lg border border-white/15 bg-black/60 px-4 py-2.5 text-sm text-white placeholder:text-white/35 outline-none focus:border-white/35"
             />
             <Button variant="outline" disabled={cohostBusy} onClick={inviteCohost}>
-              {cohostBusy ? "Adding…" : "Add co-host"}
+              <UserPlus className="size-4" /> {cohostBusy ? "Adding…" : "Add co-host"}
             </Button>
           </div>
           {cohostMsg && <p className="mt-3 text-sm text-white/70">{cohostMsg}</p>}

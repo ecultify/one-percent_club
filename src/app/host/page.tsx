@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Plus } from "lucide-react";
 import HostRoomCard from "@/components/live/HostRoomCard";
 import { Button } from "@/components/ui/button";
 import type { RoomPhase } from "@/lib/quizProtocol";
@@ -118,7 +119,7 @@ export default function HostDashboardPage() {
             </p>
           </div>
           <Button variant="gold" size="lg" onClick={createRoom} disabled={creating}>
-            {creating ? "Creating…" : "+ Create new room"}
+            <Plus className="size-4" /> {creating ? "Creating…" : "Create new room"}
           </Button>
         </header>
 
