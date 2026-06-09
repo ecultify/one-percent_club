@@ -4,8 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import HostRoomCard from "@/components/live/HostRoomCard";
 import { Button } from "@/components/ui/button";
 import type { RoomPhase } from "@/lib/quizProtocol";
-import type { RoomRecord } from "@/lib/roomsDb";
+import type { HostRoomRow } from "@/lib/roomsDb";
 
+type DashRoom = HostRoomRow & { cohosts?: string[] };
 type RoomFilter = "all" | "lobby" | "running" | "ended";
 
 const FILTERS: { id: RoomFilter; label: string }[] = [
@@ -23,121 +24,108 @@ function generateRoomCode(): string {
   return out;
 }
 
-const STORAGE_KEY = "1pc-host-rooms";
-
 /**
- * Multi-room host dashboard. The host can spin up arbitrarily many
- * rooms — each becomes its own card with an independent WebSocket
- * subscription to the PartyKit server. The list of rooms is persisted
- * in localStorage so the host can refresh the page without losing
- * their dashboard layout. Removing a room from the dashboard only
- * deletes the local pointer — the PartyKit room itself keeps running
- * until all sockets close.
- *
- * Each room is independent: 100+ players can join one room while a
- * different room sits in the lobby; the host controls Start / End for
- * each room separately.
+ * Per-host dashboard. Each signed-in host sees the rooms THEY created plus any
+ * they co-host — server-backed (rooms.created_by + room_cohosts), not browser
+ * localStorage, so the list follows them across devices.
  */
 export default function HostDashboardPage() {
-  const [rooms, setRooms] = useState<string[]>([]);
-  const [hydrated, setHydrated] = useState(false);
-  /** Phase reported by each room card's socket, used for the filter chips. */
-  const [phaseByCode, setPhaseByCode] = useState<Record<string, RoomPhase>>({});
+  const [rooms, setRooms] = useState<DashRoom[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [filter, setFilter] = useState<RoomFilter>("all");
-  /** Server-side lobby registry (survives across devices & days). Empty when
-   *  no database is configured — the dashboard still works off localStorage. */
-  const [history, setHistory] = useState<RoomRecord[]>([]);
-  const [dbOn, setDbOn] = useState(false);
+  /** Live phase from each card's socket (overrides the stored status). */
+  const [phaseByCode, setPhaseByCode] = useState<Record<string, RoomPhase>>({});
   const hostKey = process.env.NEXT_PUBLIC_HOST_KEY || "DEV";
 
   const handlePhaseChange = useCallback((code: string, phase: RoomPhase) => {
     setPhaseByCode((prev) => (prev[code] === phase ? prev : { ...prev, [code]: phase }));
   }, []);
 
-  // Poll the lobby registry so the host sees every room (incl. old/closed
-  // ones) from any device. Fails silently — purely additive to the cards.
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/host/rooms", { cache: "no-store" });
+      const data = (await res.json()) as { authed?: boolean; rooms?: DashRoom[] };
+      setRooms(Array.isArray(data.rooms) ? data.rooms : []);
+    } catch {
+      /* ignore */
+    } finally {
+      setLoaded(true);
+    }
+  }, []);
+
   useEffect(() => {
-    let alive = true;
-    const load = async () => {
-      try {
-        const res = await fetch("/api/rooms", { cache: "no-store" });
-        const data = (await res.json()) as { db?: boolean; rooms?: RoomRecord[] };
-        if (!alive) return;
-        setDbOn(Boolean(data.db));
-        setHistory(Array.isArray(data.rooms) ? data.rooms : []);
-      } catch {
-        /* ignore — registry is optional */
-      }
-    };
     void load();
     const t = setInterval(load, 15000);
-    return () => {
-      alive = false;
-      clearInterval(t);
-    };
-  }, []);
+    return () => clearInterval(t);
+  }, [load]);
 
-  const addRoomCode = useCallback((code: string) => {
-    setRooms((prev) => (prev.includes(code) ? prev : [...prev, code]));
-  }, []);
-
-  // Hydrate from localStorage on mount.
-  useEffect(() => {
+  const createRoom = useCallback(async () => {
+    if (creating) return;
+    setCreating(true);
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as string[];
-        if (Array.isArray(parsed)) setRooms(parsed.filter((s) => typeof s === "string"));
-      }
-    } catch {
-      // ignore corrupt localStorage
+      await fetch("/api/host/rooms", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code: generateRoomCode() }),
+      });
+      await load();
+    } finally {
+      setCreating(false);
     }
-    setHydrated(true);
-  }, []);
+  }, [creating, load]);
 
-  // Persist on change (only after hydration so we don't overwrite with []).
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(rooms));
-    } catch {
-      // ignore quota errors
-    }
-  }, [rooms, hydrated]);
+  const removeRoom = useCallback(
+    async (code: string) => {
+      await fetch(`/api/host/rooms?code=${encodeURIComponent(code)}`, { method: "DELETE" });
+      await load();
+    },
+    [load],
+  );
 
-  const addRoom = useCallback(() => {
-    const code = generateRoomCode();
-    setRooms((prev) => (prev.includes(code) ? prev : [...prev, code]));
-  }, []);
+  const effectivePhase = (r: DashRoom): RoomPhase => phaseByCode[r.code] ?? (r.status as RoomPhase);
+  const matches = (r: DashRoom) => filter === "all" || effectivePhase(r) === filter;
 
-  const removeRoom = useCallback((code: string) => {
-    setRooms((prev) => prev.filter((c) => c !== code));
-  }, []);
+  const owned = rooms.filter((r) => r.isOwner);
+  const cohosting = rooms.filter((r) => !r.isOwner);
+
+  const renderCard = (r: DashRoom) => (
+    <div key={r.code} className={matches(r) ? undefined : "hidden"}>
+      {!r.isOwner && r.ownerEmail && (
+        <p className="mb-1 text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">
+          owned by {r.ownerEmail}
+        </p>
+      )}
+      <HostRoomCard
+        code={r.code}
+        hostKey={hostKey}
+        canRemove={r.isOwner}
+        onRemove={() => removeRoom(r.code)}
+        onPhaseChange={handlePhaseChange}
+      />
+    </div>
+  );
 
   return (
-    <main className="min-h-screen bg-black text-white">
+    <main className="bg-black text-white">
       <div className="mx-auto max-w-6xl px-6 py-8">
         <header className="flex flex-wrap items-end justify-between gap-4 border-b border-white/10 pb-6">
           <div>
             <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-white/50">Host dashboard</p>
-            <h1 className="mt-1 text-3xl font-semibold text-white">The 1% Club — live quiz rooms</h1>
+            <h1 className="mt-1 text-3xl font-semibold text-white">The 1% Club — your lobbies</h1>
             <p className="mt-2 text-sm text-white/55">
-              Each card is an independent room. Start or end them individually.
+              Rooms you created, plus ones you co-host. Start or end them individually.
             </p>
           </div>
-          <Button variant="gold" size="lg" onClick={addRoom}>
-            + Create new room
+          <Button variant="gold" size="lg" onClick={createRoom} disabled={creating}>
+            {creating ? "Creating…" : "+ Create new room"}
           </Button>
         </header>
 
-        {/* Filter chips — segregate rooms by lifecycle. */}
-        {hydrated && rooms.length > 0 && (
+        {rooms.length > 0 && (
           <div className="mt-6 inline-flex gap-1 rounded-xl border border-white/10 bg-white/5 p-1">
             {FILTERS.map((f) => {
-              const count =
-                f.id === "all"
-                  ? rooms.length
-                  : rooms.filter((c) => phaseByCode[c] === f.id).length;
+              const count = f.id === "all" ? rooms.length : rooms.filter((r) => effectivePhase(r) === f.id).length;
               return (
                 <button
                   key={f.id}
@@ -153,128 +141,37 @@ export default function HostDashboardPage() {
           </div>
         )}
 
-        {!hydrated ? (
+        {!loaded ? (
           <p className="mt-12 text-center text-white/50">Loading…</p>
         ) : rooms.length === 0 ? (
           <div className="mt-12 rounded-xl border border-dashed border-white/15 px-6 py-16 text-center">
             <p className="text-white/65">
-              No rooms yet. Click <span className="font-mono text-white">+ Create new room</span> to spin up your first room.
+              No rooms yet. Click <span className="font-mono text-white">+ Create new room</span> to spin up your first.
             </p>
-            <p className="mt-3 text-xs font-mono text-white/40">
-              Each room can hold ~100 players. Open as many as you need.
-            </p>
+            <p className="mt-3 text-xs font-mono text-white/40">Each room can hold ~100 players.</p>
           </div>
         ) : (
           <>
-            <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {rooms.map((code) => {
-                // Keep every card mounted so its socket stays live and its
-                // phase keeps reporting; just hide the ones that don't match
-                // the active filter.
-                const visible = filter === "all" || phaseByCode[code] === filter;
-                return (
-                  <div key={code} className={visible ? undefined : "hidden"}>
-                    <HostRoomCard
-                      code={code}
-                      hostKey={hostKey}
-                      onRemove={() => removeRoom(code)}
-                      onPhaseChange={handlePhaseChange}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-            {rooms.every((code) => !(filter === "all" || phaseByCode[code] === filter)) && (
+            {owned.length > 0 && (
+              <section className="mt-8">
+                <h2 className="mb-3 text-[11px] font-mono uppercase tracking-[0.3em] text-white/45">My rooms</h2>
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{owned.map(renderCard)}</div>
+              </section>
+            )}
+            {cohosting.length > 0 && (
+              <section className="mt-10">
+                <h2 className="mb-3 text-[11px] font-mono uppercase tracking-[0.3em] text-white/45">Co-hosting</h2>
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{cohosting.map(renderCard)}</div>
+              </section>
+            )}
+            {rooms.every((r) => !matches(r)) && (
               <p className="mt-12 text-center text-white/50">
                 No {FILTERS.find((f) => f.id === filter)?.label.toLowerCase()} rooms right now.
               </p>
             )}
           </>
         )}
-
-        {/* ── Saved lobby registry (cross-device, survives days) ── */}
-        {dbOn && history.length > 0 && (
-          <section className="mt-12 border-t border-white/10 pt-6">
-            <h2 className="text-lg font-semibold text-white">
-              All lobbies <span className="text-sm font-normal text-white/45">· saved history</span>
-            </h2>
-            <p className="mt-1 text-xs text-white/45">
-              Every room ever created, from any device. Open one to view it (closed rooms show their final standings).
-            </p>
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-[10px] font-mono uppercase tracking-[0.2em] text-white/40">
-                    <th className="py-1.5">Code</th>
-                    <th className="py-1.5">Status</th>
-                    <th className="py-1.5">Players</th>
-                    <th className="py-1.5">Created</th>
-                    <th className="py-1.5">Ended</th>
-                    <th className="py-1.5"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {history
-                    .filter((r) => filter === "all" || r.status === filter)
-                    .map((r) => (
-                      <tr key={r.code} className="border-t border-white/10">
-                        <td className="py-2 font-mono tracking-widest text-white">{r.code}</td>
-                        <td className="py-2">
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.15em] ${
-                              r.status === "running"
-                                ? "bg-emerald-950/40 text-emerald-300"
-                                : r.status === "ended"
-                                  ? "bg-white/10 text-white/55"
-                                  : "bg-white/10 text-white/80"
-                            }`}
-                          >
-                            {r.status === "lobby" ? "open" : r.status === "ended" ? "finished" : "running"}
-                          </span>
-                        </td>
-                        <td className="py-2 font-mono text-white/70">{r.playerCount}</td>
-                        <td className="py-2 text-white/55">{formatWhen(r.createdAt)}</td>
-                        <td className="py-2 text-white/55">{r.endedAt ? formatWhen(r.endedAt) : "—"}</td>
-                        <td className="py-2 text-right">
-                          <div className="flex justify-end gap-3">
-                            {!rooms.includes(r.code) && (
-                              <button
-                                onClick={() => addRoomCode(r.code)}
-                                className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/40 hover:text-white"
-                              >
-                                + Dashboard
-                              </button>
-                            )}
-                            <a
-                              href={`/host/${r.code}?hostKey=${encodeURIComponent(hostKey)}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/70 hover:text-white"
-                            >
-                              Open ↗
-                            </a>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
       </div>
     </main>
   );
-}
-
-/** Compact local date-time for the history table. */
-function formatWhen(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }

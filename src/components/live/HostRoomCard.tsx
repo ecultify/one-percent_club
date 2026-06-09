@@ -11,6 +11,8 @@ interface HostRoomCardProps {
   code: string;
   hostKey: string;
   onRemove: () => void;
+  /** Whether to show "Remove from dashboard" (owners only). */
+  canRemove?: boolean;
   /** Lifts this room's phase to the dashboard so it can filter cards. */
   onPhaseChange?: (code: string, phase: RoomPhase) => void;
 }
@@ -22,7 +24,7 @@ interface HostRoomCardProps {
  * (the full table + kick) lives in the focused "Open lobby" view — that
  * scales to 100+ players instead of cramming a table into the card.
  */
-export default function HostRoomCard({ code, hostKey, onRemove, onPhaseChange }: HostRoomCardProps) {
+export default function HostRoomCard({ code, hostKey, onRemove, canRemove = true, onPhaseChange }: HostRoomCardProps) {
   const { state, send, error, connected } = usePartyRoom(code);
   const confirm = useConfirm();
   const [claimed, setClaimed] = useState(false);
@@ -127,25 +129,27 @@ export default function HostRoomCard({ code, hostKey, onRemove, onPhaseChange }:
         </a>
       </Button>
 
-      <Button
-        variant="ghost"
-        size="full"
-        className="mt-2 text-white/40 hover:text-red-300"
-        onClick={async () => {
-          if (
-            await confirm({
-              title: `Remove ${code} from your dashboard?`,
-              message: "The server room stays alive until everyone disconnects.",
-              confirmLabel: "Remove",
-              danger: true,
-            })
-          ) {
-            onRemove();
-          }
-        }}
-      >
-        Remove from dashboard
-      </Button>
+      {canRemove && (
+        <Button
+          variant="ghost"
+          size="full"
+          className="mt-2 text-white/40 hover:text-red-300"
+          onClick={async () => {
+            if (
+              await confirm({
+                title: `Remove ${code}?`,
+                message: "Deletes this lobby and its co-hosts from your dashboard. The live room stays alive until everyone disconnects.",
+                confirmLabel: "Remove",
+                danger: true,
+              })
+            ) {
+              onRemove();
+            }
+          }}
+        >
+          Remove from dashboard
+        </Button>
+      )}
     </div>
   );
 }

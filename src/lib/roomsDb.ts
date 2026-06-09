@@ -67,13 +67,39 @@ async function ensureTable(sql: NonNullable<ReturnType<typeof getSql>>) {
       player_count     INTEGER NOT NULL DEFAULT 0,
       host_name        TEXT,
       final_standings  JSONB,
+      created_by       TEXT,
       created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
       started_at       TIMESTAMPTZ,
       ended_at         TIMESTAMPTZ,
       updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
+  // For pre-existing tables created before ownership was added.
+  await sql`ALTER TABLE rooms ADD COLUMN IF NOT EXISTS created_by TEXT`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS room_cohosts (
+      room_code  TEXT NOT NULL,
+      user_id    TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (room_code, user_id)
+    )
+  `;
   tableReady = true;
+}
+
+/** Map a DB row to the RoomRecord shape. */
+function mapRoomRow(r: Record<string, unknown>): RoomRecord {
+  return {
+    code: String(r.code),
+    status: r.status as RoomStatus,
+    playerCount: Number(r.player_count ?? 0),
+    hostName: (r.host_name as string | null) ?? null,
+    finalStandings: r.final_standings ?? null,
+    createdAt: String(r.created_at),
+    startedAt: r.started_at ? String(r.started_at) : null,
+    endedAt: r.ended_at ? String(r.ended_at) : null,
+    updatedAt: String(r.updated_at),
+  };
 }
 
 /**
@@ -124,15 +150,108 @@ export async function listRooms(): Promise<RoomRecord[]> {
     ORDER BY updated_at DESC
     LIMIT 500
   `) as Record<string, unknown>[];
+  return rows.map(mapRoomRow);
+}
+
+// ─── Per-host ownership (named logins) ───────────────────────────────────────
+
+export interface HostRoomRow extends RoomRecord {
+  /** True when the signed-in user owns this room (vs. co-hosting it). */
+  isOwner: boolean;
+  /** Email of the room's owner, for display. */
+  ownerEmail: string | null;
+}
+
+/** Create (or claim) a room owned by the given user. Idempotent: if the row
+ *  already exists from the registry, only fills created_by when it's empty. */
+export async function createOwnedRoom(code: string, userId: string): Promise<void> {
+  const sql = getSql();
+  if (!sql) return;
+  await ensureTable(sql);
+  await sql`
+    INSERT INTO rooms (code, status, created_by, updated_at)
+    VALUES (${code}, 'lobby', ${userId}, now())
+    ON CONFLICT (code) DO UPDATE SET
+      created_by = COALESCE(rooms.created_by, EXCLUDED.created_by),
+      updated_at = now()
+  `;
+}
+
+/** Rooms the user owns or co-hosts, newest first, with owner email. */
+export async function listRoomsForUser(userId: string): Promise<HostRoomRow[]> {
+  const sql = getSql();
+  if (!sql) return [];
+  await ensureTable(sql);
+  const rows = (await sql`
+    SELECT r.code, r.status, r.player_count, r.host_name, r.final_standings,
+           r.created_at, r.started_at, r.ended_at, r.updated_at, r.created_by,
+           u.email AS owner_email
+    FROM rooms r
+    LEFT JOIN "user" u ON u.id = r.created_by
+    WHERE r.created_by = ${userId}
+       OR r.code IN (SELECT room_code FROM room_cohosts WHERE user_id = ${userId})
+    ORDER BY r.updated_at DESC
+    LIMIT 200
+  `) as Record<string, unknown>[];
   return rows.map((r) => ({
-    code: String(r.code),
-    status: r.status as RoomStatus,
-    playerCount: Number(r.player_count ?? 0),
-    hostName: (r.host_name as string | null) ?? null,
-    finalStandings: r.final_standings ?? null,
-    createdAt: String(r.created_at),
-    startedAt: r.started_at ? String(r.started_at) : null,
-    endedAt: r.ended_at ? String(r.ended_at) : null,
-    updatedAt: String(r.updated_at),
+    ...mapRoomRow(r),
+    isOwner: r.created_by === userId,
+    ownerEmail: (r.owner_email as string | null) ?? null,
   }));
+}
+
+/** Who owns a room (for authorizing co-host invites / removal). */
+export async function getRoomOwner(code: string): Promise<string | null> {
+  const sql = getSql();
+  if (!sql) return null;
+  await ensureTable(sql);
+  const rows = (await sql`SELECT created_by FROM rooms WHERE code = ${code}`) as Record<string, unknown>[];
+  return rows[0] ? ((rows[0].created_by as string | null) ?? null) : null;
+}
+
+/** Resolve a user id from an email (for inviting a co-host). */
+export async function findUserIdByEmail(email: string): Promise<string | null> {
+  const sql = getSql();
+  if (!sql) return null;
+  const rows = (await sql`SELECT id FROM "user" WHERE lower(email) = lower(${email}) LIMIT 1`) as Record<
+    string,
+    unknown
+  >[];
+  return rows[0] ? String(rows[0].id) : null;
+}
+
+/** Add a co-host to a room (idempotent). */
+export async function addCohost(code: string, userId: string): Promise<void> {
+  const sql = getSql();
+  if (!sql) return;
+  await ensureTable(sql);
+  await sql`
+    INSERT INTO room_cohosts (room_code, user_id)
+    VALUES (${code}, ${userId})
+    ON CONFLICT (room_code, user_id) DO NOTHING
+  `;
+}
+
+/** Emails of a room's co-hosts, for display. */
+export async function listCohostEmails(code: string): Promise<string[]> {
+  const sql = getSql();
+  if (!sql) return [];
+  await ensureTable(sql);
+  const rows = (await sql`
+    SELECT u.email FROM room_cohosts c JOIN "user" u ON u.id = c.user_id WHERE c.room_code = ${code}
+  `) as Record<string, unknown>[];
+  return rows.map((r) => String(r.email));
+}
+
+/** Remove a room the user owns (from the registry + its co-host rows). */
+export async function deleteOwnedRoom(code: string, userId: string): Promise<boolean> {
+  const sql = getSql();
+  if (!sql) return false;
+  await ensureTable(sql);
+  const res = (await sql`DELETE FROM rooms WHERE code = ${code} AND created_by = ${userId} RETURNING code`) as unknown[];
+  if (res.length > 0) {
+    await sql`DELETE FROM room_cohosts WHERE room_code = ${code}`;
+    return true;
+  }
+  return false;
 }

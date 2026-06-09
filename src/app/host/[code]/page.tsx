@@ -27,6 +27,41 @@ export default function HostRoomPage() {
   const { state, send, error, connected } = usePartyRoom(roomCode);
   const confirm = useConfirm();
   const [showStats, setShowStats] = useState(false);
+  const [cohostEmail, setCohostEmail] = useState("");
+  const [cohostMsg, setCohostMsg] = useState<string | null>(null);
+  const [cohostBusy, setCohostBusy] = useState(false);
+
+  const inviteCohost = async () => {
+    const email = cohostEmail.trim();
+    if (!email || cohostBusy) return;
+    setCohostBusy(true);
+    setCohostMsg(null);
+    try {
+      const res = await fetch("/api/host/cohost", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code: roomCode, email }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (data.ok) {
+        setCohostMsg(`Added ${email} as a co-host.`);
+        setCohostEmail("");
+      } else {
+        const map: Record<string, string> = {
+          "no-such-user": "No host account with that email. Ask them to sign up at /host first.",
+          "not-owner": "Only the room owner can add co-hosts.",
+          "no-such-room": "This room isn't in the registry yet — start it once, then invite.",
+          "already-owner": "That's you — you already own this room.",
+          unauthorized: "Please sign in again.",
+        };
+        setCohostMsg(map[data.error ?? ""] ?? "Couldn't add co-host.");
+      }
+    } catch {
+      setCohostMsg("Network error — try again.");
+    } finally {
+      setCohostBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (!connected) return;
@@ -189,6 +224,29 @@ export default function HostRoomPage() {
               </tbody>
             </table>
           )}
+        </section>
+        <section className="rounded-xl border border-white/10 bg-neutral-950 p-6">
+          <h2 className="text-lg font-semibold text-white">Co-hosts</h2>
+          <p className="mt-1 text-sm text-white/55">
+            Add another host by email — they&apos;ll see this lobby on their own dashboard. They must have a
+            host account (sign up at <span className="font-mono text-white/70">/host</span>) first.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <input
+              value={cohostEmail}
+              onChange={(e) => setCohostEmail(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void inviteCohost();
+              }}
+              type="email"
+              placeholder="cohost@email.com"
+              className="min-w-0 flex-1 rounded-lg border border-white/15 bg-black/60 px-4 py-2.5 text-sm text-white placeholder:text-white/35 outline-none focus:border-white/35"
+            />
+            <Button variant="outline" disabled={cohostBusy} onClick={inviteCohost}>
+              {cohostBusy ? "Adding…" : "Add co-host"}
+            </Button>
+          </div>
+          {cohostMsg && <p className="mt-3 text-sm text-white/70">{cohostMsg}</p>}
         </section>
       </div>
 
