@@ -5,55 +5,120 @@ import { motion } from "framer-motion";
 import { useNarration } from "@/components/NarrationProvider";
 
 /**
- * One-tap audio primer for the live join pages (/play, /watch).
+ * One-tap audio primer for the live join pages (/play, /watch), optionally
+ * collecting the player's name in the same step.
  *
  * Participants usually arrive via a SHARED LINK opened fresh — there's been
  * no user gesture in the document, so the browser blocks autoplay. Without
- * this, the per-question host voice-over (which fires during the server's
- * "narrating" sub-phase) is silently blocked, and sound only "wakes up" when
- * the player first taps the screen (around the timer). This gate guarantees a
- * gesture up front so the host VO + theme play from the very first question.
+ * this, the per-question host voice-over is silently blocked. This gate
+ * guarantees a gesture up front so the host VO + theme play from the first
+ * question. `unlock()` also runs the secondary audio unlocks (GameShowAudio
+ * bed), so a single tap primes everything.
  *
- * `unlock()` also runs the secondary audio unlocks (GameShowAudio bed), so a
- * single tap primes everything. Auto-skips when audio is already unlocked
- * (e.g. players who came through the in-app registration flow).
+ * Backed by the same home-video backdrop as the main app's start screen.
  */
-export default function LiveAudioGate({ onReady }: { onReady: () => void }) {
+interface LiveAudioGateProps {
+  /** Called once the user taps through; passes the entered name (trimmed). */
+  onReady: (name: string) => void;
+  /** Show a name field (used on /play). */
+  collectName?: boolean;
+  /** Require a non-empty name before enabling the button. */
+  requireName?: boolean;
+  /** Prefill the name field (e.g. from the ?name= query). */
+  initialName?: string;
+}
+
+export default function LiveAudioGate({
+  onReady,
+  collectName = false,
+  requireName = false,
+  initialName = "",
+}: LiveAudioGateProps) {
   const { unlock } = useNarration();
   const [busy, setBusy] = useState(false);
+  const [name, setName] = useState(initialName);
+
+  const trimmed = name.trim();
+  const blocked = requireName && !trimmed;
 
   const go = async () => {
-    if (busy) return;
+    if (busy || blocked) return;
     setBusy(true);
     try {
       await unlock();
     } catch {
-      /* even if unlock rejects, proceed — first in-page tap already counts */
+      /* even if unlock rejects, proceed — the tap already counts as a gesture */
     } finally {
-      onReady();
+      onReady(trimmed);
     }
   };
 
   return (
-    <main className="min-h-screen w-full flex flex-col items-center justify-center bg-black px-6 text-center">
-      <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-brass/70">The 1% Club</p>
-      <h1 className="mt-3 max-w-md text-2xl font-semibold text-foreground md:text-3xl">
-        Tap to join with sound
-      </h1>
-      <p className="mt-3 max-w-sm text-sm leading-relaxed text-foreground/60">
-        One tap turns on the host voice and music. Your browser needs this each time you open the link
-        before sound can play.
-      </p>
-      <motion.button
-        type="button"
-        disabled={busy}
-        onClick={go}
-        whileHover={{ scale: busy ? 1 : 1.03 }}
-        whileTap={{ scale: busy ? 1 : 0.97 }}
-        className="game-show-btn relative z-0 mt-9 cursor-pointer rounded-xl px-12 py-4 text-center text-[13px] font-semibold uppercase tracking-[0.22em] disabled:cursor-wait disabled:opacity-70"
-      >
-        <span className="relative z-10">{busy ? "Starting…" : "Enter with sound"}</span>
-      </motion.button>
+    <main className="relative min-h-screen w-full overflow-hidden bg-black">
+      {/* Same home-video backdrop as the main app start screen. Muted so it
+          autoplays before the user grants the audio gesture. */}
+      <video
+        src="/homepagevideo.mp4"
+        poster="/homepagevideo.mp4.poster.jpg"
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="metadata"
+        aria-hidden
+        className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+      />
+      <div className="pointer-events-none absolute inset-0" style={{ background: "rgba(3,2,8,0.45)" }} aria-hidden />
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(ellipse 60% 42% at 50% 60%, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.5) 45%, rgba(0,0,0,0.2) 78%, transparent 100%)",
+        }}
+        aria-hidden
+      />
+
+      <div className="relative z-[1] flex min-h-screen flex-col items-center justify-center px-6 text-center">
+        <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-brass/80">The 1% Club</p>
+        <h1
+          className="mt-3 max-w-md text-2xl font-semibold text-[#fff4dc] md:text-3xl"
+          style={{ textShadow: "0 2px 14px rgba(0,0,0,0.92), 0 0 36px rgba(0,0,0,0.7)" }}
+        >
+          {collectName ? "Join with your name and sound" : "Tap to join with sound"}
+        </h1>
+        <p
+          className="mt-3 max-w-sm text-sm leading-relaxed text-[#f4ecdc]"
+          style={{ textShadow: "0 2px 10px rgba(0,0,0,0.9)" }}
+        >
+          One tap turns on the host voice and music. Your browser needs this each time you open the link
+          before sound can play.
+        </p>
+
+        {collectName && (
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void go();
+            }}
+            placeholder="Your name"
+            maxLength={32}
+            autoFocus
+            className="mt-7 w-full max-w-xs rounded-xl border border-brass/30 bg-black/55 px-4 py-3.5 text-center text-[15px] text-foreground placeholder:text-foreground/40 outline-none backdrop-blur transition-colors focus:border-brass/60 focus:bg-black/65"
+          />
+        )}
+
+        <motion.button
+          type="button"
+          disabled={busy || blocked}
+          onClick={go}
+          whileHover={{ scale: busy || blocked ? 1 : 1.03 }}
+          whileTap={{ scale: busy || blocked ? 1 : 0.97 }}
+          className="game-show-btn relative z-0 mt-6 cursor-pointer rounded-xl px-12 py-4 text-center text-[13px] font-semibold uppercase tracking-[0.22em] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <span className="relative z-10">{busy ? "Starting…" : "Enter with sound"}</span>
+        </motion.button>
+      </div>
     </main>
   );
 }
