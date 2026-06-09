@@ -14,6 +14,7 @@
     "@neondatabase/serverless": "^1.1.0",
     "@radix-ui/react-slot": "^1.2.5",
     "@types/three": "^0.163.0",
+    "better-auth": "^1.6.15",
     "cannon-es": "^0.20.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -21,6 +22,7 @@
     "lucide-react": "^0.360.0",
     "next": "14.2.0",
     "partysocket": "^1.1.19",
+    "pg": "^8.21.0",
     "react": "^18",
     "react-dom": "^18",
     "tailwind-merge": "^3.6.0",
@@ -29,6 +31,7 @@
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@types/pg": "^8.20.0",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10.0.1",
