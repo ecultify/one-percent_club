@@ -346,6 +346,9 @@ function isRedundantLetterCaption(caption: string, optionIndex: number): boolean
 }
 
 function correctAnswerLabel(q: Question): string {
+  // Prefer the short, screen-friendly answer — correctAnswerText doubles as
+  // the (long) AI grading rubric for the set-based questions.
+  if (q.displayAnswer) return q.displayAnswer;
   if (q.textInput && q.correctAnswerText) return q.correctAnswerText;
   if (q.numberInput && q.correctNumber !== undefined) return String(q.correctNumber);
   return q.options[q.correctIndex] ?? "—";
@@ -1914,13 +1917,15 @@ export default function QuestionScreen({
                     // instead of leaving an empty right half. 3-option
                     // questions get a tight 3-col grid; 4-option questions
                     // (Q10) get the standard 4-col grid.
-                    className={`${
+                    className={
                       question.options.length === 2
-                        ? "grid grid-cols-2"
+                        ? "grid grid-cols-2 gap-3 md:gap-4"
                         : question.options.length === 3
-                          ? "grid grid-cols-3"
-                          : "grid grid-cols-4"
-                    } gap-3 md:gap-4`}
+                          ? "grid grid-cols-3 gap-3 md:gap-4"
+                          : question.options.length === 5
+                            ? "grid grid-cols-5 gap-1.5 md:gap-3"
+                            : "grid grid-cols-4 gap-3 md:gap-4"
+                    }
                     data-tour-id="options-area"
                   >
                     {question.options.map((option, i) => {

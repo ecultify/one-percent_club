@@ -6,6 +6,7 @@ import { Play, Square, RotateCcw, ArrowRight, Trash2 } from "lucide-react";
 import { usePartyRoom } from "@/lib/usePartyRoom";
 import { scoredParticipants, unscoredParticipants } from "@/lib/quizProtocol";
 import type { RoomPhase } from "@/lib/quizProtocol";
+import { SET_LABELS, type QuestionSetId } from "@/lib/questionSetMeta";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -15,6 +16,9 @@ import { CopyButton } from "@/components/live/CopyButton";
 interface HostRoomCardProps {
   code: string;
   hostKey: string;
+  /** Which question set this lobby plays (from the registry row). Carried on
+   *  host-claim so the PartyKit room adopts it while still in the lobby. */
+  questionSet?: QuestionSetId;
   onRemove: () => void | Promise<void>;
   /** Whether to show "Remove from dashboard" (owners only). */
   canRemove?: boolean;
@@ -29,7 +33,7 @@ interface HostRoomCardProps {
  * (the full table + kick) lives in the focused "Open lobby" view — that
  * scales to 100+ players instead of cramming a table into the card.
  */
-export default function HostRoomCard({ code, hostKey, onRemove, canRemove = true, onPhaseChange }: HostRoomCardProps) {
+export default function HostRoomCard({ code, hostKey, questionSet, onRemove, canRemove = true, onPhaseChange }: HostRoomCardProps) {
   const { state, send, error, connected } = usePartyRoom(code);
   const confirm = useConfirm();
   const [claimed, setClaimed] = useState(false);
@@ -41,9 +45,9 @@ export default function HostRoomCard({ code, hostKey, onRemove, canRemove = true
       setClaimed(true);
       return;
     }
-    send({ type: "host-claim", hostKey });
+    send({ type: "host-claim", hostKey, questionSet });
     setClaimed(true);
-  }, [connected, claimed, state, hostKey, send]);
+  }, [connected, claimed, state, hostKey, questionSet, send]);
 
   const phase = state?.phase;
   useEffect(() => {
@@ -58,7 +62,7 @@ export default function HostRoomCard({ code, hostKey, onRemove, canRemove = true
 
   const playLink = typeof window !== "undefined" ? `${window.location.origin}/play/${code}` : `/play/${code}`;
   const watchLink = typeof window !== "undefined" ? `${window.location.origin}/watch/${code}` : `/watch/${code}`;
-  const focusUrl = `/host/${code}?hostKey=${encodeURIComponent(hostKey)}`;
+  const focusUrl = `/host/${code}?hostKey=${encodeURIComponent(hostKey)}${questionSet ? `&set=${questionSet}` : ""}`;
 
   const phaseVariant =
     state?.phase === "running" ? "running" : state?.phase === "ended" ? "ended" : "default";
@@ -67,7 +71,10 @@ export default function HostRoomCard({ code, hostKey, onRemove, canRemove = true
     <Card>
       <CardHeader className="flex-row items-start justify-between gap-3 space-y-0 pb-3">
         <div>
-          <Badge variant={phaseVariant}>{state?.phase ?? "—"}</Badge>
+          <div className="flex items-center gap-1.5">
+            <Badge variant={phaseVariant}>{state?.phase ?? "—"}</Badge>
+            <Badge variant="set">{SET_LABELS[state?.questionSet ?? questionSet ?? "A"]}</Badge>
+          </div>
           <h2 className="mt-2 font-mono text-xl font-semibold tracking-wider text-white">{code}</h2>
         </div>
         <div className="flex flex-col items-end gap-0.5 text-xs text-muted-foreground">
@@ -97,21 +104,28 @@ export default function HostRoomCard({ code, hostKey, onRemove, canRemove = true
             </Button>
           )}
           {state?.phase === "running" && (
-            <Button
-              variant="destructive"
-              size="full"
-              onClick={() =>
-                confirm({
-                  title: `End room ${code}?`,
-                  message: "All players freeze on their current question.",
-                  confirmLabel: "End quiz",
-                  danger: true,
-                  action: () => send({ type: "end" }),
-                })
-              }
-            >
-              <Square className="size-4" /> End quiz
-            </Button>
+            <div className="space-y-2">
+              {state.hostNarration && state.roundPhase === "narrating" && (
+                <Button variant="gold" size="full" onClick={() => send({ type: "open-clock" })}>
+                  <Play className="size-4" /> Start Q{state.currentQuestionIdx + 1} timer
+                </Button>
+              )}
+              <Button
+                variant="destructive"
+                size="full"
+                onClick={() =>
+                  confirm({
+                    title: `End room ${code}?`,
+                    message: "All players freeze on their current question.",
+                    confirmLabel: "End quiz",
+                    danger: true,
+                    action: () => send({ type: "end" }),
+                  })
+                }
+              >
+                <Square className="size-4" /> End quiz
+              </Button>
+            </div>
           )}
           {state?.phase === "ended" && (
             <Button variant="gold" size="full" onClick={() => send({ type: "reset" })}>

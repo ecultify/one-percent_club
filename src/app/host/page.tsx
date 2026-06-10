@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { RoomPhase } from "@/lib/quizProtocol";
 import type { HostRoomRow } from "@/lib/roomsDb";
+import { QUESTION_SET_IDS, SET_LABELS, type QuestionSetId } from "@/lib/questionSetMeta";
 
 type DashRoom = HostRoomRow & { cohosts?: string[] };
 type RoomFilter = "all" | "lobby" | "running" | "ended";
@@ -36,6 +37,8 @@ export default function HostDashboardPage() {
   const [rooms, setRooms] = useState<DashRoom[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [creating, setCreating] = useState(false);
+  /** Which question set the next created room will play. */
+  const [newRoomSet, setNewRoomSet] = useState<QuestionSetId>("A");
   const [filter, setFilter] = useState<RoomFilter>("all");
   /** Live phase from each card's socket (overrides the stored status). */
   const [phaseByCode, setPhaseByCode] = useState<Record<string, RoomPhase>>({});
@@ -70,13 +73,13 @@ export default function HostDashboardPage() {
       await fetch("/api/host/rooms", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ code: generateRoomCode() }),
+        body: JSON.stringify({ code: generateRoomCode(), set: newRoomSet }),
       });
       await load();
     } finally {
       setCreating(false);
     }
-  }, [creating, load]);
+  }, [creating, newRoomSet, load]);
 
   const removeRoom = useCallback(
     async (code: string) => {
@@ -102,6 +105,7 @@ export default function HostDashboardPage() {
       <HostRoomCard
         code={r.code}
         hostKey={hostKey}
+        questionSet={r.questionSet}
         canRemove={r.isOwner}
         onRemove={() => removeRoom(r.code)}
         onPhaseChange={handlePhaseChange}
@@ -120,9 +124,33 @@ export default function HostDashboardPage() {
               Rooms you created, plus ones you co-host. Start or end them individually.
             </p>
           </div>
-          <Button variant="gold" size="lg" onClick={createRoom} disabled={creating}>
-            <Plus className="size-4" /> {creating ? "Creating…" : "Create new room"}
-          </Button>
+          <div className="flex items-center gap-3">
+            <div className="flex flex-col items-end gap-1.5">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Question set
+              </span>
+              <div className="flex rounded-md border border-white/15 p-0.5">
+                {QUESTION_SET_IDS.map((id) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setNewRoomSet(id)}
+                    className={`rounded px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      newRoomSet === id
+                        ? "bg-white text-black"
+                        : "text-white/55 hover:text-white"
+                    }`}
+                    aria-pressed={newRoomSet === id}
+                  >
+                    {id}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <Button variant="gold" size="lg" onClick={createRoom} disabled={creating}>
+              <Plus className="size-4" /> {creating ? "Creating…" : `Create room · ${SET_LABELS[newRoomSet]}`}
+            </Button>
+          </div>
         </header>
 
         {rooms.length > 0 && (

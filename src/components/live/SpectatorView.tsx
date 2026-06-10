@@ -4,9 +4,8 @@ import { useEffect, useState } from "react";
 import QuestionScreen from "@/components/QuestionScreen";
 import GameShowAudio from "@/components/GameShowAudio";
 import MuteButton from "@/components/MuteButton";
-import { QUESTIONS } from "@/components/QuizGame";
 import { useNarration } from "@/components/NarrationProvider";
-import { questionVoSrc } from "@/components/live/questionVo";
+import { getQuestionSet, setQuestionVoSrc } from "@/components/live/questionSets";
 import { rankParticipants, scoredParticipants, unscoredParticipants } from "@/lib/quizProtocol";
 import type { RoomState } from "@/lib/quizProtocol";
 
@@ -39,7 +38,7 @@ export default function SpectatorView({ state, name, banner, onPlayAlong }: Spec
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const idx = state.currentQuestionIdx;
-  const currentQ = QUESTIONS[idx];
+  const currentQ = getQuestionSet(state.questionSet)[idx];
   const narrating = state.roundPhase === "narrating";
   const revealing = state.roundPhase === "revealing";
   const survivors = state.participants.filter((p) => p.scoring && !p.eliminated).length;
@@ -49,12 +48,17 @@ export default function SpectatorView({ state, name, banner, onPlayAlong }: Spec
   const { narrateUrl, stop: stopNarration } = useNarration();
   useEffect(() => {
     if (state.phase !== "running" || !narrating || !currentQ) return;
-    const done = narrateUrl(`live-q-${currentQ.id}-vo`, questionVoSrc(currentQ.id));
+    // "Read out" mode: the host reads aloud instead. "Mute VO": the server
+    // never narrates. No recorded VO in either case.
+    if (state.hostNarration || state.muteVo) return;
+    const voSrc = setQuestionVoSrc(state.questionSet, idx);
+    if (!voSrc) return; // no VO recorded for this question yet
+    const done = narrateUrl(`live-${state.questionSet}-q${idx}-vo`, voSrc);
     void done.catch(() => {});
     return () => {
       stopNarration();
     };
-  }, [state.phase, narrating, currentQ, narrateUrl, stopNarration]);
+  }, [state.phase, state.questionSet, state.hostNarration, state.muteVo, narrating, currentQ, idx, narrateUrl, stopNarration]);
 
   return (
     <main className="relative flex h-screen w-full overflow-hidden bg-black">
@@ -64,6 +68,16 @@ export default function SpectatorView({ state, name, banner, onPlayAlong }: Spec
       {banner && (
         <div className="pointer-events-none absolute left-1/2 top-4 z-40 -translate-x-1/2 rounded-full border border-red-500/40 bg-red-950/50 px-4 py-1.5 text-[10px] font-mono uppercase tracking-[0.3em] text-red-200 backdrop-blur">
           {banner}
+        </div>
+      )}
+
+      {state.hostNarration && narrating && (
+        <div
+          className={`pointer-events-none absolute left-1/2 z-40 -translate-x-1/2 animate-pulse rounded-full border border-brass/50 bg-black/80 px-5 py-2 text-[11px] font-mono uppercase tracking-[0.25em] text-brass-bright backdrop-blur ${
+            banner ? "top-24" : "top-4"
+          }`}
+        >
+          Host is reading the question — timer starts soon
         </div>
       )}
 
@@ -83,7 +97,7 @@ export default function SpectatorView({ state, name, banner, onPlayAlong }: Spec
         {currentQ ? (
           <div className="pointer-events-none h-full w-full">
             <QuestionScreen
-              key={`spectate-q-${idx}`}
+              key={`spectate-q-${state.questionSet}-${idx}`}
               question={currentQ}
               questionNumber={idx + 1}
               totalQuestions={state.totalQuestions}

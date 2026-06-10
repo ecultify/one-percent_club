@@ -22,9 +22,14 @@
  *     reports the verdict + elapsed time via "report-answer". The
  *     server is authoritative for the clock, elimination and tallies
  *     but trusts the client's grading.
- *   • Question CONTENT is still NOT on the wire — clients import the
- *     same QUESTIONS array from src/components/QuizGame.
+ *   • Question CONTENT is still NOT on the wire — clients resolve the
+ *     room's question set (A/B/C, picked by the host at room creation)
+ *     from src/components/live/questionSets.ts via state.questionSet.
  */
+
+import type { QuestionSetId } from "./questionSetMeta";
+
+export type { QuestionSetId };
 
 export type RoomPhase = "lobby" | "running" | "ended";
 
@@ -86,7 +91,21 @@ export interface RoomState {
   viewers: ViewerState[];
   /** Server-side ms when the host hit "start". null in lobby. */
   startedAt: number | null;
-  /** Mirrors QUESTIONS.length on the client. */
+  /** Which question set (A/B/C) this room plays. Set by the host at room
+   *  creation (carried on host-claim) and fixed for the room's life; the
+   *  clients resolve the actual question content from this id. */
+  questionSet: QuestionSetId;
+  /** "Read out" mode: each round opens in "narrating" with the clock
+   *  frozen (no recorded VO plays) while the host reads the question
+   *  aloud, and stays there until the host sends "open-clock". Set in the
+   *  lobby via "set-narration-options"; LOCKED once the quiz starts. */
+  hostNarration: boolean;
+  /** Mute recorded VOs for the whole game: rounds follow normal server
+   *  timing but no "narrating" hold happens and no VO plays. Set in the
+   *  lobby via "set-narration-options"; LOCKED once the quiz starts.
+   *  Ignored while hostNarration is on (no VO plays in that mode anyway). */
+  muteVo: boolean;
+  /** Question count for this room's set. */
   totalQuestions: number;
   /** Global 0-based question everyone is on. Server-driven while
    *  running; 0 in the lobby. */
@@ -104,6 +123,10 @@ export interface RoomState {
 export interface HostClaimMessage {
   type: "host-claim";
   hostKey: string;
+  /** Which question set this room should play. Adopted by the server only
+   *  while the room is still in the lobby (a set never changes mid-game).
+   *  Omitted → the server keeps its current (or default) set. */
+  questionSet?: QuestionSetId;
 }
 
 export interface StartQuizMessage {
@@ -160,6 +183,23 @@ export interface JoinViewerMessage {
   name?: string;
 }
 
+/** Host-only, LOBBY-ONLY: configure narration for the upcoming game.
+ *  Rejected with error "narration-locked" once the quiz has started.
+ *  Omitted fields keep their current value. */
+export interface SetNarrationOptionsMessage {
+  type: "set-narration-options";
+  /** "Read out" — host reads each question and starts the clock manually. */
+  hostNarration?: boolean;
+  /** Mute recorded VOs for the whole game (server timing unchanged). */
+  muteVo?: boolean;
+}
+
+/** Host-only: while a round is holding in "narrating" (host-narration
+ *  mode), start the shared answer clock for everyone. */
+export interface OpenClockMessage {
+  type: "open-clock";
+}
+
 export type ClientMessage =
   | HostClaimMessage
   | StartQuizMessage
@@ -169,7 +209,9 @@ export type ClientMessage =
   | JoinParticipantMessage
   | ReportAnswerMessage
   | JoinViewerMessage
-  | ContinueAsViewerMessage;
+  | ContinueAsViewerMessage
+  | SetNarrationOptionsMessage
+  | OpenClockMessage;
 
 // ─── Server → Client messages ────────────────────────────────────────────
 

@@ -18,12 +18,15 @@
  * without a DB) they no-op / return empty so the app keeps working.
  */
 import { neon } from "@neondatabase/serverless";
+import { type QuestionSetId, DEFAULT_QUESTION_SET, isQuestionSetId } from "@/lib/questionSetMeta";
 
 export type RoomStatus = "lobby" | "running" | "ended";
 
 export interface RoomRecord {
   code: string;
   status: RoomStatus;
+  /** Which question set (A/B/C) this lobby plays. Picked at creation. */
+  questionSet: QuestionSetId;
   playerCount: number;
   hostName: string | null;
   finalStandings: unknown | null;
@@ -76,6 +79,8 @@ async function ensureTable(sql: NonNullable<ReturnType<typeof getSql>>) {
   `;
   // For pre-existing tables created before ownership was added.
   await sql`ALTER TABLE rooms ADD COLUMN IF NOT EXISTS created_by TEXT`;
+  // Question set (A/B/C) — added June 2026 for the set-based live quiz.
+  await sql`ALTER TABLE rooms ADD COLUMN IF NOT EXISTS question_set TEXT NOT NULL DEFAULT 'A'`;
   await sql`
     CREATE TABLE IF NOT EXISTS room_cohosts (
       room_code  TEXT NOT NULL,
@@ -92,6 +97,7 @@ function mapRoomRow(r: Record<string, unknown>): RoomRecord {
   return {
     code: String(r.code),
     status: r.status as RoomStatus,
+    questionSet: isQuestionSetId(r.question_set) ? r.question_set : DEFAULT_QUESTION_SET,
     playerCount: Number(r.player_count ?? 0),
     hostName: (r.host_name as string | null) ?? null,
     finalStandings: r.final_standings ?? null,
@@ -144,7 +150,7 @@ export async function listRooms(): Promise<RoomRecord[]> {
   if (!sql) return [];
   await ensureTable(sql);
   const rows = (await sql`
-    SELECT code, status, player_count, host_name, final_standings,
+    SELECT code, status, question_set, player_count, host_name, final_standings,
            created_at, started_at, ended_at, updated_at
     FROM rooms
     ORDER BY updated_at DESC
@@ -164,16 +170,21 @@ export interface HostRoomRow extends RoomRecord {
 
 /** Create (or claim) a room owned by the given user. Idempotent: if the row
  *  already exists from the registry, only fills created_by when it's empty. */
-export async function createOwnedRoom(code: string, userId: string): Promise<void> {
+export async function createOwnedRoom(
+  code: string,
+  userId: string,
+  questionSet: QuestionSetId = DEFAULT_QUESTION_SET,
+): Promise<void> {
   const sql = getSql();
   if (!sql) return;
   await ensureTable(sql);
   await sql`
-    INSERT INTO rooms (code, status, created_by, updated_at)
-    VALUES (${code}, 'lobby', ${userId}, now())
+    INSERT INTO rooms (code, status, question_set, created_by, updated_at)
+    VALUES (${code}, 'lobby', ${questionSet}, ${userId}, now())
     ON CONFLICT (code) DO UPDATE SET
-      created_by = COALESCE(rooms.created_by, EXCLUDED.created_by),
-      updated_at = now()
+      question_set = EXCLUDED.question_set,
+      created_by   = COALESCE(rooms.created_by, EXCLUDED.created_by),
+      updated_at   = now()
   `;
 }
 
@@ -183,7 +194,7 @@ export async function listRoomsForUser(userId: string): Promise<HostRoomRow[]> {
   if (!sql) return [];
   await ensureTable(sql);
   const rows = (await sql`
-    SELECT r.code, r.status, r.player_count, r.host_name, r.final_standings,
+    SELECT r.code, r.status, r.question_set, r.player_count, r.host_name, r.final_standings,
            r.created_at, r.started_at, r.ended_at, r.updated_at, r.created_by,
            u.email AS owner_email
     FROM rooms r

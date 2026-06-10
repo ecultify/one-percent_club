@@ -12,6 +12,8 @@ const badgeVariants = cva(
         running: "border-emerald-500/30 bg-emerald-950/40 text-emerald-300",
         ended: "border-white/10 bg-white/10 text-white/55",
         danger: "border-red-500/30 bg-red-950/40 text-red-300",
+        /** Question-set pill (Set A/B/C) on room cards. */
+        set: "border-amber-400/30 bg-amber-950/30 text-amber-200",
       },
     },
     defaultVariants: { variant: "default" },

@@ -9,6 +9,7 @@
 import { NextResponse } from "next/server";
 import { getHostUserId } from "@/lib/hostSession";
 import { createOwnedRoom, deleteOwnedRoom, listCohostEmails, listRoomsForUser } from "@/lib/roomsDb";
+import { DEFAULT_QUESTION_SET, isQuestionSetId } from "@/lib/questionSetMeta";
 
 export const dynamic = "force-dynamic";
 
@@ -40,9 +41,10 @@ export async function POST(req: Request) {
   if (!/^[A-Z0-9]{4,8}$/.test(code)) {
     return NextResponse.json({ ok: false, error: "bad-code" }, { status: 400 });
   }
+  const set = isQuestionSetId(body.set) ? body.set : DEFAULT_QUESTION_SET;
   try {
-    await createOwnedRoom(code, uid);
-    return NextResponse.json({ ok: true, code });
+    await createOwnedRoom(code, uid, set);
+    return NextResponse.json({ ok: true, code, set });
   } catch (err) {
     console.error("[/api/host/rooms POST]", err);
     return NextResponse.json({ ok: false, error: "write-failed" }, { status: 200 });

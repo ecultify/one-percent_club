@@ -8,6 +8,13 @@ import type {
   ServerMessage,
   ViewerState,
 } from "../src/lib/quizProtocol";
+import {
+  type QuestionSetId,
+  DEFAULT_QUESTION_SET,
+  SET_QUESTION_COUNT,
+  SET_VO_DURATION_MS,
+  isQuestionSetId,
+} from "../src/lib/questionSetMeta";
 
 /**
  * Quiz room server. One PartyKit room per active quiz session — the
@@ -39,8 +46,6 @@ import type {
  *     elimination and tallies.
  */
 
-const TOTAL_QUESTIONS = 10;
-
 /** All questions use a 30s clock on the client. The server mirrors that
  *  with a small grace so a player answering on their visible "0" still
  *  beats the authoritative cutoff despite network latency. */
@@ -49,17 +54,19 @@ const ANSWER_GRACE_MS = 1_500;
 /** How long the correct answer is held on screen before advancing. */
 const REVEAL_HOLD_MS = 2_500;
 
-/** Per-question voice-over duration (ms), indexed by question position
- *  (Q1 → index 0), measured from the VO mp3s + a buffer that covers
- *  client-side load/decode latency so the clock doesn't start before the
- *  VO finishes for everyone. The clock is held this long in the
- *  "narrating" sub-phase before flipping to "asking". Keep in sync with
- *  the VO files resolved by src/components/live/questionVo.ts. */
+/** Buffer added on top of each measured VO duration to cover client-side
+ *  load/decode latency, so the clock doesn't start before the VO finishes
+ *  for everyone. Per-set VO durations live in src/lib/questionSetMeta.ts
+ *  (SET_VO_DURATION_MS — keep in sync with the files resolved by
+ *  src/components/live/questionSets.ts). A null entry = no VO recorded yet
+ *  → that round opens its answer clock immediately (no "narrating"). */
 const VO_BUFFER_MS = 1_000;
-const VO_DURATION_MS = [9_875, 16_980, 6_766, 8_960, 12_356, 12_539, 11_233, 8_908, 11_651, 6_583].map(
-  (d) => d + VO_BUFFER_MS,
-);
-const DEFAULT_VO_MS = 10_000 + VO_BUFFER_MS;
+
+/** VO hold for a set's question, or null when that question has no VO. */
+function voHoldMs(setId: QuestionSetId, questionIdx: number): number | null {
+  const d = SET_VO_DURATION_MS[setId]?.[questionIdx] ?? null;
+  return d == null ? null : d + VO_BUFFER_MS;
+}
 
 interface ConnState {
   role: "host" | "participant" | "viewer" | "unclaimed";
@@ -76,6 +83,9 @@ interface PersistedRoom {
   participants: ParticipantState[];
   viewers: ViewerState[];
   startedAt: number | null;
+  questionSet?: QuestionSetId;
+  hostNarration?: boolean;
+  muteVo?: boolean;
   currentQuestionIdx: number;
   roundPhase: RoundPhase;
   questionStartedAt: number | null;
@@ -114,6 +124,15 @@ export default class QuizServer implements Party.Server {
   private participants = new Map<string, ParticipantState>();
   private viewers = new Map<string, ViewerState>();
   private startedAt: number | null = null;
+  /** Which question set (A/B/C) this room plays. Adopted from the host's
+   *  claim while in the lobby; fixed once the quiz starts. */
+  private questionSet: QuestionSetId = DEFAULT_QUESTION_SET;
+  /** "Read out" mode: rounds hold in "narrating" (clock frozen, no
+   *  recorded VO) until the host fires "open-clock". Lobby-locked. */
+  private hostNarration = false;
+  /** Mute recorded VOs for the whole game (server timing unchanged).
+   *  Lobby-locked. */
+  private muteVo = false;
 
   // ── Synchronized round state ──────────────────────────────────────────
   private currentQuestionIdx = 0;
@@ -147,6 +166,9 @@ export default class QuizServer implements Party.Server {
     if (!snap) return;
     this.phase = snap.phase;
     this.startedAt = snap.startedAt;
+    this.questionSet = isQuestionSetId(snap.questionSet) ? snap.questionSet : DEFAULT_QUESTION_SET;
+    this.hostNarration = snap.hostNarration === true;
+    this.muteVo = snap.muteVo === true;
     this.currentQuestionIdx = snap.currentQuestionIdx;
     this.roundPhase = snap.roundPhase;
     this.questionStartedAt = snap.questionStartedAt;
@@ -189,7 +211,7 @@ export default class QuizServer implements Party.Server {
 
     switch (msg.type) {
       case "host-claim":
-        this.handleHostClaim(sender, msg.hostKey);
+        this.handleHostClaim(sender, msg.hostKey, msg.questionSet);
         return;
       case "start":
         this.requireHost(sender, () => this.startQuiz());
@@ -214,6 +236,12 @@ export default class QuizServer implements Party.Server {
         return;
       case "continue-as-viewer":
         this.continueAsViewer(sender);
+        return;
+      case "set-narration-options":
+        this.requireHost(sender, () => this.setNarrationOptions(sender, msg.hostNarration, msg.muteVo));
+        return;
+      case "open-clock":
+        this.requireHost(sender, () => this.hostOpenClock());
         return;
       default: {
         const _exhaustive: never = msg;
@@ -254,7 +282,7 @@ export default class QuizServer implements Party.Server {
 
   // ─── Host actions ──────────────────────────────────────────────────────
 
-  private handleHostClaim(connection: Party.Connection, hostKey: string) {
+  private handleHostClaim(connection: Party.Connection, hostKey: string, questionSet?: QuestionSetId) {
     const expected = (this.room.env.HOST_KEY as string | undefined) ?? "DEV";
     if (hostKey !== expected) {
       this.sendTo(connection, { type: "error", reason: "bad-host-key" });
@@ -263,6 +291,11 @@ export default class QuizServer implements Party.Server {
     if (this.hostId && this.hostId !== connection.id) {
       this.sendTo(connection, { type: "error", reason: "host-already-claimed" });
       return;
+    }
+    // Adopt the host's set choice while still in the lobby. Once running /
+    // ended the set is locked — players' answer logs are set-specific.
+    if (this.phase === "lobby" && isQuestionSetId(questionSet)) {
+      this.questionSet = questionSet;
     }
     this.hostId = connection.id;
     connection.setState({ role: "host" } satisfies ConnState);
@@ -325,6 +358,29 @@ export default class QuizServer implements Party.Server {
     void this.reportRoomEvent("lobby");
   }
 
+  /** Configure narration for the upcoming game. LOBBY-ONLY: once the quiz
+   *  has started the settings are locked (the host UI greys the toggles
+   *  out; this guard enforces it server-side too). */
+  private setNarrationOptions(
+    connection: Party.Connection,
+    hostNarration?: boolean,
+    muteVo?: boolean,
+  ) {
+    if (this.phase !== "lobby") {
+      this.sendTo(connection, { type: "error", reason: "narration-locked" });
+      return;
+    }
+    if (typeof hostNarration === "boolean") this.hostNarration = hostNarration;
+    if (typeof muteVo === "boolean") this.muteVo = muteVo;
+    this.broadcastState();
+  }
+
+  /** Host finished reading — start the shared answer clock. */
+  private hostOpenClock() {
+    if (this.phase !== "running" || this.roundPhase !== "narrating") return;
+    this.openAnswerClock();
+  }
+
   private kickParticipant(participantId: string) {
     if (!this.participants.delete(participantId)) return;
     this.answeredThisRound.delete(participantId);
@@ -339,18 +395,40 @@ export default class QuizServer implements Party.Server {
 
   // ─── Round engine ────────────────────────────────────────────────────
 
-  /** Open the current question with its voice-over. The clock is frozen
-   *  while the VO plays for the whole room; once it finishes the round
-   *  flips to "asking". */
+  /** Open the current question.
+   *
+   *  Host-narration mode: hold in "narrating" with NO timer — the clock is
+   *  frozen while the host reads the question aloud, until the host sends
+   *  "open-clock".
+   *
+   *  Otherwise, if recorded VOs are enabled and this question has one, the
+   *  clock is frozen in "narrating" while the VO plays for the whole room,
+   *  then flips to "asking". No VO (or VOs muted) → the answer clock opens
+   *  immediately. */
   private beginRound() {
     if (this.phase !== "running") return;
-    this.roundPhase = "narrating";
     this.questionStartedAt = null;
-    this.narratingStartedAt = Date.now();
     this.revealStartedAt = null;
     this.answeredThisRound.clear();
     this.clearRoundTimer();
-    const voMs = VO_DURATION_MS[this.currentQuestionIdx] ?? DEFAULT_VO_MS;
+    if (this.hostNarration) {
+      // Indefinite hold — the host starts the clock when they're done
+      // reading. Survives restarts (recoverTimer leaves it waiting).
+      this.roundPhase = "narrating";
+      this.narratingStartedAt = Date.now();
+      this.broadcastState();
+      return;
+    }
+    const voMs = this.muteVo ? null : voHoldMs(this.questionSet, this.currentQuestionIdx);
+    if (voMs == null) {
+      // No recorded VO for this question (or VOs muted for this room) —
+      // straight to the answer clock.
+      this.narratingStartedAt = null;
+      this.openAnswerClock();
+      return;
+    }
+    this.roundPhase = "narrating";
+    this.narratingStartedAt = Date.now();
     this.roundTimer = setTimeout(() => this.beginAsking(), voMs);
     this.broadcastState();
   }
@@ -358,6 +436,11 @@ export default class QuizServer implements Party.Server {
   /** VO finished — start the answer clock for everyone at once. */
   private beginAsking() {
     if (this.phase !== "running" || this.roundPhase !== "narrating") return;
+    this.openAnswerClock();
+  }
+
+  /** Flip to "asking" and arm the shared answer clock. */
+  private openAnswerClock() {
     this.roundPhase = "asking";
     this.questionStartedAt = Date.now();
     this.clearRoundTimer();
@@ -403,7 +486,17 @@ export default class QuizServer implements Party.Server {
       if (remaining <= 0) this.beginReveal();
       else this.roundTimer = setTimeout(() => this.beginReveal(), remaining);
     } else if (this.roundPhase === "narrating") {
-      const voMs = VO_DURATION_MS[this.currentQuestionIdx] ?? DEFAULT_VO_MS;
+      if (this.hostNarration) {
+        // Host-narration hold — no timer to rebuild; the round resumes when
+        // the (re-connected) host sends "open-clock".
+        return;
+      }
+      const voMs = this.muteVo ? null : voHoldMs(this.questionSet, this.currentQuestionIdx);
+      if (voMs == null) {
+        // VOs muted / table changed across a redeploy — open the clock now.
+        this.beginAsking();
+        return;
+      }
       const elapsed = this.narratingStartedAt != null ? now - this.narratingStartedAt : voMs;
       const remaining = voMs - elapsed;
       if (remaining <= 0) this.beginAsking();
@@ -421,7 +514,7 @@ export default class QuizServer implements Party.Server {
     if (this.phase !== "running") return;
     const survivors = this.survivorCount();
     const nextIdx = this.currentQuestionIdx + 1;
-    if (survivors === 0 || nextIdx >= TOTAL_QUESTIONS) {
+    if (survivors === 0 || nextIdx >= SET_QUESTION_COUNT[this.questionSet]) {
       this.endQuiz();
       return;
     }
@@ -591,7 +684,10 @@ export default class QuizServer implements Party.Server {
       participants: Array.from(this.participants.values()),
       viewers: Array.from(this.viewers.values()),
       startedAt: this.startedAt,
-      totalQuestions: TOTAL_QUESTIONS,
+      questionSet: this.questionSet,
+      hostNarration: this.hostNarration,
+      muteVo: this.muteVo,
+      totalQuestions: SET_QUESTION_COUNT[this.questionSet],
       currentQuestionIdx: this.currentQuestionIdx,
       roundPhase: this.roundPhase,
       questionStartedAt: this.roundPhase === "asking" ? this.questionStartedAt : null,
@@ -613,6 +709,9 @@ export default class QuizServer implements Party.Server {
       participants: Array.from(this.participants.values()),
       viewers: Array.from(this.viewers.values()),
       startedAt: this.startedAt,
+      questionSet: this.questionSet,
+      hostNarration: this.hostNarration,
+      muteVo: this.muteVo,
       currentQuestionIdx: this.currentQuestionIdx,
       roundPhase: this.roundPhase,
       questionStartedAt: this.questionStartedAt,

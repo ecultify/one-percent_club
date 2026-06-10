@@ -5,14 +5,13 @@ import QuestionScreen from "@/components/QuestionScreen";
 import GameShowAudio from "@/components/GameShowAudio";
 import MuteButton from "@/components/MuteButton";
 import {
-  QUESTIONS,
   playQuizSfx,
   checkAnswerWithOpenAI,
 } from "@/components/QuizGame";
 import { useNarration } from "@/components/NarrationProvider";
 import SpectatorView from "@/components/live/SpectatorView";
 import FinalStandings from "@/components/live/FinalStandings";
-import { questionVoSrc } from "@/components/live/questionVo";
+import { getQuestionSet, setQuestionVoSrc } from "@/components/live/questionSets";
 import type { ClientMessage, RoomState } from "@/lib/quizProtocol";
 
 /**
@@ -46,6 +45,9 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
     return state.participants.find((p) => p.id === myId) ?? null;
   }, [state.participants, myId]);
 
+  // The room's question set (A/B/C) — picked by the host at room creation
+  // and broadcast in every state snapshot.
+  const questions = getQuestionSet(state.questionSet);
   const globalIdx = state.currentQuestionIdx;
   const roundPhase = state.roundPhase;
   const eliminated = me?.eliminated ?? false;
@@ -108,14 +110,18 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
   useEffect(() => {
     if (state.phase !== "running" || spectating) return;
     if (roundPhase !== "narrating") return;
-    const q = QUESTIONS[globalIdx];
-    if (!q) return;
-    const done = narrateUrl(`live-q-${q.id}-vo`, questionVoSrc(q.id));
+    // In "Read out" mode the HOST reads the question aloud during this
+    // hold; with "Mute VO" the server never enters narrating. Either way,
+    // no recorded VO plays. (Both are lobby-locked room settings.)
+    if (state.hostNarration || state.muteVo) return;
+    const voSrc = setQuestionVoSrc(state.questionSet, globalIdx);
+    if (!voSrc) return; // no VO recorded — the server skips narrating anyway
+    const done = narrateUrl(`live-${state.questionSet}-q${globalIdx}-vo`, voSrc);
     void done.catch(() => {});
     return () => {
       stopNarration();
     };
-  }, [state.phase, spectating, roundPhase, globalIdx, narrateUrl, stopNarration]);
+  }, [state.phase, state.questionSet, state.hostNarration, state.muteVo, spectating, roundPhase, globalIdx, narrateUrl, stopNarration]);
 
   const handleAnswer = useCallback(
     async (selectedIndex: number, typedAnswer?: string) => {
@@ -123,7 +129,7 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
       // though they're flagged eliminated; only a scored-and-out player is
       // blocked here.
       if ((eliminated && scoring) || roundPhase !== "asking" || answered) return;
-      const q = QUESTIONS[globalIdx];
+      const q = questions[globalIdx];
       if (!q) return;
       let correct: boolean;
 
@@ -133,7 +139,18 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
         } else {
           setValidating(true);
           const raw = typedAnswer.trim().toLowerCase();
-          if (q.id === 1 && /\bthe\b/.test(raw)) {
+          // Deterministic fast-path (no AI round-trip) when the question
+          // declares a passRegex; misses still fall through to the
+          // semantic OpenAI check so phrasings/typos aren't punished.
+          let fastPass = false;
+          if (q.passRegex) {
+            try {
+              fastPass = new RegExp(q.passRegex, "i").test(raw);
+            } catch {
+              fastPass = false;
+            }
+          }
+          if (fastPass) {
             correct = true;
           } else {
             correct = await checkAnswerWithOpenAI(typedAnswer, q.correctAnswerText ?? "", q.question);
@@ -166,7 +183,7 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
       const answerValue: number | string | null = typedAnswer ?? selectedIndex;
       send({ type: "report-answer", questionIdx: globalIdx, answer: answerValue, correct, elapsedMs });
     },
-    [eliminated, scoring, roundPhase, answered, globalIdx, stopNarration, send],
+    [eliminated, scoring, roundPhase, answered, questions, globalIdx, stopNarration, send],
   );
 
   const handleTimeUp = useCallback(() => {
@@ -207,7 +224,7 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
     );
   }
 
-  const currentQ = QUESTIONS[globalIdx];
+  const currentQ = questions[globalIdx];
   if (!currentQ) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-black text-foreground/70">
@@ -227,8 +244,13 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
           Playing along · unscored
         </div>
       )}
+      {state.hostNarration && roundPhase === "narrating" && (
+        <div className="pointer-events-none absolute left-1/2 top-12 z-40 -translate-x-1/2 animate-pulse rounded-full border border-brass/50 bg-black/80 px-5 py-2 text-[11px] font-mono uppercase tracking-[0.25em] text-brass-bright backdrop-blur">
+          Host is reading the question — timer starts soon
+        </div>
+      )}
       <QuestionScreen
-        key={`q-${globalIdx}`}
+        key={`q-${state.questionSet}-${globalIdx}`}
         question={currentQ}
         questionNumber={globalIdx + 1}
         totalQuestions={state.totalQuestions}

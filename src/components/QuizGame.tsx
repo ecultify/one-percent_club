@@ -368,6 +368,14 @@ export interface Question {
   /** Correct answer text sent to OpenAI for semantic matching when
    *  textInput is true. */
   correctAnswerText?: string;
+  /** Short, screen-friendly answer shown on the reveal. Falls back to
+   *  correctAnswerText (which doubles as the AI grading rubric) when unset. */
+  displayAnswer?: string;
+  /** Optional case-insensitive regex fast-path for textInput grading: if it
+   *  matches the trimmed/lowercased typed answer the answer is correct
+   *  WITHOUT an OpenAI round-trip. Non-matches still fall through to the
+   *  semantic check. Used by the live (set-based) flow. */
+  passRegex?: string;
 }
 
 export interface GameState {

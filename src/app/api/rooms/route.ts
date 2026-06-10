@@ -12,6 +12,7 @@
 import { NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
 import type { RoomRecord } from "@/lib/roomsDb";
+import { DEFAULT_QUESTION_SET, isQuestionSetId } from "@/lib/questionSetMeta";
 
 export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
@@ -31,14 +32,16 @@ export async function GET() {
         ended_at TIMESTAMPTZ, updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
       )
     `;
+    await sql`ALTER TABLE rooms ADD COLUMN IF NOT EXISTS question_set TEXT NOT NULL DEFAULT 'A'`;
     const rows = (await sql`
-      SELECT code, status, player_count, host_name, final_standings,
+      SELECT code, status, question_set, player_count, host_name, final_standings,
              created_at, started_at, ended_at, updated_at
       FROM rooms ORDER BY updated_at DESC LIMIT 500
     `) as Record<string, unknown>[];
     const rooms: RoomRecord[] = rows.map((r) => ({
       code: String(r.code),
       status: r.status as RoomRecord["status"],
+      questionSet: isQuestionSetId(r.question_set) ? r.question_set : DEFAULT_QUESTION_SET,
       playerCount: Number(r.player_count ?? 0),
       hostName: (r.host_name as string | null) ?? null,
       finalStandings: r.final_standings ?? null,

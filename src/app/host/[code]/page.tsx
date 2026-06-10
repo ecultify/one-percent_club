@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { usePartyRoom } from "@/lib/usePartyRoom";
 import { rankParticipants, scoredParticipants, unscoredParticipants, totalResponseMs } from "@/lib/quizProtocol";
-import { ArrowLeft, Play, Square, RotateCcw, UserPlus } from "lucide-react";
+import { ArrowLeft, Play, Square, RotateCcw, UserPlus, Mic, MicOff, TimerReset } from "lucide-react";
+import { getQuestionSet } from "@/components/live/questionSets";
 import AnalyticsPanel from "@/components/live/AnalyticsPanel";
 import { CopyButton } from "@/components/live/CopyButton";
 import { useConfirm } from "@/components/ConfirmDialog";
@@ -14,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { SET_LABELS, isQuestionSetId } from "@/lib/questionSetMeta";
 
 /**
  * Focused single-room host view. Reachable from the dashboard via the
@@ -29,6 +31,10 @@ export default function HostRoomPage() {
   const search = useSearchParams();
   const roomCode = (params?.code ?? "").toUpperCase();
   const hostKey = search?.get("hostKey") ?? process.env.NEXT_PUBLIC_HOST_KEY ?? "";
+  /** Set carried from the dashboard card link; adopted by the server only
+   *  while the room is still in the lobby. */
+  const setParam = search?.get("set");
+  const questionSet = isQuestionSetId(setParam) ? setParam : undefined;
 
   const { state, send, error, connected } = usePartyRoom(roomCode);
   const confirm = useConfirm();
@@ -72,8 +78,8 @@ export default function HostRoomPage() {
     if (!connected) return;
     if (!state) return;
     if (state.hostId) return;
-    send({ type: "host-claim", hostKey });
-  }, [connected, state, hostKey, send]);
+    send({ type: "host-claim", hostKey, questionSet });
+  }, [connected, state, hostKey, questionSet, send]);
 
   if (!connected || !state) {
     return (
@@ -107,8 +113,9 @@ export default function HostRoomPage() {
             >
               <ArrowLeft className="size-3.5" /> Back to dashboard
             </Link>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white">
+            <h1 className="mt-2 flex items-center gap-3 text-2xl font-semibold tracking-tight text-white">
               Room <span className="font-mono tracking-wider text-white">{roomCode}</span>
+              <Badge variant="set">{SET_LABELS[state.questionSet ?? "A"]}</Badge>
             </h1>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -176,6 +183,125 @@ export default function HostRoomPage() {
                 </Button>
               )}
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Narration settings — LOBBY-ONLY (the server rejects changes once
+            the quiz starts; the toggles grey out). Read out = host reads each
+            question and starts the clock manually. Mute VO = recorded
+            voice-overs stay silent but rounds keep normal server timing. */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2">
+              {state.hostNarration ? <Mic className="size-4" /> : <MicOff className="size-4" />}
+              Narration
+            </CardTitle>
+            <CardDescription>
+              {state.phase === "lobby"
+                ? "Choose how questions are narrated. Locked once the quiz starts."
+                : "Locked — narration settings can only be changed in the lobby."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              {/* Read out */}
+              <div
+                className={`rounded-lg border p-4 ${
+                  state.hostNarration ? "border-amber-400/40 bg-amber-950/15" : "border-white/10"
+                } ${state.phase !== "lobby" ? "opacity-50" : ""}`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-white">Read out</p>
+                  <Button
+                    size="sm"
+                    variant={state.hostNarration ? "gold" : "outline"}
+                    disabled={state.phase !== "lobby"}
+                    className={state.phase !== "lobby" ? "cursor-not-allowed" : ""}
+                    onClick={() => send({ type: "set-narration-options", hostNarration: !state.hostNarration })}
+                  >
+                    {state.hostNarration ? "ON" : "OFF"}
+                  </Button>
+                </div>
+                <p className="mt-2 text-xs leading-relaxed text-white/55">
+                  You read each question aloud — every round holds with the timer frozen until you press{" "}
+                  <span className="font-mono text-white/70">Start question timer</span>. No recorded voice-over plays.
+                </p>
+              </div>
+
+              {/* Mute VO */}
+              <div
+                className={`rounded-lg border p-4 ${
+                  state.muteVo ? "border-amber-400/40 bg-amber-950/15" : "border-white/10"
+                } ${state.phase !== "lobby" || state.hostNarration ? "opacity-50" : ""}`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-white">Mute VO</p>
+                  <Button
+                    size="sm"
+                    variant={state.muteVo ? "gold" : "outline"}
+                    disabled={state.phase !== "lobby"}
+                    className={state.phase !== "lobby" ? "cursor-not-allowed" : ""}
+                    onClick={() => send({ type: "set-narration-options", muteVo: !state.muteVo })}
+                  >
+                    {state.muteVo ? "ON" : "OFF"}
+                  </Button>
+                </div>
+                <p className="mt-2 text-xs leading-relaxed text-white/55">
+                  Rounds follow normal server timing, but recorded voice-overs stay silent for the whole game.
+                  {state.hostNarration && " (No effect while Read out is ON.)"}
+                </p>
+              </div>
+            </div>
+
+            {state.phase === "running" && state.roundPhase === "narrating" && state.hostNarration && (
+              <Button variant="gold" size="lg" onClick={() => send({ type: "open-clock" })}>
+                <TimerReset className="size-4" /> Start question timer
+              </Button>
+            )}
+            {state.phase === "running" && state.roundPhase === "asking" && (
+              <p className="text-xs font-mono uppercase tracking-wider text-emerald-300/80">Clock running…</p>
+            )}
+            {state.phase === "running" && state.roundPhase === "revealing" && (
+              <p className="text-xs font-mono uppercase tracking-wider text-white/50">Revealing answer…</p>
+            )}
+
+            {state.phase === "running" && (() => {
+              const q = getQuestionSet(state.questionSet)[state.currentQuestionIdx];
+              if (!q) return null;
+              return (
+                <div className="rounded-lg border border-amber-400/20 bg-amber-950/10 p-4">
+                  <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-amber-200/70">
+                    Q{state.currentQuestionIdx + 1} of {state.totalQuestions} · {q.percentage}% question
+                    {state.hostNarration ? " — read this out" : ""}
+                  </p>
+                  <p className="mt-2 text-lg font-medium leading-snug text-white">{q.question}</p>
+                  {q.wordPuzzle && (
+                    <p className="mt-2 font-mono text-base tracking-[0.2em] text-amber-100">{q.wordPuzzle}</p>
+                  )}
+                  {q.wordSequence && (
+                    <p className="mt-2 font-mono text-base text-amber-100">{q.wordSequence.join("   ")}</p>
+                  )}
+                  <p className="mt-3 text-sm text-white/60">
+                    {q.options.length > 0 ? (
+                      <>
+                        Options:{" "}
+                        {q.options.map((o, i) => (
+                          <span key={i} className={i === q.correctIndex ? "font-semibold text-emerald-300" : ""}>
+                            {o}
+                            {i === q.correctIndex ? " ✓" : ""}
+                            {i < q.options.length - 1 ? " · " : ""}
+                          </span>
+                        ))}
+                      </>
+                    ) : (
+                      <>
+                        Answer: <span className="font-semibold text-emerald-300">{q.displayAnswer ?? (q.numberInput ? String(q.correctNumber ?? "") : q.correctAnswerText ?? "")}</span>
+                      </>
+                    )}
+                  </p>
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
 
