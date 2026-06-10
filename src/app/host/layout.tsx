@@ -3,6 +3,8 @@
 import { useState, type FormEvent } from "react";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 
 /**
  * Auth gate for the host area only. The main quiz (/), /play and /watch are
@@ -70,68 +72,56 @@ function HostAuthGate() {
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-black px-6">
-      <form
-        onSubmit={submit}
-        className="w-full max-w-sm rounded-2xl border border-white/10 bg-neutral-950 p-7"
-      >
-        <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-white/45">The 1% Club · Host</p>
-        <h1 className="mt-2 text-2xl font-semibold text-white">
-          {mode === "sign-in" ? "Host sign in" : "Create host account"}
-        </h1>
-        <p className="mt-1 text-sm text-white/55">
-          {mode === "sign-in"
-            ? "Sign in to manage your lobbies."
-            : "Make an account to host and manage lobbies."}
-        </p>
-
-        <div className="mt-6 space-y-3">
-          {mode === "sign-up" && (
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Name"
-              autoComplete="name"
-              className="w-full rounded-lg border border-white/15 bg-black/60 px-4 py-3 text-[15px] text-white placeholder:text-white/35 outline-none focus:border-white/35"
+      <Card className="w-full max-w-sm">
+        <CardHeader>
+          <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-white/45">The 1% Club · Host</p>
+          <CardTitle className="text-2xl">{mode === "sign-in" ? "Host sign in" : "Create host account"}</CardTitle>
+          <CardDescription>
+            {mode === "sign-in" ? "Sign in to manage your lobbies." : "Make an account to host and manage lobbies."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={submit} className="space-y-3">
+            {mode === "sign-up" && (
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" autoComplete="name" />
+            )}
+            <Input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              type="email"
+              required
+              placeholder="Email"
+              autoComplete="email"
             />
-          )}
-          <input
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            type="email"
-            required
-            placeholder="Email"
-            autoComplete="email"
-            className="w-full rounded-lg border border-white/15 bg-black/60 px-4 py-3 text-[15px] text-white placeholder:text-white/35 outline-none focus:border-white/35"
-          />
-          <input
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            type="password"
-            required
-            minLength={8}
-            placeholder="Password (min 8 chars)"
-            autoComplete={mode === "sign-in" ? "current-password" : "new-password"}
-            className="w-full rounded-lg border border-white/15 bg-black/60 px-4 py-3 text-[15px] text-white placeholder:text-white/35 outline-none focus:border-white/35"
-          />
-        </div>
+            <Input
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              type="password"
+              required
+              minLength={8}
+              placeholder="Password (min 8 chars)"
+              autoComplete={mode === "sign-in" ? "current-password" : "new-password"}
+            />
 
-        {err && <p className="mt-3 text-sm text-red-300">{err}</p>}
+            {err && <p className="text-sm text-red-300">{err}</p>}
 
-        <Button type="submit" variant="gold" size="full" disabled={busy} className="mt-5">
-          {busy ? "Please wait…" : mode === "sign-in" ? "Sign in" : "Create account"}
-        </Button>
+            <Button type="submit" variant="gold" size="full" disabled={busy} className="mt-2">
+              {busy ? "Please wait…" : mode === "sign-in" ? "Sign in" : "Create account"}
+            </Button>
+          </form>
 
-        <button
-          type="button"
-          onClick={() => {
-            setMode((m) => (m === "sign-in" ? "sign-up" : "sign-in"));
-            setErr(null);
-          }}
-          className="mt-4 w-full text-center text-xs text-white/50 hover:text-white"
-        >
-          {mode === "sign-in" ? "Need an account? Create one" : "Already have an account? Sign in"}
-        </button>
-      </form>
+          <button
+            type="button"
+            onClick={() => {
+              setMode((m) => (m === "sign-in" ? "sign-up" : "sign-in"));
+              setErr(null);
+            }}
+            className="mt-4 w-full text-center text-xs text-white/50 hover:text-white"
+          >
+            {mode === "sign-in" ? "Need an account? Create one" : "Already have an account? Sign in"}
+          </button>
+        </CardContent>
+      </Card>
     </main>
   );
 }

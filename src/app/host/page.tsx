@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import HostRoomCard from "@/components/live/HostRoomCard";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { RoomPhase } from "@/lib/quizProtocol";
 import type { HostRoomRow } from "@/lib/roomsDb";
 
@@ -124,33 +126,29 @@ export default function HostDashboardPage() {
         </header>
 
         {rooms.length > 0 && (
-          <div className="mt-6 inline-flex gap-1 rounded-xl border border-white/10 bg-white/5 p-1">
-            {FILTERS.map((f) => {
-              const count = f.id === "all" ? rooms.length : rooms.filter((r) => effectivePhase(r) === f.id).length;
-              return (
-                <button
-                  key={f.id}
-                  onClick={() => setFilter(f.id)}
-                  className={`cursor-pointer rounded-lg px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors duration-200 ${
-                    filter === f.id ? "bg-white/15 text-white" : "text-white/45 hover:text-white"
-                  }`}
-                >
-                  {f.label} <span className="opacity-50">{count}</span>
-                </button>
-              );
-            })}
-          </div>
+          <Tabs value={filter} onValueChange={(v) => setFilter(v as RoomFilter)} className="mt-6">
+            <TabsList>
+              {FILTERS.map((f) => {
+                const count = f.id === "all" ? rooms.length : rooms.filter((r) => effectivePhase(r) === f.id).length;
+                return (
+                  <TabsTrigger key={f.id} value={f.id}>
+                    {f.label} <span className="ml-1.5 opacity-50">{count}</span>
+                  </TabsTrigger>
+                );
+              })}
+            </TabsList>
+          </Tabs>
         )}
 
         {!loaded ? (
           <p className="mt-12 text-center text-white/50">Loading…</p>
         ) : rooms.length === 0 ? (
-          <div className="mt-12 rounded-xl border border-dashed border-white/15 px-6 py-16 text-center">
+          <Card className="mt-12 border-dashed bg-transparent px-6 py-16 text-center">
             <p className="text-white/65">
-              No rooms yet. Click <span className="font-mono text-white">+ Create new room</span> to spin up your first.
+              No rooms yet. Click <span className="font-mono text-white">Create new room</span> to spin up your first.
             </p>
             <p className="mt-3 text-xs font-mono text-white/40">Each room can hold ~100 players.</p>
-          </div>
+          </Card>
         ) : (
           <>
             {owned.length > 0 && (

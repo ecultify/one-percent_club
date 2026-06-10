@@ -8,6 +8,8 @@ import { scoredParticipants, unscoredParticipants } from "@/lib/quizProtocol";
 import type { RoomPhase } from "@/lib/quizProtocol";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { CopyButton } from "@/components/live/CopyButton";
 
 interface HostRoomCardProps {
@@ -58,16 +60,15 @@ export default function HostRoomCard({ code, hostKey, onRemove, canRemove = true
   const watchLink = typeof window !== "undefined" ? `${window.location.origin}/watch/${code}` : `/watch/${code}`;
   const focusUrl = `/host/${code}?hostKey=${encodeURIComponent(hostKey)}`;
 
-  const phaseTone =
-    state?.phase === "running" ? "text-emerald-400" : state?.phase === "ended" ? "text-white/40" : "text-white/70";
+  const phaseVariant =
+    state?.phase === "running" ? "running" : state?.phase === "ended" ? "ended" : "default";
 
   return (
-    <div className="rounded-xl border border-white/10 bg-neutral-950 p-5">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3">
+    <Card>
+      <CardHeader className="flex-row items-start justify-between gap-3 space-y-0 pb-3">
         <div>
-          <p className={`text-[10px] font-mono uppercase tracking-[0.4em] ${phaseTone}`}>{state?.phase ?? "—"}</p>
-          <h2 className="mt-1 font-mono text-2xl tracking-widest text-white">{code}</h2>
+          <Badge variant={phaseVariant}>{state?.phase ?? "—"}</Badge>
+          <h2 className="mt-2 font-mono text-2xl tracking-widest text-white">{code}</h2>
         </div>
         <div className="flex flex-col items-end gap-0.5 text-[10px] font-mono uppercase tracking-[0.2em] text-white/55">
           <span>{total} joined</span>
@@ -75,75 +76,76 @@ export default function HostRoomCard({ code, hostKey, onRemove, canRemove = true
           <span>{state?.viewers.length ?? 0} viewers</span>
           {playingAlong > 0 && <span className="text-white/70">{playingAlong} playing along</span>}
         </div>
-      </div>
+      </CardHeader>
 
-      {error && (
-        <p className="mt-3 rounded border border-red-500/30 bg-red-950/30 px-2 py-1 text-[10px] text-red-200">{error}</p>
-      )}
-
-      {/* Share links */}
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <CopyButton variant="outline" size="sm" value={playLink} label="Play link" />
-        <CopyButton variant="outline" size="sm" value={watchLink} label="Watch link" />
-      </div>
-
-      {/* Primary action */}
-      <div className="mt-3">
-        {state?.phase === "lobby" && (
-          <Button variant="gold" size="full" disabled={total === 0} onClick={() => send({ type: "start" })}>
-            <Play className="size-4" /> Start quiz
-          </Button>
+      <CardContent>
+        {error && (
+          <p className="mb-3 rounded border border-red-500/30 bg-red-950/30 px-2 py-1 text-[10px] text-red-200">
+            {error}
+          </p>
         )}
-        {state?.phase === "running" && (
+
+        <div className="grid grid-cols-2 gap-2">
+          <CopyButton variant="outline" size="sm" value={playLink} label="Play link" />
+          <CopyButton variant="outline" size="sm" value={watchLink} label="Watch link" />
+        </div>
+
+        <div className="mt-3">
+          {state?.phase === "lobby" && (
+            <Button variant="gold" size="full" disabled={total === 0} onClick={() => send({ type: "start" })}>
+              <Play className="size-4" /> Start quiz
+            </Button>
+          )}
+          {state?.phase === "running" && (
+            <Button
+              variant="destructive"
+              size="full"
+              onClick={() =>
+                confirm({
+                  title: `End room ${code}?`,
+                  message: "All players freeze on their current question.",
+                  confirmLabel: "End quiz",
+                  danger: true,
+                  action: () => send({ type: "end" }),
+                })
+              }
+            >
+              <Square className="size-4" /> End quiz
+            </Button>
+          )}
+          {state?.phase === "ended" && (
+            <Button variant="gold" size="full" onClick={() => send({ type: "reset" })}>
+              <RotateCcw className="size-4" /> Reset to lobby
+            </Button>
+          )}
+        </div>
+
+        <Button asChild variant="secondary" size="full" className="mt-2">
+          <Link href={focusUrl}>
+            Open lobby <ArrowRight className="size-4" />
+          </Link>
+        </Button>
+
+        {canRemove && (
           <Button
-            variant="destructive"
+            variant="ghost"
             size="full"
+            className="mt-2 text-white/40 hover:text-red-300"
             onClick={() =>
               confirm({
-                title: `End room ${code}?`,
-                message: "All players freeze on their current question.",
-                confirmLabel: "End quiz",
+                title: `Remove ${code}?`,
+                message:
+                  "Deletes this lobby from your dashboard. The live room stays alive until everyone disconnects.",
+                confirmLabel: "Remove",
                 danger: true,
-                action: () => send({ type: "end" }),
+                action: () => onRemove(),
               })
             }
           >
-            <Square className="size-4" /> End quiz
+            <Trash2 className="size-3.5" /> Remove from dashboard
           </Button>
         )}
-        {state?.phase === "ended" && (
-          <Button variant="gold" size="full" onClick={() => send({ type: "reset" })}>
-            <RotateCcw className="size-4" /> Reset to lobby
-          </Button>
-        )}
-      </div>
-
-      {/* Open the full lobby view (same tab; it has a back-to-dashboard link). */}
-      <Button asChild variant="secondary" size="full" className="mt-2">
-        <Link href={focusUrl}>
-          Open lobby <ArrowRight className="size-4" />
-        </Link>
-      </Button>
-
-      {canRemove && (
-        <Button
-          variant="ghost"
-          size="full"
-          className="mt-2 text-white/40 hover:text-red-300"
-          onClick={() =>
-            confirm({
-              title: `Remove ${code}?`,
-              message:
-                "Deletes this lobby from your dashboard. The live room stays alive until everyone disconnects.",
-              confirmLabel: "Remove",
-              danger: true,
-              action: () => onRemove(),
-            })
-          }
-        >
-          <Trash2 className="size-3.5" /> Remove from dashboard
-        </Button>
-      )}
-    </div>
+      </CardContent>
+    </Card>
   );
 }

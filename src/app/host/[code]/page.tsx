@@ -10,6 +10,10 @@ import AnalyticsPanel from "@/components/live/AnalyticsPanel";
 import { CopyButton } from "@/components/live/CopyButton";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 
 /**
  * Focused single-room host view. Reachable from the dashboard via the
@@ -124,14 +128,20 @@ export default function HostRoomPage() {
           </div>
         )}
 
-        <section className="rounded-xl border border-white/10 bg-neutral-950 p-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
+        <Card>
+          <CardContent className="flex flex-wrap items-center justify-between gap-4 p-6">
             <div>
-              <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-white/55">
-                {phaseLabel[state.phase]}
-                {state.phase === "running" && ` · Q${state.currentQuestionIdx + 1}/${state.totalQuestions}`}
-              </p>
-              <p className="mt-1 text-xl text-white">
+              <div className="flex items-center gap-2">
+                <Badge variant={state.phase === "running" ? "running" : state.phase === "ended" ? "ended" : "default"}>
+                  {phaseLabel[state.phase]}
+                </Badge>
+                {state.phase === "running" && (
+                  <span className="font-mono text-[11px] text-white/55">
+                    Q{state.currentQuestionIdx + 1}/{state.totalQuestions}
+                  </span>
+                )}
+              </div>
+              <p className="mt-2 text-xl text-white">
                 {scored.length} player{scored.length === 1 ? "" : "s"} ·{" "}
                 {state.phase === "running" ? `${survivors} still in` : `${scored.length} ready`} ·{" "}
                 {state.viewers.length} viewer{state.viewers.length === 1 ? "" : "s"}
@@ -166,92 +176,100 @@ export default function HostRoomPage() {
                 </Button>
               )}
             </div>
-          </div>
-        </section>
+          </CardContent>
+        </Card>
 
         {/* Co-hosts — kept near the top so it's reachable without scrolling. */}
-        <section className="rounded-xl border border-white/10 bg-neutral-950 p-6">
-          <h2 className="text-lg font-semibold text-white">Co-hosts</h2>
-          <p className="mt-1 text-sm text-white/55">
-            Add another host by email — they&apos;ll see this lobby on their own dashboard. They must have a
-            host account (sign up at <span className="font-mono text-white/70">/host</span>) first.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <input
-              value={cohostEmail}
-              onChange={(e) => setCohostEmail(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void inviteCohost();
-              }}
-              type="email"
-              placeholder="cohost@email.com"
-              className="min-w-0 flex-1 rounded-lg border border-white/15 bg-black/60 px-4 py-2.5 text-sm text-white placeholder:text-white/35 outline-none focus:border-white/35"
-            />
-            <Button variant="outline" disabled={cohostBusy} onClick={inviteCohost}>
-              <UserPlus className="size-4" /> {cohostBusy ? "Adding…" : "Add co-host"}
-            </Button>
-          </div>
-          {cohostMsg && <p className="mt-3 text-sm text-white/70">{cohostMsg}</p>}
-        </section>
+        <Card>
+          <CardHeader>
+            <CardTitle>Co-hosts</CardTitle>
+            <CardDescription>
+              Add another host by email — they&apos;ll see this lobby on their own dashboard. They must have a host
+              account (sign up at <span className="font-mono text-white/70">/host</span>) first.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              <Input
+                value={cohostEmail}
+                onChange={(e) => setCohostEmail(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void inviteCohost();
+                }}
+                type="email"
+                placeholder="cohost@email.com"
+                className="min-w-0 flex-1"
+              />
+              <Button variant="outline" disabled={cohostBusy} onClick={inviteCohost}>
+                <UserPlus className="size-4" /> {cohostBusy ? "Adding…" : "Add co-host"}
+              </Button>
+            </div>
+            {cohostMsg && <p className="mt-3 text-sm text-white/70">{cohostMsg}</p>}
+          </CardContent>
+        </Card>
 
         {/* Live analytics — shown inline (no modal). */}
         <AnalyticsPanel state={state} />
 
-        <section className="rounded-xl border border-white/10 bg-neutral-950 p-6">
-          <h2 className="text-lg font-semibold text-white">Participants</h2>
-          {ranked.length === 0 ? (
-            <p className="mt-3 text-sm text-white/55">No one yet. Share the /play link.</p>
-          ) : (
-            <table className="mt-4 w-full text-sm">
-              <thead>
-                <tr className="text-left text-[10px] font-mono uppercase tracking-[0.25em] text-white/45">
-                  <th className="py-1">Name</th>
-                  <th className="py-1">Status</th>
-                  <th className="py-1">Score</th>
-                  <th className="py-1">Time</th>
-                  <th className="py-1"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {ranked.map((p) => (
-                  <tr key={p.id} className="border-t border-white/10">
-                    <td className="py-2 font-medium text-white">{p.name}</td>
-                    <td className="py-2">
-                      {p.lateJoin ? (
-                        <span className="text-white/45">Spectator</span>
-                      ) : p.eliminated ? (
-                        <span className="text-red-300/90">Out · Q{(p.eliminatedAtQuestion ?? 0) + 1}</span>
-                      ) : state.phase === "running" ? (
-                        <span className="text-emerald-300">In</span>
-                      ) : state.phase === "ended" ? (
-                        <span className="text-emerald-300">Survived</span>
-                      ) : (
-                        <span className="text-white/55">Ready</span>
-                      )}
-                    </td>
-                    <td className="py-2 font-mono text-white">{p.score}</td>
-                    <td className="py-2 font-mono text-white/55">{(totalResponseMs(p) / 1000).toFixed(1)}s</td>
-                    <td className="py-2 text-right">
-                      <button
-                        onClick={() =>
-                          confirm({
-                            title: `Remove ${p.name}?`,
-                            confirmLabel: "Remove",
-                            danger: true,
-                            action: () => send({ type: "kick", participantId: p.id }),
-                          })
-                        }
-                        className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/40 hover:text-red-300"
-                      >
-                        Kick
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </section>
+        <Card>
+          <CardHeader>
+            <CardTitle>Participants</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {ranked.length === 0 ? (
+              <p className="text-sm text-white/55">No one yet. Share the /play link.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Score</TableHead>
+                    <TableHead>Time</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {ranked.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="font-medium text-white">{p.name}</TableCell>
+                      <TableCell>
+                        {p.lateJoin ? (
+                          <span className="text-white/45">Spectator</span>
+                        ) : p.eliminated ? (
+                          <span className="text-red-300/90">Out · Q{(p.eliminatedAtQuestion ?? 0) + 1}</span>
+                        ) : state.phase === "running" ? (
+                          <span className="text-emerald-300">In</span>
+                        ) : state.phase === "ended" ? (
+                          <span className="text-emerald-300">Survived</span>
+                        ) : (
+                          <span className="text-white/55">Ready</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="font-mono text-white">{p.score}</TableCell>
+                      <TableCell className="font-mono text-white/55">{(totalResponseMs(p) / 1000).toFixed(1)}s</TableCell>
+                      <TableCell className="text-right">
+                        <button
+                          onClick={() =>
+                            confirm({
+                              title: `Remove ${p.name}?`,
+                              confirmLabel: "Remove",
+                              danger: true,
+                              action: () => send({ type: "kick", participantId: p.id }),
+                            })
+                          }
+                          className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/40 hover:text-red-300"
+                        >
+                          Kick
+                        </button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </main>
   );
