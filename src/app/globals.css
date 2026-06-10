@@ -132,6 +132,28 @@
   --surface: #11100e;
   --surface-light: #1a1814;
   --ring: rgba(196, 160, 53, 0.22);
+
+  /* ─── shadcn design tokens (dark) ───────────────────────────────
+     Additive: reuse the app's --background/--foreground; add the rest as
+     full-color values so they work with the app's plain `var(--x)` Tailwind
+     mapping (not shadcn's hsl() convention). Lets shadcn components + future
+     `npx shadcn add` work on the black host theme without touching the main
+     app's existing tokens. */
+  --card: #0c0c0e;
+  --card-foreground: #fafafa;
+  --popover: #0c0c0e;
+  --popover-foreground: #fafafa;
+  --primary: #e4cf6a;
+  --primary-foreground: #14110a;
+  --secondary: #1c1c20;
+  --secondary-foreground: #fafafa;
+  --accent: #1f1f24;
+  --accent-foreground: #fafafa;
+  --destructive: #dc2626;
+  --destructive-foreground: #fafafa;
+  --muted-foreground: #a1a1aa;
+  --border: rgba(255, 255, 255, 0.10);
+  --input: rgba(255, 255, 255, 0.16);
 }
 
 body {

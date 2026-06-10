@@ -27,6 +27,7 @@
     "react": "^18",
     "react-dom": "^18",
     "tailwind-merge": "^3.6.0",
+    "tailwindcss-animate": "^1.0.7",
     "three": "^0.163.0",
     "unicornstudio-react": "^1.5.2"
   },

@@ -11,20 +11,22 @@ import { cn } from "@/lib/utils";
  * (.game-show-btn from globals.css).
  */
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-[13px] font-semibold uppercase tracking-[0.14em] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40 disabled:pointer-events-none disabled:opacity-50 cursor-pointer",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-[13px] font-semibold uppercase tracking-[0.14em] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 cursor-pointer",
   {
     variants: {
       variant: {
         // Metallic gold — primary actions (Start, Create room).
         gold: "game-show-btn relative z-0 text-[#14110a]",
-        // Neutral outline on black.
-        outline: "border border-white/20 bg-transparent text-white/90 hover:bg-white/10 hover:border-white/35",
+        // shadcn primary (flat gold token).
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        // Neutral outline.
+        outline: "border border-input bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground",
         // Subtle filled.
-        secondary: "bg-white/10 text-white/90 hover:bg-white/15",
+        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         // Quiet text button.
-        ghost: "text-white/70 hover:bg-white/10 hover:text-white",
+        ghost: "text-foreground/80 hover:bg-accent hover:text-accent-foreground",
         // Destructive (end / remove / kick).
-        destructive: "bg-red-600/90 text-red-50 hover:bg-red-600 border border-red-400/30",
+        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
       },
       size: {
         default: "h-10 px-5 py-2",
