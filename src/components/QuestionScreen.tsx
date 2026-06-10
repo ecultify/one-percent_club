@@ -2039,7 +2039,13 @@ export default function QuestionScreen({
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0 }}
-                    transition={{ delay: 0.1, duration: 0.3, ease: EASE_OUT }}
+                    // Long entrance delay on purpose: when the room reveals
+                    // quickly (everyone answered — always true playing solo)
+                    // the shared reveal lands before this ever becomes
+                    // visible, so the banner doesn't flash in and out below
+                    // the options. It only fades in during a genuine wait
+                    // for slower players / the clock.
+                    transition={{ delay: 1.1, duration: 0.35, ease: EASE_OUT }}
                     className="flex justify-center"
                   >
                     <div className="flex items-center gap-2 rounded-lg border border-brass/45 bg-black/70 backdrop-blur-sm px-4 py-2 text-center shadow-[0_0_20px_rgba(228,207,106,0.18)]">

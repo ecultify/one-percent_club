@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { usePartyRoom } from "@/lib/usePartyRoom";
 import LiveQuizPlayer from "@/components/live/LiveQuizPlayer";
 import LiveAudioGate from "@/components/live/LiveAudioGate";
+import GameShowAudio from "@/components/GameShowAudio";
 import { useNarration } from "@/components/NarrationProvider";
 
 /** Shared muted home-video backdrop for the pre-game (gate + waiting lobby). */
@@ -95,6 +96,9 @@ export default function PlayRoomPage() {
   if (!connected || !state) {
     return (
       <main className="relative min-h-screen flex items-center justify-center overflow-hidden bg-black text-foreground/80">
+        {/* Theme starts the moment the player clears the gate (name + ready
+            tap = the audio gesture), not when the host presses start. */}
+        <GameShowAudio playBgm suppressForVideo={false} slowMode={false} />
         <LobbyBackdrop />
         <span className="relative z-[1]">
           Connecting to room <span className="ml-1 font-mono text-brass">{roomCode}</span>…
@@ -106,6 +110,9 @@ export default function PlayRoomPage() {
   if (state.phase === "lobby") {
     return (
       <main className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-black px-6 text-center">
+        {/* Keep the theme running through the waiting lobby; LiveQuizPlayer
+            takes over the same audio singleton once the quiz starts. */}
+        <GameShowAudio playBgm suppressForVideo={false} slowMode={false} />
         <LobbyBackdrop />
         <div className="relative z-[1]">
           <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-brass/80">Waiting for host</p>

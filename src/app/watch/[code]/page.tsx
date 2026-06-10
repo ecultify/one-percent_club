@@ -7,6 +7,7 @@ import SpectatorView from "@/components/live/SpectatorView";
 import FinalStandings from "@/components/live/FinalStandings";
 import LiveQuizPlayer from "@/components/live/LiveQuizPlayer";
 import LiveAudioGate from "@/components/live/LiveAudioGate";
+import GameShowAudio from "@/components/GameShowAudio";
 import { useNarration } from "@/components/NarrationProvider";
 
 /**
@@ -76,6 +77,9 @@ export default function WatchRoomPage() {
   // Lobby.
   return (
     <main className="min-h-screen bg-black text-foreground">
+      {/* Theme starts right after the audio gate, same as the player flow;
+          SpectatorView takes over the audio singleton once the quiz runs. */}
+      <GameShowAudio playBgm suppressForVideo={false} slowMode={false} />
       <div className="mx-auto max-w-3xl px-6 py-8">
         <header className="border-b border-brass/15 pb-4">
           <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-brass/70">Spectating</p>
