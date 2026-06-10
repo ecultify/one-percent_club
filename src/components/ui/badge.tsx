@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 /** shadcn Badge, themed for the black host UI (status pills). */
 const badgeVariants = cva(
-  "inline-flex items-center rounded-full border px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.15em]",
+  "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium capitalize",
   {
     variants: {
       variant: {

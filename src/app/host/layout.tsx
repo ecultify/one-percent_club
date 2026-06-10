@@ -25,14 +25,11 @@ export default function HostLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <div className="min-h-screen bg-black">
-      <div className="flex items-center justify-between border-b border-white/10 px-6 py-2.5">
-        <span className="text-[10px] font-mono uppercase tracking-[0.35em] text-white/45">The 1% Club · Host</span>
-        <div className="flex items-center gap-3 text-xs text-white/55">
+      <div className="flex items-center justify-between border-b border-border px-6 py-2.5">
+        <span className="text-xs font-medium text-muted-foreground">The 1% Club · Host</span>
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <span className="hidden sm:inline">{session.user.email}</span>
-          <button
-            onClick={() => authClient.signOut()}
-            className="font-mono uppercase tracking-[0.15em] text-white/50 hover:text-white"
-          >
+          <button onClick={() => authClient.signOut()} className="text-muted-foreground hover:text-foreground">
             Sign out
           </button>
         </div>
@@ -74,7 +71,7 @@ function HostAuthGate() {
     <main className="min-h-screen flex items-center justify-center bg-black px-6">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-white/45">The 1% Club · Host</p>
+          <p className="text-xs font-medium text-muted-foreground">The 1% Club · Host</p>
           <CardTitle className="text-2xl">{mode === "sign-in" ? "Host sign in" : "Create host account"}</CardTitle>
           <CardDescription>
             {mode === "sign-in" ? "Sign in to manage your lobbies." : "Make an account to host and manage lobbies."}

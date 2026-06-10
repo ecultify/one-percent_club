@@ -61,8 +61,8 @@ function StatCard({
   } as const;
   return (
     <div className={`rounded-lg border px-3 py-3 ${tones[tone]}`}>
-      <p className="font-mono text-2xl">{value}</p>
-      <p className="mt-0.5 text-[10px] uppercase tracking-[0.2em] text-white/55">{label}</p>
+      <p className="text-2xl font-semibold">{value}</p>
+      <p className="mt-0.5 text-xs text-muted-foreground">{label}</p>
     </div>
   );
 }

@@ -114,9 +114,9 @@ export default function HostDashboardPage() {
       <div className="mx-auto max-w-6xl px-6 py-8">
         <header className="flex flex-wrap items-end justify-between gap-4 border-b border-white/10 pb-6">
           <div>
-            <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-white/50">Host dashboard</p>
-            <h1 className="mt-1 text-3xl font-semibold text-white">The 1% Club — your lobbies</h1>
-            <p className="mt-2 text-sm text-white/55">
+            <p className="text-xs font-medium text-muted-foreground">Host dashboard</p>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-white">The 1% Club — your lobbies</h1>
+            <p className="mt-1.5 text-sm text-muted-foreground">
               Rooms you created, plus ones you co-host. Start or end them individually.
             </p>
           </div>
@@ -153,13 +153,13 @@ export default function HostDashboardPage() {
           <>
             {owned.length > 0 && (
               <section className="mt-8">
-                <h2 className="mb-3 text-[11px] font-mono uppercase tracking-[0.3em] text-white/45">My rooms</h2>
+                <h2 className="mb-3 text-sm font-medium text-muted-foreground">My rooms</h2>
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{owned.map(renderCard)}</div>
               </section>
             )}
             {cohosting.length > 0 && (
               <section className="mt-10">
-                <h2 className="mb-3 text-[11px] font-mono uppercase tracking-[0.3em] text-white/45">Co-hosting</h2>
+                <h2 className="mb-3 text-sm font-medium text-muted-foreground">Co-hosting</h2>
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{cohosting.map(renderCard)}</div>
               </section>
             )}

@@ -103,12 +103,12 @@ export default function HostRoomPage() {
           <div>
             <Link
               href="/host"
-              className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-[0.3em] text-white/40 hover:text-white/70"
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
             >
-              <ArrowLeft className="size-3.5" /> back to dashboard
+              <ArrowLeft className="size-3.5" /> Back to dashboard
             </Link>
-            <h1 className="mt-2 text-3xl font-semibold text-white">
-              Room <span className="font-mono tracking-widest text-white">{roomCode}</span>
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white">
+              Room <span className="font-mono tracking-wider text-white">{roomCode}</span>
             </h1>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -258,7 +258,7 @@ export default function HostRoomPage() {
                               action: () => send({ type: "kick", participantId: p.id }),
                             })
                           }
-                          className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/40 hover:text-red-300"
+                          className="text-xs text-muted-foreground hover:text-red-300"
                         >
                           Kick
                         </button>

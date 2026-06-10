@@ -68,13 +68,13 @@ export default function HostRoomCard({ code, hostKey, onRemove, canRemove = true
       <CardHeader className="flex-row items-start justify-between gap-3 space-y-0 pb-3">
         <div>
           <Badge variant={phaseVariant}>{state?.phase ?? "—"}</Badge>
-          <h2 className="mt-2 font-mono text-2xl tracking-widest text-white">{code}</h2>
+          <h2 className="mt-2 font-mono text-xl font-semibold tracking-wider text-white">{code}</h2>
         </div>
-        <div className="flex flex-col items-end gap-0.5 text-[10px] font-mono uppercase tracking-[0.2em] text-white/55">
+        <div className="flex flex-col items-end gap-0.5 text-xs text-muted-foreground">
           <span>{total} joined</span>
           <span>{active} {activeLabel}</span>
           <span>{state?.viewers.length ?? 0} viewers</span>
-          {playingAlong > 0 && <span className="text-white/70">{playingAlong} playing along</span>}
+          {playingAlong > 0 && <span className="text-foreground/70">{playingAlong} playing along</span>}
         </div>
       </CardHeader>
 
