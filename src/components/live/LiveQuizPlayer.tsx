@@ -62,6 +62,9 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [isCorrect, setIsCorrect] = useState(false);
   const [validating, setValidating] = useState(false);
+  /** True when THIS round was passed via the skip lifeline (drives the
+   *  "question skipped" overlay/banner instead of right/wrong). */
+  const [skippedThisRound, setSkippedThisRound] = useState(false);
   /** Eliminated player's explicit choice: keep playing unscored ("play"),
    *  or just watch ("watch"). null until they've been asked. Lives for the
    *  whole game (the component unmounts when the room returns to lobby). */
@@ -80,6 +83,7 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
     setSelectedAnswer(null);
     setIsCorrect(false);
     setValidating(false);
+    setSkippedThisRound(false);
     sfxPlayedRef.current = false;
   }, [globalIdx]);
 
@@ -90,9 +94,10 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
   useEffect(() => {
     if (roundPhase !== "revealing" || sfxPlayedRef.current) return;
     sfxPlayedRef.current = true;
-    const wonRound = answered && selectedAnswer !== null && isCorrect;
+    // A lifeline skip counts as surviving the round → "correct" sting.
+    const wonRound = answered && (skippedThisRound || (selectedAnswer !== null && isCorrect));
     playQuizSfx(wonRound ? "correct" : "wrong", muted);
-  }, [roundPhase, answered, selectedAnswer, isCorrect, muted]);
+  }, [roundPhase, answered, selectedAnswer, isCorrect, skippedThisRound, muted]);
 
   // The answer clock starts when the server flips to "asking" (after the
   // VO). Anchor the speed measurement there so we record how fast they
@@ -215,6 +220,20 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
     // reveal for everyone.
   }, [answered, stopNarration]);
 
+  /** Spend the one skip-a-question lifeline: the server marks the round as
+   *  passed (no score, no elimination) and flags it as used. Locally the
+   *  round locks immediately with the "question skipped" treatment. */
+  const handleUseLifeline = useCallback(() => {
+    if ((eliminated && scoring) || !scoring || roundPhase !== "asking" || answered) return;
+    if (me?.lifelineUsed) return;
+    stopNarration();
+    setSkippedThisRound(true);
+    setSelectedAnswer(null);
+    setIsCorrect(true); // survived the round (no score awarded server-side)
+    setAnswered(true);
+    send({ type: "use-lifeline", questionIdx: globalIdx });
+  }, [eliminated, scoring, roundPhase, answered, me?.lifelineUsed, stopNarration, send, globalIdx]);
+
   // ─── Render ────────────────────────────────────────────────────────────
 
   if (state.phase === "ended") {
@@ -324,6 +343,13 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
         paused={roundPhase === "narrating" || validating}
         // Live-only: transient heads-up chip + the locked-answer overlay.
         answerHintChip
+        // Skip-a-question lifeline: one per game, scored live players only,
+        // unlocked from the 50% question onward.
+        lifelineAvailable={
+          scoring && !eliminated && !(me?.lifelineUsed ?? false) && currentQ.percentage <= 50
+        }
+        onUseLifeline={handleUseLifeline}
+        skipped={skippedThisRound}
       />
     </main>
   );

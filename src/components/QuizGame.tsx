@@ -1093,6 +1093,46 @@ export default function QuizGame({
   const currentQ = QUESTIONS[gameState.currentQuestion];
   const isLastQ = gameState.currentQuestion >= QUESTIONS.length - 1;
 
+  // ─── Skip-a-question lifeline (one per game, unlocked from the 50%
+  // question onward). Skipping passes the round: the player survives, the
+  // crowd simulation runs as if they answered correctly, and the question
+  // is logged as passed (counts in playerCorrect so the run continues
+  // exactly like a correct answer).
+  const [lifelineUsed, setLifelineUsed] = useState(false);
+  const [skippedQuestion, setSkippedQuestion] = useState<number | null>(null);
+
+  const handleUseLifeline = useCallback(() => {
+    if (lifelineUsed) return;
+    const q = QUESTIONS[gameState.currentQuestion];
+    if (!q || q.percentage > 50) return;
+    setLifelineUsed(true);
+    setSkippedQuestion(gameState.currentQuestion);
+
+    const lastQ = gameState.currentQuestion >= QUESTIONS.length - 1;
+    const eliminated = simulateEliminations(q.percentage, gameState.remainingPlayers, lastQ, true);
+    const addedToPot = eliminated * gameState.stakePerPlayer;
+
+    setGameState(prev => ({
+      ...prev,
+      phase: "answered",
+      playerAnswers: [...prev.playerAnswers, null],
+      playerAnswerTexts: [...prev.playerAnswerTexts, null],
+      playerCorrect: [...prev.playerCorrect, true],
+    }));
+
+    playQuizSfx("correct", muted);
+    stop();
+    pendingEliminationRef.current = { eliminated, addedToPot };
+    const token = postAnswerChainRef.current;
+    setTimeout(() => {
+      if (postAnswerChainRef.current !== token) return;
+      runWipeThen(() => {
+        wrongReactionUrlRef.current = null;
+        setReactionVideo("correct");
+      });
+    }, 2000);
+  }, [lifelineUsed, gameState.currentQuestion, gameState.remainingPlayers, gameState.stakePerPlayer, stop, runWipeThen, muted]);
+
   const handleAnswer = useCallback(async (selectedIndex: number, typedAnswer?: string) => {
     const q = QUESTIONS[gameState.currentQuestion];
     let isCorrect: boolean;
@@ -1911,6 +1951,10 @@ export default function QuizGame({
             selectedAnswer={gameState.playerAnswers[gameState.currentQuestion] ?? null}
             isCorrect={gameState.playerCorrect[gameState.currentQuestion] ?? false}
             paused={tourState !== "done" || narratingQuestion}
+            // Skip-a-question lifeline — one per game, from the 50% question on.
+            lifelineAvailable={!lifelineUsed && currentQ.percentage <= 50}
+            onUseLifeline={handleUseLifeline}
+            skipped={skippedQuestion === gameState.currentQuestion}
             afterRoundOverlay={
               gameState.phase === "elimination" ? (
                 <EliminationReveal

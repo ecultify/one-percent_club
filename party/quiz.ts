@@ -115,6 +115,7 @@ function freshParticipant(
     eliminatedAtQuestion: null,
     lateJoin,
     scoring,
+    lifelineUsed: false,
   };
 }
 
@@ -231,6 +232,9 @@ export default class QuizServer implements Party.Server {
       case "report-answer":
         this.reportAnswer(sender, msg.questionIdx, msg.answer, msg.correct, msg.elapsedMs);
         return;
+      case "use-lifeline":
+        this.useLifeline(sender, msg.questionIdx);
+        return;
       case "join-viewer":
         this.joinViewer(sender, msg.name);
         return;
@@ -320,6 +324,7 @@ export default class QuizServer implements Party.Server {
       p.eliminatedAtQuestion = null;
       p.lateJoin = false;
       p.scoring = true;
+      p.lifelineUsed = false;
     }
     this.currentQuestionIdx = 0;
     this.beginRound();
@@ -645,6 +650,33 @@ export default class QuizServer implements Party.Server {
 
     this.broadcastState();
     if (scoredPath) this.maybeRevealEarly();
+  }
+
+  /** A live scored player spends their one skip-a-question lifeline. The
+   *  round is marked as PASSED for them — they survive without answering —
+   *  but their score does not increase. correctness[idx] is set to true
+   *  (not null) so the answered-this-round rebuild after a server restart
+   *  still counts them as done for the round. The 50%-question unlock is
+   *  enforced client-side (the client owns question content/percentages,
+   *  same trust model as answer grading). */
+  private useLifeline(connection: Party.Connection, questionIdx: number) {
+    if (this.phase !== "running" || this.roundPhase !== "asking") return;
+    const p = this.participants.get(connection.id);
+    if (!p) return;
+    if (!p.scoring || p.eliminated) return; // only a live scored player benefits
+    if (p.lifelineUsed) return; // single use
+    if (questionIdx !== this.currentQuestionIdx) return; // round moved on
+    if (this.answeredThisRound.has(connection.id)) return; // already answered
+
+    const idx = this.currentQuestionIdx;
+    this.padTo(p, idx);
+    p.answers[idx] = "lifeline-skip";
+    p.correctness[idx] = true;
+    p.times[idx] = null;
+    p.lifelineUsed = true;
+    this.answeredThisRound.add(connection.id);
+    this.broadcastState();
+    this.maybeRevealEarly();
   }
 
   // ─── Helpers ───────────────────────────────────────────────────────────

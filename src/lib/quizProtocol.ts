@@ -77,6 +77,10 @@ export interface ParticipantState {
    *    >= 0      → was a scored player eliminated at that question who then
    *                opted to keep playing unscored. */
   scoring: boolean;
+  /** True once the player has spent their one skip-a-question lifeline
+   *  (unlocked from the 50% question onward). Optional so snapshots
+   *  persisted before the field existed still rehydrate. */
+  lifelineUsed?: boolean;
 }
 
 export interface ViewerState {
@@ -178,6 +182,16 @@ export interface ReportAnswerMessage {
   elapsedMs: number;
 }
 
+/** Sent by a live scored player spending their one skip-a-question
+ *  lifeline (unlocked from the 50% question onward). The server marks the
+ *  round as passed for them — no score, no elimination — and flags the
+ *  lifeline as spent. Rejected if already used, the player is out/unscored,
+ *  or the round isn't currently asking. */
+export interface UseLifelineMessage {
+  type: "use-lifeline";
+  questionIdx: number;
+}
+
 export interface JoinViewerMessage {
   type: "join-viewer";
   name?: string;
@@ -208,6 +222,7 @@ export type ClientMessage =
   | KickMessage
   | JoinParticipantMessage
   | ReportAnswerMessage
+  | UseLifelineMessage
   | JoinViewerMessage
   | ContinueAsViewerMessage
   | SetNarrationOptionsMessage

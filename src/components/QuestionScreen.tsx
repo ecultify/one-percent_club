@@ -54,6 +54,14 @@ interface QuestionScreenProps {
    *  when the question becomes answerable (auto-dismisses after 5s), and swap
    *  the "answer locked" chip for a semi-transparent lock overlay. */
   answerHintChip?: boolean;
+  /** Skip-a-question lifeline (one per game, unlocked from the 50% question
+   *  onward). When true a "use lifeline" button renders under the question;
+   *  pressing it twice (tap-to-arm, tap-to-confirm) fires onUseLifeline. */
+  lifelineAvailable?: boolean;
+  onUseLifeline?: () => void;
+  /** True when THIS question was passed via the lifeline — the lock overlay
+   *  and reveal banners read "skipped" instead of right/wrong/time's-up. */
+  skipped?: boolean;
 }
 
 const OPTION_LABELS = ["A", "B", "C", "D"];
@@ -785,6 +793,9 @@ export default function QuestionScreen({
   paused = false,
   afterRoundOverlay,
   answerHintChip = false,
+  lifelineAvailable = false,
+  onUseLifeline,
+  skipped = false,
 }: QuestionScreenProps) {
   // In the solo flow `revealed` is omitted, so correctness shows the moment
   // the answer is locked (revealed tracks answered). In the live flow the
@@ -793,6 +804,16 @@ export default function QuestionScreen({
   const revealed = revealedProp ?? answered;
   /** Player has locked an answer but the shared reveal hasn't happened yet. */
   const awaitingReveal = answered && !revealed;
+
+  /** Two-step lifeline confirm: first tap arms the button ("tap again"),
+   *  second tap actually spends it. Auto-disarms after a few seconds. Keyed
+   *  per question by the parent, so it resets each round. */
+  const [lifelineArmed, setLifelineArmed] = useState(false);
+  useEffect(() => {
+    if (!lifelineArmed) return;
+    const t = setTimeout(() => setLifelineArmed(false), 4000);
+    return () => clearTimeout(t);
+  }, [lifelineArmed]);
 
   /** Heads-up chip shown over the question when it becomes answerable
    *  (live quiz only). Auto-dismisses 5s after the timer goes live. The
@@ -1521,6 +1542,45 @@ export default function QuestionScreen({
                     </div>
                   </motion.div>
 
+                  {/* ───────── LIFELINE — one skip-a-question per game,
+                        unlocked from the 50% question onward. Two-tap confirm
+                        so a stray touch can't burn it. */}
+                  {lifelineAvailable && !answered && !revealed && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.3, duration: 0.4, ease: EASE_OUT }}
+                      className="flex justify-center"
+                    >
+                      <button
+                        type="button"
+                        disabled={inputsLocked || answerChecking}
+                        onClick={() => {
+                          if (inputsLocked || answerChecking) return;
+                          if (!lifelineArmed) {
+                            setLifelineArmed(true);
+                            return;
+                          }
+                          setLifelineArmed(false);
+                          onUseLifeline?.();
+                        }}
+                        className={`flex items-center gap-2 rounded-full px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] backdrop-blur-sm transition-all duration-200 ${
+                          inputsLocked || answerChecking
+                            ? "cursor-not-allowed border border-brass/25 bg-black/50 text-brass/45"
+                            : lifelineArmed
+                              ? "cursor-pointer border border-red-400/70 bg-red-950/75 text-red-100 shadow-[0_0_22px_rgba(217,74,92,0.4)] motion-safe:animate-pulse"
+                              : "cursor-pointer border border-brass/55 bg-black/70 text-brass-bright shadow-[0_0_18px_rgba(228,207,106,0.3)] hover:border-brass/80"
+                        }`}
+                        aria-label="Use your skip-a-question lifeline"
+                      >
+                        <span className="text-sm leading-none" aria-hidden>🛟</span>
+                        {lifelineArmed
+                          ? "Tap again to skip this question"
+                          : "Lifeline · Skip this question (1 left)"}
+                      </button>
+                    </motion.div>
+                  )}
+
                   {/* ───────── MEDIA BLOCK — images / row of images / glyph
                         tiles. Renders BELOW the question panel and ABOVE the
                         options. Every variant wears the METALLIC_RIM_GRADIENT
@@ -2138,7 +2198,9 @@ export default function QuestionScreen({
                     <div className="flex items-center gap-2 rounded-lg border border-brass/45 bg-black/70 backdrop-blur-sm px-4 py-2 text-center shadow-[0_0_20px_rgba(228,207,106,0.18)]">
                       <span className="inline-block h-2 w-2 rounded-full bg-brass-bright motion-safe:animate-pulse" aria-hidden />
                       <p className="text-brass-bright/95 text-xs md:text-sm font-medium tracking-wide">
-                        Answer locked — waiting for the timer…
+                        {skipped
+                          ? "Lifeline used — question skipped. Waiting for the timer…"
+                          : "Answer locked — waiting for the timer…"}
                       </p>
                     </div>
                   </motion.div>
@@ -2152,7 +2214,14 @@ export default function QuestionScreen({
                     transition={{ delay: 0.15, duration: 0.3, ease: EASE_OUT }}
                     className="flex justify-center"
                   >
-                    {selectedAnswer === null ? (
+                    {skipped ? (
+                      <div className="rounded-lg border border-brass/55 bg-black/75 backdrop-blur-sm px-5 py-2 text-center shadow-[0_0_22px_rgba(228,207,106,0.3)]">
+                        <p className="text-brass-bright text-xs md:text-sm font-semibold tracking-wide">
+                          🛟 Lifeline used — you&apos;re safe this round. The answer was{" "}
+                          <span className="font-semibold">{correctAnswerLabel(question)}</span>
+                        </p>
+                      </div>
+                    ) : selectedAnswer === null ? (
                       <div className="rounded-lg border border-red-500/60 bg-red-950/70 backdrop-blur-sm px-4 py-2 text-center shadow-[0_0_20px_rgba(217,74,92,0.25)]">
                         <p className="text-red-200/95 text-xs md:text-sm font-medium">
                           Time&apos;s up.
@@ -2241,10 +2310,12 @@ export default function QuestionScreen({
                     </svg>
                   </motion.div>
                   <p className="font-display text-base md:text-lg font-semibold text-brass-bright tracking-wide">
-                    Your answer is now locked
+                    {skipped ? "Question skipped — lifeline used" : "Your answer is now locked"}
                   </p>
                   <p className="max-w-xs text-[13px] md:text-sm leading-relaxed text-[#f4ecdc]/85">
-                    Sit tight for the answer reveal after the timer ends.
+                    {skipped
+                      ? "You're safe this round. Sit tight for the answer reveal after the timer ends."
+                      : "Sit tight for the answer reveal after the timer ends."}
                   </p>
                 </motion.div>
               )}
