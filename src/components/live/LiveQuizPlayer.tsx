@@ -272,6 +272,8 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
         // Freeze the clock while the VO narrates; it starts only once the
         // server flips to "asking".
         paused={roundPhase === "narrating" || validating}
+        // Live-only: transient heads-up chip + the locked-answer overlay.
+        answerHintChip
       />
     </main>
   );

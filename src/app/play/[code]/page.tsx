@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { usePartyRoom } from "@/lib/usePartyRoom";
 import LiveQuizPlayer from "@/components/live/LiveQuizPlayer";
-import LiveAudioGate from "@/components/live/LiveAudioGate";
+import LivePlayerIntro from "@/components/live/LivePlayerIntro";
 import GameShowAudio from "@/components/GameShowAudio";
 import { useNarration } from "@/components/NarrationProvider";
 
@@ -66,14 +66,14 @@ export default function PlayRoomPage() {
     setJoined(true);
   }, [connected, joined, name, send]);
 
-  // Show the gate until audio is primed AND we have a name. Skipped for the
-  // in-app flow (audio already unlocked + name carried in the query).
+  // Show the intro (teaser → instructions → name/audio gate) until audio is
+  // primed AND we have a name. Skipped for the in-app flow (audio already
+  // unlocked + name carried in the query). The gate at the end of the intro is
+  // what finally fires onReady — same join contract as before.
   const needGate = !soundReady && (!audioUnlocked || !name.trim());
   if (needGate) {
     return (
-      <LiveAudioGate
-        collectName
-        requireName
+      <LivePlayerIntro
         initialName={queryName}
         onReady={(enteredName) => {
           setName(enteredName || queryName || "Player");

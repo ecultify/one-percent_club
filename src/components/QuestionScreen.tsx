@@ -50,6 +50,10 @@ interface QuestionScreenProps {
   paused?: boolean;
   /** Overlay rendered inside the screen frame (e.g. after-round elimination reveal). */
   afterRoundOverlay?: ReactNode;
+  /** Live-quiz only: show a transient heads-up chip over the question block
+   *  when the question becomes answerable (auto-dismisses after 5s), and swap
+   *  the "answer locked" chip for a semi-transparent lock overlay. */
+  answerHintChip?: boolean;
 }
 
 const OPTION_LABELS = ["A", "B", "C", "D"];
@@ -775,6 +779,7 @@ export default function QuestionScreen({
   isCorrect,
   paused = false,
   afterRoundOverlay,
+  answerHintChip = false,
 }: QuestionScreenProps) {
   // In the solo flow `revealed` is omitted, so correctness shows the moment
   // the answer is locked (revealed tracks answered). In the live flow the
@@ -783,6 +788,16 @@ export default function QuestionScreen({
   const revealed = revealedProp ?? answered;
   /** Player has locked an answer but the shared reveal hasn't happened yet. */
   const awaitingReveal = answered && !revealed;
+
+  /** Heads-up chip shown over the question when it becomes answerable
+   *  (live quiz only). Auto-dismisses 5s after the timer goes live. The
+   *  component is keyed per question by the parent, so this resets each round. */
+  const [hintChipDismissed, setHintChipDismissed] = useState(false);
+  const isTypedQuestion = question.textInput === true || question.numberInput === true;
+  const showHintChip = answerHintChip && !hintChipDismissed && !answered && !revealed;
+  const hintChipText = isTypedQuestion
+    ? "Type your answer in the answer box, then hit Submit."
+    : "Choose carefully — once you select and submit, there's no changing your answer.";
   const isThreeImageOptions =
     question.imagesAreOptions === true &&
     question.images?.length === 3 &&
@@ -809,6 +824,14 @@ export default function QuestionScreen({
    *  `paused` (host narration / tour) with the new `timerPaused` (host pause
    *  control). Anywhere `paused` was checked before, `inputsLocked` now goes. */
   const inputsLocked = paused || timerPaused;
+
+  // Start the heads-up chip's 5s life once the question is actually answerable
+  // (timer live, not narrating). Also clears the moment an answer is locked.
+  useEffect(() => {
+    if (!answerHintChip || inputsLocked || answered) return;
+    const t = setTimeout(() => setHintChipDismissed(true), 5000);
+    return () => clearTimeout(t);
+  }, [answerHintChip, inputsLocked, answered]);
 
   const togglePause = useCallback(() => {
     // No-op while the host is still narrating, after the answer is locked in,
@@ -2031,9 +2054,13 @@ export default function QuestionScreen({
                   )}
               </div>
 
-              {/* ───────── FEEDBACK BANNER ───────── */}
+              {/* ───────── FEEDBACK BANNER ─────────
+                  The "answer locked — waiting" state is now rendered as a
+                  semi-transparent overlay across the whole question block (see
+                  the LOCK OVERLAY below the board), so the solo flow keeps the
+                  inline locked chip while the live flow gets the overlay. */}
               <AnimatePresence>
-                {awaitingReveal && (
+                {awaitingReveal && !answerHintChip && (
                   <motion.div
                     key="locked-waiting"
                     initial={{ opacity: 0, y: 8 }}
@@ -2102,6 +2129,66 @@ export default function QuestionScreen({
 
             </div>
             </div>
+
+            {/* ───────── HEADS-UP CHIP ─────────
+                Transient alert floated over the top of the question block when
+                the question becomes answerable; auto-dismisses after 5s. */}
+            <AnimatePresence>
+              {showHintChip && (
+                <motion.div
+                  key="hint-chip"
+                  initial={{ opacity: 0, y: -10, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -8, scale: 0.97 }}
+                  transition={{ duration: 0.3, ease: EASE_OUT }}
+                  className="pointer-events-none absolute left-1/2 top-3 z-30 w-[min(92%,30rem)] -translate-x-1/2"
+                >
+                  <div className="flex items-center justify-center gap-2.5 rounded-full border border-brass/50 bg-black/85 px-4 py-2 text-center shadow-[0_0_26px_rgba(228,207,106,0.3)] backdrop-blur-md">
+                    <span className="text-base leading-none" aria-hidden>{isTypedQuestion ? "⌨️" : "☝️"}</span>
+                    <p className="text-brass-bright text-[12px] md:text-[13px] font-medium leading-snug tracking-wide">
+                      {hintChipText}
+                    </p>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* ───────── LOCK OVERLAY ─────────
+                Live quiz: once the answer is locked and we're waiting on the
+                shared reveal, a semi-transparent veil settles over the whole
+                question block so it's unmistakable the answer is committed. */}
+            <AnimatePresence>
+              {answerHintChip && awaitingReveal && (
+                <motion.div
+                  key="lock-overlay"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.4, ease: EASE_OUT }}
+                  className="absolute inset-[4px] z-40 flex flex-col items-center justify-center gap-3 rounded-[22px] px-6 text-center backdrop-blur-[3px]"
+                  style={{ background: "rgba(6,4,2,0.72)" }}
+                >
+                  <motion.div
+                    initial={{ scale: 0.85, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: 0.08, type: "spring", bounce: 0.4 }}
+                    className="flex h-12 w-12 items-center justify-center rounded-full border border-brass/55"
+                    style={{ background: "rgba(0,0,0,0.55)", boxShadow: `0 0 24px ${GOLD_GLOW}` }}
+                  >
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+                      <rect x="5" y="11" width="14" height="9" rx="2" stroke={GOLD_BRIGHT} strokeWidth="1.6" />
+                      <path d="M8 11V8a4 4 0 018 0v3" stroke={GOLD_BRIGHT} strokeWidth="1.6" strokeLinecap="round" />
+                    </svg>
+                  </motion.div>
+                  <p className="font-display text-base md:text-lg font-semibold text-brass-bright tracking-wide">
+                    Your answer is now locked
+                  </p>
+                  <p className="max-w-xs text-[13px] md:text-sm leading-relaxed text-[#f4ecdc]/85">
+                    Sit tight for the answer reveal after the timer ends.
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         </div>
       </div>
