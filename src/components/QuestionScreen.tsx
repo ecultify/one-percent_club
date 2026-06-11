@@ -425,6 +425,11 @@ export const PANEL_INNER_FILL: CSSProperties = {
     "inset 0 1px 0 rgba(255,245,210,0.08), inset 0 -1px 0 rgba(0,0,0,0.52), inset 0 0 32px rgba(0,0,0,0.48)",
 };
 
+// Vertical "journey" ticker — the 10 actual game checkpoints, top (90) to
+// bottom (1). DESKTOP ONLY: on phones the ladder is replaced by the compact
+// percentage chip above the question panel.
+const JOURNEY = [90, 80, 70, 60, 50, 40, 30, 20, 10, 1];
+
 /** PNG in public/questionscreenimages/ — filenames like `90%.png`, `1%.png` */
 function percentImageSrc(pct: number): string {
   return `/questionscreenimages/${encodeURIComponent(`${pct}%.png`)}`;
@@ -1222,9 +1227,91 @@ export default function QuestionScreen({
         </div>
       </div>
 
-      {/* The right-edge JOURNEY ladder was removed — the current game
-            percentage now reads as a chip directly above the question panel
-            (see GAME PERCENTAGE inside the board). */}
+      {/* ━━ JOURNEY TICKER — pinned to the RIGHT EDGE, vertically centered.
+            DESKTOP ONLY (hidden below md): on phones the ladder ate too much
+            width, so the percentage chip above the question takes over there.
+            IMPORTANT: framer-motion sets `transform: translateX(...)` inline on the
+            animated element, which overrides Tailwind's `-translate-y-1/2` utility.
+            So the OUTER positioning wrapper (non-motion) does the vertical centering,
+            and motion animates opacity/x on an INNER element only. ━━ */}
+      <div
+        className="pointer-events-none absolute top-1/2 -translate-y-1/2 right-4 z-20 hidden md:block"
+        aria-label="Your journey from 90% to 1%"
+      >
+        <motion.div
+          initial={{ opacity: 0, x: 12 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.25, duration: 0.5, ease: EASE_OUT }}
+          className="pointer-events-auto relative rounded-xl p-[1.5px] shadow-[0_12px_32px_-10px_rgba(0,0,0,0.75)]"
+          style={{ background: METALLIC_RIM_GRADIENT }}
+        >
+          <div className="relative flex min-h-[min(72vh,640px)] w-[6.25rem] flex-col items-stretch rounded-[10px] bg-black/70 backdrop-blur-md px-3 py-6">
+            <p
+              className="shrink-0 text-center font-mono text-[11px] font-bold uppercase leading-tight px-0.5"
+              style={{
+                color: "#e7cf6a",
+                letterSpacing: "0.18em",
+                textShadow:
+                  "0 1px 0 rgba(20,10,0,0.6), 0 0 10px rgba(228,174,68,0.28)",
+              }}
+            >
+              Journey
+            </p>
+            <div className="relative flex min-h-0 flex-1 flex-col items-center justify-evenly py-4">
+              {JOURNEY.map((pct) => {
+                const isCurrent = pct === question.percentage;
+                const isReached = pct >= question.percentage;
+                if (isCurrent) {
+                  return (
+                    <motion.div
+                      key={pct}
+                      initial={{ scale: 0.6 }}
+                      animate={{ scale: 1 }}
+                      transition={{ type: "spring", bounce: 0.5 }}
+                      className="relative flex items-center justify-center"
+                    >
+                      <div
+                        className="absolute -inset-3.5 rounded-lg blur-xl opacity-90"
+                        style={{
+                          background:
+                            "radial-gradient(closest-side, rgba(255,230,150,0.75), rgba(228,190,80,0.35) 55%, transparent 82%)",
+                        }}
+                      />
+                      <div
+                        className="metallic-chip relative rounded-lg px-4 py-3 text-lg font-bold tabular-nums leading-none shadow-[0_0_20px_rgba(228,207,106,0.45)] font-display"
+                        style={{
+                          color: "#1a1105",
+                          textShadow:
+                            "0 1px 0 rgba(255,236,180,0.55), 0 -1px 0 rgba(36,22,0,0.4)",
+                        }}
+                      >
+                        <span className="relative z-[3]">{pct}%</span>
+                      </div>
+                    </motion.div>
+                  );
+                }
+                // Non-current rungs: reached = bright brass, not-reached = dim
+                // but still legible against the black panel. Added a subtle
+                // text-shadow so the numerals pop against dark backgrounds.
+                return (
+                  <span
+                    key={pct}
+                    className="font-display text-lg font-bold tabular-nums leading-none transition-colors"
+                    style={{
+                      color: isReached ? "#f4dc7c" : "rgba(228,207,106,0.62)",
+                      textShadow: isReached
+                        ? "0 1px 0 rgba(20,10,0,0.75), 0 0 10px rgba(228,174,68,0.38)"
+                        : "0 1px 0 rgba(20,10,0,0.75)",
+                    }}
+                  >
+                    {pct}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        </motion.div>
+      </div>
 
       {/* ━━ Centered content frame — pushed down to clear the 3D logo in the
             navbar. The board centers via m-auto inside a scroll container so
@@ -1354,36 +1441,36 @@ export default function QuestionScreen({
                     )}
                   </motion.div>
 
-                  {/* ───────── GAME PERCENTAGE — replaces the old right-edge
-                        journey ladder: the round's percentage sits in a
-                        metallic box directly above the question. On phones a
-                        compact countdown rides alongside it (the big timer
-                        dock is desktop-only). */}
+                  {/* ───────── GAME PERCENTAGE — MOBILE ONLY: stands in for
+                        the right-edge journey ladder (desktop keeps the
+                        ladder). The round's percentage sits in a metallic box
+                        directly above the question with a compact countdown
+                        beside it (the big timer dock is desktop-only). */}
                   <motion.div
                     initial={{ opacity: 0, y: -6 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.22, duration: 0.4, ease: EASE_OUT }}
-                    className="flex items-center justify-center gap-2"
+                    className="flex items-center justify-center gap-2 md:hidden"
                   >
                     <div
-                      className="metallic-chip relative rounded-lg px-3.5 py-1.5 shadow-[0_0_20px_rgba(228,207,106,0.4)] md:px-4 md:py-2"
+                      className="metallic-chip relative rounded-lg px-3.5 py-1.5 shadow-[0_0_20px_rgba(228,207,106,0.4)]"
                       aria-label={`This is a ${question.percentage}% question`}
                     >
                       <span
-                        className="relative z-[3] flex items-baseline gap-1.5 font-display text-base font-bold tabular-nums leading-none md:text-lg"
+                        className="relative z-[3] flex items-baseline gap-1.5 font-display text-base font-bold tabular-nums leading-none"
                         style={{
                           color: "#1a1105",
                           textShadow: "0 1px 0 rgba(255,236,180,0.55), 0 -1px 0 rgba(36,22,0,0.4)",
                         }}
                       >
                         {question.percentage}%
-                        <span className="font-mono text-[9px] font-bold uppercase tracking-[0.22em] md:text-[10px]">
+                        <span className="font-mono text-[9px] font-bold uppercase tracking-[0.22em]">
                           question
                         </span>
                       </span>
                     </div>
                     <div
-                      className="flex items-center rounded-lg border border-brass/45 bg-black/70 px-3 py-1.5 backdrop-blur-sm md:hidden"
+                      className="flex items-center rounded-lg border border-brass/45 bg-black/70 px-3 py-1.5 backdrop-blur-sm"
                       aria-label="Time left"
                     >
                       <span
