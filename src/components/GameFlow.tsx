@@ -14,7 +14,7 @@ import QuizGame from "./QuizGame";
 import ReadyToPlayGate from "./ReadyToPlayGate";
 import GameShowAudio from "./GameShowAudio";
 import EnterButtonHint from "./EnterButtonHint";
-import FlowBackButton from "./FlowBackButton";
+import TiltScreenNotice, { ROTATED_VIDEO_STYLE, useIsPortraitMobile } from "./RotateForVideo";
 import { useNarration } from "./NarrationProvider";
 import { warmClubLogoGlbAsset } from "@/lib/warmClubLogoAsset";
 import { useVideoAutoplay } from "@/lib/useVideoAutoplay";
@@ -125,16 +125,25 @@ function useLogoPositions() {
         y: h / 2 - half,
         scale: 1,
       },
-      // Top-LEFT navbar brand mark. Visual width ≈ LOGO_SIZE * scale (LOGO_SIZE = 300).
+      // Navbar brand mark. Visual width ≈ LOGO_SIZE * scale (LOGO_SIZE = 300).
       // The 3D model is centered inside its 300×300 canvas; a small negative y
       // offset trims the empty canvas padding above the glyphs so the visible
       // logo sits at a standard "corner with small margin" position rather than
       // floating an extra ~50 px below the navbar top.
-      corner: {
-        x: 8,
-        y: -8,
-        scale: 152 / LOGO_SIZE,
-      },
+      // Desktop: top-left corner. Mobile: CENTERED and slightly smaller so it
+      // never overlaps the HUD chips (which sit at the left/right edges).
+      corner:
+        w < 768
+          ? {
+              x: w / 2 - half,
+              y: -95,
+              scale: 0.38,
+            }
+          : {
+              x: 8,
+              y: -8,
+              scale: 152 / LOGO_SIZE,
+            },
     };
   }
 
@@ -447,40 +456,10 @@ export default function GameFlow() {
     quizBackHandlerRef.current = fn;
   }, []);
 
-  const resetIntroToIdle = useCallback(() => {
-    flowRunIdRef.current += 1;
-    pendingFlyToCorner.current = false;
-    setPhase("idle");
-  }, []);
-
-  const handleFlowBack = useCallback(() => {
-    switch (phase) {
-      case "ripple":
-      case "logo-enter":
-      case "logo-center":
-      case "logo-fly-corner":
-      case "welcome-video":
-        resetIntroToIdle();
-        break;
-      case "post-video-gate":
-        setPhase("welcome-video");
-        break;
-      case "details":
-        setPhase("post-video-gate");
-        break;
-      case "instructions":
-        setPhase("details");
-        break;
-      case "playing":
-        if (quizBackHandlerRef.current) quizBackHandlerRef.current();
-        else exitQuizToInstructions();
-        break;
-      default:
-        break;
-    }
-  }, [phase, resetIntroToIdle, exitQuizToInstructions]);
-
-  const showFlowBack = phase !== "idle" && phase !== "coming-soon";
+  // The floating back button (FlowBackButton) was removed from the flow —
+  // navigation is forward-only for players. The in-quiz back handler ref is
+  // still registered by QuizGame but no longer has a trigger.
+  // (resetIntroToIdle went with it — it was only reachable from that button.)
 
   // `next dev` only: from welcome / stats gate / scrolly (Enter visible), go straight
   // to the champion end screen to preview confetti + applause.
@@ -527,6 +506,24 @@ export default function GameFlow() {
 
   const showWelcomeVideo = phase === "welcome-video";
   const showPostVideoGate = phase === "post-video-gate";
+
+  // ── Portrait-phone welcome video ──
+  // The teaser is a landscape master. On a phone held upright we first show
+  // a "tilt your phone" notice for a beat, then play the video ROTATED 90° so
+  // it fills the screen widescreen (works even with rotation-lock on).
+  const portraitMobile = useIsPortraitMobile();
+  const [tiltNoticeDone, setTiltNoticeDone] = useState(false);
+  useEffect(() => {
+    if (!showWelcomeVideo) {
+      setTiltNoticeDone(false);
+      return;
+    }
+    if (!portraitMobile || tiltNoticeDone) return;
+    const t = setTimeout(() => setTiltNoticeDone(true), 2600);
+    return () => clearTimeout(t);
+  }, [showWelcomeVideo, portraitMobile, tiltNoticeDone]);
+  const rotateWelcomeVideo = portraitMobile;
+  const welcomeVideoHeldForTilt = showWelcomeVideo && portraitMobile && !tiltNoticeDone;
 
   /** Keep welcome teaser playing — autoplay can stall after heavy 3D work,
    *  tab switches, or a hard reload landing on bfcache. Shared hook so the
@@ -811,29 +808,34 @@ export default function GameFlow() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.6, ease: EASE_SMOOTH }}
           >
-            <video
-              ref={welcomeVideoRef}
-              poster={WELCOME_VIDEO_POSTER}
-              className="w-full h-full object-cover"
-              autoPlay
-              playsInline
-              preload="auto"
-              onLoadedData={() => {
-                void welcomeVideoRef.current?.play().catch(() => {});
-              }}
-              onCanPlay={() => {
-                void welcomeVideoRef.current?.play().catch(() => {});
-              }}
-              onStalled={() => {
-                void welcomeVideoRef.current?.play().catch(() => {});
-              }}
-              onWaiting={() => {
-                void welcomeVideoRef.current?.play().catch(() => {});
-              }}
-              onEnded={handleVideoEnd}
-              onError={handleVideoEnd}
-              src={WELCOME_VIDEO_SRC}
-            />
+            {welcomeVideoHeldForTilt ? (
+              <TiltScreenNotice />
+            ) : (
+              <video
+                ref={welcomeVideoRef}
+                poster={WELCOME_VIDEO_POSTER}
+                className={rotateWelcomeVideo ? undefined : "w-full h-full object-cover"}
+                style={rotateWelcomeVideo ? ROTATED_VIDEO_STYLE : undefined}
+                autoPlay
+                playsInline
+                preload="auto"
+                onLoadedData={() => {
+                  void welcomeVideoRef.current?.play().catch(() => {});
+                }}
+                onCanPlay={() => {
+                  void welcomeVideoRef.current?.play().catch(() => {});
+                }}
+                onStalled={() => {
+                  void welcomeVideoRef.current?.play().catch(() => {});
+                }}
+                onWaiting={() => {
+                  void welcomeVideoRef.current?.play().catch(() => {});
+                }}
+                onEnded={handleVideoEnd}
+                onError={handleVideoEnd}
+                src={WELCOME_VIDEO_SRC}
+              />
+            )}
             {/* Skip button — bottom right, no other video controls visible */}
             <motion.button
               type="button"
@@ -1033,8 +1035,6 @@ export default function GameFlow() {
           </motion.div>
         )}
       </AnimatePresence>
-
-      {showFlowBack && <FlowBackButton onClick={handleFlowBack} />}
 
       <GameShowAudio
         playBgm={playBgm}

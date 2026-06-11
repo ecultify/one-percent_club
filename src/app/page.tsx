@@ -1,7 +1,6 @@
 import HomeIntroVideo from "@/components/HomeIntroVideo";
 import GameFlow from "@/components/GameFlow";
 import AudioPrimingGate from "@/components/AudioPrimingGate";
-import LiveQuizNav from "@/components/live/LiveQuizNav";
 import { ScrollScrollyProvider } from "@/contexts/ScrollScrollyContext";
 import { PERF_FLAGS } from "@/lib/perfFlags";
 
@@ -43,7 +42,8 @@ export default function Home({ searchParams }: { searchParams?: HomeSearchParams
               final videos remain commented out via PERF_FLAGS.liveQuizMode. */}
           {!devJump && PERF_FLAGS.backgroundVideo && <HomeIntroVideo />}
           <GameFlow />
-          {PERF_FLAGS.liveQuizMode && <LiveQuizNav />}
+          {/* The "● Live" quick-nav chip was removed — hosts/players reach
+              /host, /play and /watch via their shared links. */}
         </main>
       </ScrollScrollyProvider>
     </AudioPrimingGate>

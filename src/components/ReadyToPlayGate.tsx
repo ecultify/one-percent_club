@@ -37,10 +37,10 @@ function StatTile({ src, caption, delay = 0, imgScale = 1.22 }: StatTileProps) {
       initial={{ opacity: 0, y: 24 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.65, delay, ease: EASE_EXPO }}
-      className="flex min-w-0 flex-1 flex-col items-stretch"
+      className="flex w-full min-w-0 flex-col items-stretch sm:flex-1"
     >
       <div
-        className="relative aspect-square w-full max-w-[188px] sm:max-w-[228px] md:max-w-[272px] lg:max-w-[308px] xl:max-w-[332px] rounded-xl p-[2.5px] shadow-[0_0_22px_-6px_rgba(228,207,106,0.4),0_12px_28px_-14px_rgba(0,0,0,0.72)]"
+        className="relative mx-auto aspect-square w-full max-w-[146px] sm:max-w-[228px] md:max-w-[272px] lg:max-w-[308px] xl:max-w-[332px] rounded-xl p-[2.5px] shadow-[0_0_22px_-6px_rgba(228,207,106,0.4),0_12px_28px_-14px_rgba(0,0,0,0.72)]"
         style={{ background: METALLIC_RIM_GRADIENT }}
       >
         <div
@@ -162,7 +162,7 @@ export default function ReadyToPlayGate({ onStart }: ReadyToPlayGateProps) {
 
       <div className="relative z-10 shrink-0 pt-14 md:pt-16" aria-hidden />
 
-      <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center px-3 py-4 md:px-8 lg:px-12">
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-3 py-4 md:px-8 lg:px-12">
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -195,7 +195,9 @@ export default function ReadyToPlayGate({ onStart }: ReadyToPlayGateProps) {
           />
         </motion.div>
 
-        <div className="flex w-full max-w-[min(96vw,1040px)] flex-row items-stretch justify-center gap-2.5 sm:gap-4 md:gap-6 lg:gap-8">
+        {/* Phones: one tile under another (smaller, centered). sm+: the
+            original three-across row. */}
+        <div className="flex w-full max-w-[min(96vw,1040px)] flex-col items-center gap-3 sm:flex-row sm:items-stretch sm:justify-center sm:gap-4 md:gap-6 lg:gap-8">
           <StatTile src={ASSETS.questions} caption="Questions" delay={0.16} imgScale={0.95} />
           <StatTile src={ASSETS.players} caption="Contestants" delay={0.28} />
           <StatTile src={ASSETS.prize} caption="Cash prize" delay={0.4} />

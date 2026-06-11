@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import LiveAudioGate from "@/components/live/LiveAudioGate";
+import TiltScreenNotice, { ROTATED_VIDEO_STYLE, useIsPortraitMobile } from "@/components/RotateForVideo";
 
 /**
  * Pre-game intro shown the moment a player opens the shared /play link,
@@ -76,6 +77,18 @@ export default function LivePlayerIntro({ onReady, initialName = "" }: LivePlaye
   const [muted, setMuted] = useState(true);
   const [step, setStep] = useState(0);
 
+  // Portrait phones: hold the teaser behind a short "tilt your phone"
+  // notice, then play it rotated 90° so the landscape master fills the
+  // screen widescreen (rotation-lock friendly).
+  const portraitMobile = useIsPortraitMobile();
+  const [tiltNoticeDone, setTiltNoticeDone] = useState(false);
+  useEffect(() => {
+    if (stage !== "teaser" || !portraitMobile || tiltNoticeDone) return;
+    const t = setTimeout(() => setTiltNoticeDone(true), 2600);
+    return () => clearTimeout(t);
+  }, [stage, portraitMobile, tiltNoticeDone]);
+  const teaserHeldForTilt = portraitMobile && !tiltNoticeDone;
+
   if (stage === "gate") {
     return <LiveAudioGate collectName requireName initialName={initialName} onReady={onReady} />;
   }
@@ -83,16 +96,21 @@ export default function LivePlayerIntro({ onReady, initialName = "" }: LivePlaye
   if (stage === "teaser") {
     return (
       <main className="relative min-h-screen w-full overflow-hidden bg-black">
-        <video
-          src={TEASER_SRC}
-          poster={TEASER_POSTER}
-          autoPlay
-          muted={muted}
-          playsInline
-          preload="auto"
-          onEnded={() => setStage("instructions")}
-          className="absolute inset-0 h-full w-full object-cover"
-        />
+        {teaserHeldForTilt ? (
+          <TiltScreenNotice />
+        ) : (
+          <video
+            src={TEASER_SRC}
+            poster={TEASER_POSTER}
+            autoPlay
+            muted={muted}
+            playsInline
+            preload="auto"
+            onEnded={() => setStage("instructions")}
+            className={portraitMobile ? undefined : "absolute inset-0 h-full w-full object-cover"}
+            style={portraitMobile ? ROTATED_VIDEO_STYLE : undefined}
+          />
+        )}
         <div className="pointer-events-none absolute inset-0" style={{ background: "rgba(3,2,8,0.25)" }} aria-hidden />
 
         {/* Unmute prompt — the teaser autoplays muted (no gesture yet); one tap

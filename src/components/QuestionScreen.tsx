@@ -425,9 +425,6 @@ export const PANEL_INNER_FILL: CSSProperties = {
     "inset 0 1px 0 rgba(255,245,210,0.08), inset 0 -1px 0 rgba(0,0,0,0.52), inset 0 0 32px rgba(0,0,0,0.48)",
 };
 
-// Vertical "journey" ticker — the 10 actual game checkpoints, top (90) to bottom (1).
-const JOURNEY = [90, 80, 70, 60, 50, 40, 30, 20, 10, 1];
-
 /** PNG in public/questionscreenimages/ — filenames like `90%.png`, `1%.png` */
 function percentImageSrc(pct: number): string {
   return `/questionscreenimages/${encodeURIComponent(`${pct}%.png`)}`;
@@ -479,8 +476,11 @@ function PercentTimerDock({
     // Outer wrapper accepts pointer events so the play/pause buttons inside
     // are clickable (was pointer-events-none on the original spec dock; the
     // SVG ring + countdown stay aria-hidden via the inner container).
+    // Desktop-only: on phones the dock overlapped the answer options, so a
+    // compact countdown chip next to the percentage box (inside the board)
+    // takes over below md.
     <div
-      className="fixed bottom-4 left-3 z-20 md:bottom-6 md:left-6 select-none flex flex-col items-center gap-2 md:gap-3"
+      className="fixed bottom-4 left-3 z-20 md:bottom-6 md:left-6 select-none hidden md:flex flex-col items-center gap-2 md:gap-3"
       data-tour-id="timer"
     >
       <div
@@ -1222,99 +1222,20 @@ export default function QuestionScreen({
         </div>
       </div>
 
-      {/* ━━ JOURNEY TICKER — pinned to the RIGHT EDGE, vertically centered.
-            IMPORTANT: framer-motion sets `transform: translateX(...)` inline on the
-            animated element, which overrides Tailwind's `-translate-y-1/2` utility.
-            So the OUTER positioning wrapper (non-motion) does the vertical centering,
-            and motion animates opacity/x on an INNER element only. ━━ */}
-      <div
-        className="pointer-events-none absolute top-1/2 -translate-y-1/2 right-2 md:right-4 z-20"
-        aria-label="Your journey from 90% to 1%"
-      >
-        <motion.div
-          initial={{ opacity: 0, x: 12 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.25, duration: 0.5, ease: EASE_OUT }}
-          className="pointer-events-auto relative rounded-xl p-[1.5px] shadow-[0_12px_32px_-10px_rgba(0,0,0,0.75)]"
-          style={{ background: METALLIC_RIM_GRADIENT }}
-        >
-          <div className="relative flex min-h-[min(58vh,520px)] w-[3.5rem] flex-col items-stretch rounded-[10px] bg-black/70 backdrop-blur-md px-1 py-4 sm:min-h-[min(72vh,640px)] sm:w-[5.75rem] sm:px-2 sm:py-5 md:w-[6.25rem] md:px-3 md:py-6">
-            <p
-              className="shrink-0 text-center font-mono text-[9px] font-bold uppercase leading-tight sm:text-[10px] md:text-[11px] px-0.5"
-              style={{
-                color: "#e7cf6a",
-                letterSpacing: "0.18em",
-                textShadow:
-                  "0 1px 0 rgba(20,10,0,0.6), 0 0 10px rgba(228,174,68,0.28)",
-              }}
-            >
-              Journey
-            </p>
-            <div className="relative flex min-h-0 flex-1 flex-col items-center justify-evenly py-3 md:py-4">
-              {JOURNEY.map((pct) => {
-                const isCurrent = pct === question.percentage;
-                const isReached = pct >= question.percentage;
-                if (isCurrent) {
-                  return (
-                    <motion.div
-                      key={pct}
-                      initial={{ scale: 0.6 }}
-                      animate={{ scale: 1 }}
-                      transition={{ type: "spring", bounce: 0.5 }}
-                      className="relative flex items-center justify-center"
-                    >
-                      <div
-                        className="absolute -inset-3 rounded-lg blur-xl opacity-90 sm:-inset-3.5"
-                        style={{
-                          background:
-                            "radial-gradient(closest-side, rgba(255,230,150,0.75), rgba(228,190,80,0.35) 55%, transparent 82%)",
-                        }}
-                      />
-                      <div
-                        className="metallic-chip relative rounded-lg px-2 py-1.5 text-xs font-bold tabular-nums leading-none shadow-[0_0_20px_rgba(228,207,106,0.45)] sm:px-3.5 sm:py-2.5 sm:text-base md:px-4 md:py-3 md:text-lg font-display"
-                        style={{
-                          color: "#1a1105",
-                          textShadow:
-                            "0 1px 0 rgba(255,236,180,0.55), 0 -1px 0 rgba(36,22,0,0.4)",
-                        }}
-                      >
-                        <span className="relative z-[3]">{pct}%</span>
-                      </div>
-                    </motion.div>
-                  );
-                }
-                // Non-current rungs: reached = bright brass, not-reached = dim
-                // but still legible against the black panel. Added a subtle
-                // text-shadow so the numerals pop against dark backgrounds.
-                return (
-                  <span
-                    key={pct}
-                    className="font-display text-xs font-bold tabular-nums leading-none transition-colors sm:text-base md:text-lg"
-                    style={{
-                      color: isReached ? "#f4dc7c" : "rgba(228,207,106,0.62)",
-                      textShadow: isReached
-                        ? "0 1px 0 rgba(20,10,0,0.75), 0 0 10px rgba(228,174,68,0.38)"
-                        : "0 1px 0 rgba(20,10,0,0.75)",
-                    }}
-                  >
-                    {pct}
-                  </span>
-                );
-              })}
-            </div>
-          </div>
-        </motion.div>
-      </div>
+      {/* The right-edge JOURNEY ladder was removed — the current game
+            percentage now reads as a chip directly above the question panel
+            (see GAME PERCENTAGE inside the board). */}
 
       {/* ━━ Centered content frame — pushed down to clear the 3D logo in the
-            navbar. On phones the right padding clears the (slimmed) journey
-            ticker so it never sits on top of the board. ━━ */}
-      <div className="relative z-10 w-full h-full flex items-center justify-center pl-3 pr-[4.25rem] sm:pl-4 sm:pr-[6.75rem] md:px-8 pt-24 md:pt-36 pb-14 md:pb-20">
+            navbar. The board centers via m-auto inside a scroll container so
+            a question taller than a phone screen SCROLLS instead of clipping
+            top/bottom (the old items-center clipped overflow). ━━ */}
+      <div className="relative z-10 w-full h-full flex overflow-y-auto md:overflow-visible px-3 sm:px-6 md:px-8 pt-32 md:pt-36 pb-14 md:pb-20">
         {/* Perspective container — required for the rotateX/rotateY on
             the board below to actually produce a depth illusion. Without
             perspective on a parent, 3D rotations collapse to a flat skew. */}
         <div
-          className="relative w-full max-w-[920px]"
+          className="relative m-auto w-full max-w-[920px]"
           style={{ perspective: "1500px", perspectiveOrigin: "50% 50%" }}
         >
 
@@ -1433,6 +1354,53 @@ export default function QuestionScreen({
                     )}
                   </motion.div>
 
+                  {/* ───────── GAME PERCENTAGE — replaces the old right-edge
+                        journey ladder: the round's percentage sits in a
+                        metallic box directly above the question. On phones a
+                        compact countdown rides alongside it (the big timer
+                        dock is desktop-only). */}
+                  <motion.div
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.22, duration: 0.4, ease: EASE_OUT }}
+                    className="flex items-center justify-center gap-2"
+                  >
+                    <div
+                      className="metallic-chip relative rounded-lg px-3.5 py-1.5 shadow-[0_0_20px_rgba(228,207,106,0.4)] md:px-4 md:py-2"
+                      aria-label={`This is a ${question.percentage}% question`}
+                    >
+                      <span
+                        className="relative z-[3] flex items-baseline gap-1.5 font-display text-base font-bold tabular-nums leading-none md:text-lg"
+                        style={{
+                          color: "#1a1105",
+                          textShadow: "0 1px 0 rgba(255,236,180,0.55), 0 -1px 0 rgba(36,22,0,0.4)",
+                        }}
+                      >
+                        {question.percentage}%
+                        <span className="font-mono text-[9px] font-bold uppercase tracking-[0.22em] md:text-[10px]">
+                          question
+                        </span>
+                      </span>
+                    </div>
+                    <div
+                      className="flex items-center rounded-lg border border-brass/45 bg-black/70 px-3 py-1.5 backdrop-blur-sm md:hidden"
+                      aria-label="Time left"
+                    >
+                      <span
+                        className={`font-display text-base font-bold tabular-nums leading-none ${
+                          timeLeft <= 10 && !answered && !inputsLocked ? "motion-safe:animate-pulse" : ""
+                        }`}
+                        style={{
+                          color: timeLeft <= 10 && !answered ? "#ffb4a8" : "#f4dc7c",
+                          textShadow: "0 1px 0 rgba(20,10,0,0.75), 0 0 10px rgba(228,174,68,0.38)",
+                        }}
+                      >
+                        {Math.max(0, Math.ceil(timeLeft))}
+                        <span className="text-[10px]">s</span>
+                      </span>
+                    </div>
+                  </motion.div>
+
                   {/* ───────── QUESTION PANEL — renders FIRST inside the
                         frame (above any media / word blocks / options). Gold
                         rim + dark bronze fill matches the registration modal. */}
@@ -1514,7 +1482,10 @@ export default function QuestionScreen({
                                       ? " pt-3.5 pl-2.5 pr-1 sm:pt-4 sm:pl-3 md:pt-4 md:pl-3.5"
                                       : "")
                                 : isThreeImageOptions
-                                  ? "grid grid-cols-2 md:grid-cols-3 w-full max-w-4xl mx-auto gap-2.5 md:gap-3 items-stretch justify-items-center pt-3.5 px-1 sm:pt-4 sm:px-2"
+                                  // Phones: 2-up with the third tile spanning
+                                  // (and centering in) the full row below, so
+                                  // there's no orphaned empty cell.
+                                  ? "grid grid-cols-2 md:grid-cols-3 [&>*:last-child]:col-span-2 md:[&>*:last-child]:col-span-1 w-full max-w-4xl mx-auto gap-2.5 md:gap-3 items-stretch justify-items-center pt-3.5 px-1 sm:pt-4 sm:px-2"
                                   : "flex flex-nowrap md:flex-wrap items-stretch justify-center gap-2.5 md:gap-3 min-w-max md:min-w-0" +
                                     (question.imagesAreOptions
                                       ? " pt-3.5 pl-2.5 pr-1 sm:pt-4 sm:pl-3 md:pt-4 md:pl-3.5"
@@ -1537,9 +1508,9 @@ export default function QuestionScreen({
                                     // empty letterboxing top/bottom. Smaller
                                     // boxes hug the actual content.
                                     ? question.id === 5
-                                      ? "h-[170px] sm:h-[190px] md:h-[210px] lg:h-[220px] w-full max-w-[min(38vw,260px)] md:max-w-[min(28vw,300px)] object-contain rounded"
-                                      : "h-[280px] sm:h-[320px] md:h-[360px] lg:h-[380px] w-full max-w-[min(38vw,260px)] md:max-w-[min(28vw,300px)] object-contain rounded"
-                                    : "h-[236px] sm:h-[252px] md:h-[300px] lg:h-[320px] w-auto max-w-[min(34vw,200px)] md:max-w-[min(30vw,280px)]";
+                                      ? "h-[132px] sm:h-[190px] md:h-[210px] lg:h-[220px] w-full max-w-[min(38vw,260px)] md:max-w-[min(28vw,300px)] object-contain rounded"
+                                      : "h-[180px] sm:h-[320px] md:h-[360px] lg:h-[380px] w-full max-w-[min(40vw,260px)] md:max-w-[min(28vw,300px)] object-contain rounded"
+                                    : "h-[170px] sm:h-[252px] md:h-[300px] lg:h-[320px] w-auto max-w-[min(34vw,200px)] md:max-w-[min(30vw,280px)]";
                                 return (
                                   <motion.button
                                     key={`${src}-${i}`}
