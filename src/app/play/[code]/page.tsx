@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
 import { useParams, useSearchParams } from "next/navigation";
 import { usePartyRoom } from "@/lib/usePartyRoom";
 import LiveQuizPlayer from "@/components/live/LiveQuizPlayer";
@@ -57,14 +58,28 @@ export default function PlayRoomPage() {
 
   // Join only once we actually have a name (entered in the gate for shared
   // links, or carried from ?name= via the in-app flow). The name then shows
-  // up in the host dashboard.
+  // up in the host dashboard. Only auto-join while the room is still in the
+  // LOBBY — a late arrival gets an explicit "already started" screen below
+  // and joins as an unscored viewer-player instead.
   useEffect(() => {
-    if (!connected || joined) return;
+    if (!connected || joined || !state) return;
+    if (state.phase !== "lobby") return;
     const n = name.trim();
     if (!n) return;
     send({ type: "join-participant", name: n });
     setJoined(true);
-  }, [connected, joined, name, send]);
+  }, [connected, joined, name, send, state]);
+
+  // Re-join after a host reset. Resetting the room clears every participant
+  // row server-side (so refreshed players' old ids can't duplicate); anyone
+  // still connected simply re-joins here with the SAME connection id.
+  useEffect(() => {
+    if (!connected || !joined || !state || state.phase !== "lobby" || !myId) return;
+    if (state.participants.some((p) => p.id === myId)) return;
+    const n = name.trim();
+    if (!n) return;
+    send({ type: "join-participant", name: n });
+  }, [connected, joined, state, myId, name, send]);
 
   // Show the intro (teaser → instructions → name/audio gate) until audio is
   // primed AND we have a name. Skipped for the in-app flow (audio already
@@ -129,6 +144,47 @@ export default function PlayRoomPage() {
           {error === "host-already-claimed" && (
             <p className="mt-4 text-xs text-yellow-200/80">Host is connected from another tab.</p>
           )}
+        </div>
+      </main>
+    );
+  }
+
+  // Late arrival: the quiz is already underway and we never joined the
+  // lobby. Offer to enter as an unscored viewer-player — they play along
+  // for fun but can't win or be eliminated.
+  if (!joined) {
+    const ended = state.phase === "ended";
+    return (
+      <main className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-black px-6 text-center">
+        <GameShowAudio playBgm suppressForVideo={false} slowMode={false} />
+        <LobbyBackdrop />
+        <div className="relative z-[1] max-w-md">
+          <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-brass/80">
+            {ended ? "Quiz finished" : "Quiz in progress"}
+          </p>
+          <h1
+            className="mt-2 text-2xl font-semibold text-[#fff4dc] md:text-3xl"
+            style={{ textShadow: "0 2px 14px rgba(0,0,0,0.92)" }}
+          >
+            {ended ? "This lobby has already finished" : "This lobby has already started"}
+          </h1>
+          <p className="mt-3 text-sm leading-relaxed text-[#f4ecdc]/85" style={{ textShadow: "0 2px 10px rgba(0,0,0,0.9)" }}>
+            {ended
+              ? "You can still hop in to see the final standings."
+              : "You can still join as a viewer — you'll see every question live and play along for fun, but you won't be scored or eliminated."}
+          </p>
+          <motion.button
+            type="button"
+            onClick={() => {
+              send({ type: "join-participant", name: name.trim() || "Viewer", scoring: false });
+              setJoined(true);
+            }}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            className="game-show-btn relative z-0 mt-7 cursor-pointer rounded-xl px-10 py-4 text-center text-[13px] font-semibold uppercase tracking-[0.22em]"
+          >
+            <span className="relative z-10">{ended ? "See the results" : "Play as a viewer"}</span>
+          </motion.button>
         </div>
       </main>
     );

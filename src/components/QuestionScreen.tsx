@@ -1238,7 +1238,7 @@ export default function QuestionScreen({
           className="pointer-events-auto relative rounded-xl p-[1.5px] shadow-[0_12px_32px_-10px_rgba(0,0,0,0.75)]"
           style={{ background: METALLIC_RIM_GRADIENT }}
         >
-          <div className="relative flex min-h-[min(72vh,640px)] w-[5.25rem] flex-col items-stretch rounded-[10px] bg-black/70 backdrop-blur-md px-2 py-5 sm:w-[5.75rem] md:w-[6.25rem] md:px-3 md:py-6">
+          <div className="relative flex min-h-[min(58vh,520px)] w-[3.5rem] flex-col items-stretch rounded-[10px] bg-black/70 backdrop-blur-md px-1 py-4 sm:min-h-[min(72vh,640px)] sm:w-[5.75rem] sm:px-2 sm:py-5 md:w-[6.25rem] md:px-3 md:py-6">
             <p
               className="shrink-0 text-center font-mono text-[9px] font-bold uppercase leading-tight sm:text-[10px] md:text-[11px] px-0.5"
               style={{
@@ -1271,7 +1271,7 @@ export default function QuestionScreen({
                         }}
                       />
                       <div
-                        className="metallic-chip relative rounded-lg px-3 py-2 text-sm font-bold tabular-nums leading-none shadow-[0_0_20px_rgba(228,207,106,0.45)] sm:px-3.5 sm:py-2.5 sm:text-base md:px-4 md:py-3 md:text-lg font-display"
+                        className="metallic-chip relative rounded-lg px-2 py-1.5 text-xs font-bold tabular-nums leading-none shadow-[0_0_20px_rgba(228,207,106,0.45)] sm:px-3.5 sm:py-2.5 sm:text-base md:px-4 md:py-3 md:text-lg font-display"
                         style={{
                           color: "#1a1105",
                           textShadow:
@@ -1289,7 +1289,7 @@ export default function QuestionScreen({
                 return (
                   <span
                     key={pct}
-                    className="font-display text-sm font-bold tabular-nums leading-none transition-colors sm:text-base md:text-lg"
+                    className="font-display text-xs font-bold tabular-nums leading-none transition-colors sm:text-base md:text-lg"
                     style={{
                       color: isReached ? "#f4dc7c" : "rgba(228,207,106,0.62)",
                       textShadow: isReached
@@ -1306,8 +1306,10 @@ export default function QuestionScreen({
         </motion.div>
       </div>
 
-      {/* ━━ Centered content frame — pushed down to clear the 3D logo in the navbar ━━ */}
-      <div className="relative z-10 w-full h-full flex items-center justify-center px-4 md:px-8 pt-28 md:pt-36 pb-16 md:pb-20">
+      {/* ━━ Centered content frame — pushed down to clear the 3D logo in the
+            navbar. On phones the right padding clears the (slimmed) journey
+            ticker so it never sits on top of the board. ━━ */}
+      <div className="relative z-10 w-full h-full flex items-center justify-center pl-3 pr-[4.25rem] sm:pl-4 sm:pr-[6.75rem] md:px-8 pt-24 md:pt-36 pb-14 md:pb-20">
         {/* Perspective container — required for the rotateX/rotateY on
             the board below to actually produce a depth illusion. Without
             perspective on a parent, 3D rotations collapse to a flat skew. */}
@@ -1347,7 +1349,7 @@ export default function QuestionScreen({
             }}
           >
             <div
-              className="relative flex min-h-[inherit] flex-col gap-5 overflow-hidden rounded-[22px] p-5 md:p-7 md:gap-6 backdrop-blur-sm"
+              className="relative flex min-h-[inherit] flex-col gap-4 overflow-hidden rounded-[22px] p-3.5 sm:gap-5 sm:p-5 md:p-7 md:gap-6 backdrop-blur-sm"
               style={PANEL_INNER_FILL}
             >
             <div

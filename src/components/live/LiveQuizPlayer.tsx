@@ -62,6 +62,10 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [isCorrect, setIsCorrect] = useState(false);
   const [validating, setValidating] = useState(false);
+  /** Eliminated player's explicit choice: keep playing unscored ("play"),
+   *  or just watch ("watch"). null until they've been asked. Lives for the
+   *  whole game (the component unmounts when the room returns to lobby). */
+  const [viewerChoice, setViewerChoice] = useState<null | "play" | "watch">(null);
   /** High-res timestamp captured when this question mounted, used to
    *  measure the player's answer speed. */
   const questionStartRef = useRef(0);
@@ -106,7 +110,21 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
   // Show the passive elimination screen only for a SCORED player who is out
   // and hasn't opted to play along. Unscored players (scoring === false) keep
   // an interactive screen so they can play for fun.
-  const spectating = scoring && eliminated && (eliminatedAt == null || globalIdx > eliminatedAt);
+  // Once the player has chosen "play", treat them as interactive locally even
+  // while the server's scoring flag is still in flight — the opt-in effect
+  // below re-sends until the server confirms, so a dropped message can't
+  // strand them in the read-only spectator view.
+  const spectating =
+    scoring && eliminated && viewerChoice !== "play" && (eliminatedAt == null || globalIdx > eliminatedAt);
+
+  // Deliver the play-along opt-in reliably: keep nudging the server while it
+  // still has us as a scored (eliminated) player. Idempotent server-side.
+  useEffect(() => {
+    if (viewerChoice !== "play" || !scoring) return;
+    send({ type: "continue-as-viewer" });
+    const t = setInterval(() => send({ type: "continue-as-viewer" }), 1500);
+    return () => clearInterval(t);
+  }, [viewerChoice, scoring, send]);
   useEffect(() => {
     if (state.phase !== "running" || spectating) return;
     if (roundPhase !== "narrating") return;
@@ -209,17 +227,49 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
     );
   }
 
-  // Scored player who is out and hasn't opted to continue → elimination
-  // screen with a "Play as viewer" button. Clicking it flips them to an
-  // unscored play-along player (server sets scoring=false), and on the next
-  // render `spectating` is false so they get the interactive screen back.
+  // Scored player who is out: FIRST a full, unmissable choice screen — keep
+  // playing as an unscored viewer, or just watch. (Previously this dropped
+  // them straight into the spectator view with only a small pill button,
+  // which players often never saw.)
+  if (spectating && viewerChoice === null) {
+    return (
+      <main className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-black px-6 text-center">
+        <GameShowAudio playBgm suppressForVideo={false} slowMode={false} />
+        <div className="relative z-[1] max-w-md">
+          <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-red-300/80">Eliminated</p>
+          <h1 className="mt-2 text-3xl font-semibold text-[#fff4dc]">You&apos;re out of the running</h1>
+          <p className="mt-3 text-sm leading-relaxed text-foreground/70">
+            That answer knocked you out — but the game isn&apos;t over for you. Keep playing along as a
+            viewer (your answers won&apos;t count), or sit back and watch the survivors.
+          </p>
+          <div className="mt-8 flex flex-col items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setViewerChoice("play")}
+              className="game-show-btn relative z-0 w-full max-w-xs cursor-pointer rounded-xl px-8 py-4 text-[13px] font-semibold uppercase tracking-[0.2em]"
+            >
+              <span className="relative z-10">Continue playing as viewer</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewerChoice("watch")}
+              className="w-full max-w-xs cursor-pointer rounded-xl border border-brass/35 bg-black/55 px-8 py-3.5 text-[12px] font-semibold uppercase tracking-[0.2em] text-brass-bright/90 backdrop-blur transition-colors hover:border-brass/60"
+            >
+              Just watch
+            </button>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   if (spectating) {
     return (
       <SpectatorView
         state={state}
         name={name || me.name}
         banner="You're out — spectating"
-        onPlayAlong={() => send({ type: "continue-as-viewer" })}
+        onPlayAlong={() => setViewerChoice("play")}
       />
     );
   }

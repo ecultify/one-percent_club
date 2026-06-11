@@ -35,7 +35,11 @@ interface SpectatorViewProps {
 }
 
 export default function SpectatorView({ state, name, banner, onPlayAlong }: SpectatorViewProps) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Open by default on desktop; closed on phones, where the 18rem panel
+  // would otherwise crush the question screen to a sliver.
+  const [sidebarOpen, setSidebarOpen] = useState(
+    () => typeof window === "undefined" || window.innerWidth >= 768,
+  );
 
   const idx = state.currentQuestionIdx;
   const currentQ = getQuestionSet(state.questionSet)[idx];
@@ -153,7 +157,9 @@ function ParticipantsSidebar({ state }: { state: RoomState }) {
   ).length;
 
   return (
-    <aside className="z-30 flex h-full w-72 shrink-0 flex-col border-l border-brass/20 bg-neutral-950/90 backdrop-blur md:w-80">
+    // On phones the panel OVERLAYS the stream (absolute) instead of
+    // squeezing it; from md up it docks as a normal flex column.
+    <aside className="absolute inset-y-0 right-0 z-30 flex h-full w-72 shrink-0 flex-col border-l border-brass/20 bg-neutral-950/90 backdrop-blur md:static md:w-80">
       <div className="border-b border-brass/15 px-5 pb-4 pt-16">
         <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-brass/70">Participants</p>
         <p className="mt-1 text-2xl font-semibold text-foreground">

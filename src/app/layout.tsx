@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { NarrationProvider } from "@/components/NarrationProvider";
 import { ConfirmProvider } from "@/components/ConfirmDialog";
@@ -31,6 +31,17 @@ const instructionsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "The 1% Club",
   description: "The 1% Club interactive experience.",
+};
+
+/** Game-show UI: lock the scale so iOS doesn't auto-zoom the page when an
+ *  answer input (sub-16px font) gains focus, and extend into the safe areas
+ *  on notched phones. */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

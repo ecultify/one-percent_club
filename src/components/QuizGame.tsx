@@ -423,6 +423,14 @@ function rewindToPreviousRoundStart(prev: GameState): GameState {
 // declares the per-question CONTENT (text, options, scoring rules, inline
 // media references). Folder-pathed reaction/intro/VO files are resolved at
 // runtime by questionIntroVideoSrc / questionVoSrc / correctReactionSrc.
+//
+// ⚠️ OLD APP QUESTION JOURNEY — these are the original solo questions whose
+// per-question intro/reaction videos drove the cinematic flow. The solo game
+// now plays a RANDOMLY-PICKED live set (A/B/C, passed in via the `questions`
+// prop from GameFlow) and the video phases stay disabled via
+// PERF_FLAGS.liveQuizMode. The array is kept because the live sets reuse
+// individual questions from it (see src/components/live/questionSets.ts) and
+// the dev-only helpers below still reference it.
 export const QUESTIONS: Question[] = [
   {
     // Q1 (90%) — Find the Mistake.
@@ -586,6 +594,11 @@ export const QUESTIONS: Question[] = [
   },
 ];
 
+/** Module-scope alias of the legacy list. The component shadows `QUESTIONS`
+ *  with the set passed in via props, so this alias is how the shadow's
+ *  initializer can still fall back to the legacy questions. */
+const LEGACY_QUESTIONS = QUESTIONS;
+
 /** Dev-only: initial `GameState` for the champion final screen (all questions correct). */
 function createDevChampionInitialState(): GameState {
   const n = QUESTIONS.length;
@@ -743,6 +756,13 @@ interface QuizGameProps {
   onBackToMenu?: () => void;
   /** Lets `GameFlow` wire the fixed Back control while `playing` is active. */
   onRegisterBack?: (handler: (() => void) | null) => void;
+  /** The question list this run plays. GameFlow passes a randomly-picked
+   *  live set (A/B/C); omitted → the legacy solo questions. */
+  questions?: Question[];
+  /** Voice-over source for question index (live sets have per-set VO files).
+   *  Returning null skips narration for that question. Omitted → the legacy
+   *  per-question /sound files. */
+  questionVoForIndex?: (idx: number) => string | null;
 }
 
 function getDefaultQuizGameState(): GameState {
@@ -778,7 +798,14 @@ export default function QuizGame({
   // ─── END DEV-ONLY ───
   onBackToMenu = () => {},
   onRegisterBack,
+  questions,
+  questionVoForIndex,
 }: QuizGameProps) {
+  // The active question list for THIS run. Intentionally shadows the
+  // module-level legacy QUESTIONS so the entire engine below (timers, ticker,
+  // scoring, final screen) runs on the randomly-picked set without touching
+  // every reference. Identity is stable per set, so closures stay fresh.
+  const QUESTIONS = questions ?? LEGACY_QUESTIONS;
   const [gameState, setGameState] = useState<GameState>(() => {
     // ─── DEV-ONLY: ?devq= quick-jump (REMOVE BEFORE PROD) ───
     if (typeof devStartFromQuestion === "number" && devStartFromQuestion >= 1) {
@@ -937,8 +964,16 @@ export default function QuizGame({
       setNarratingQuestion(true);
       delayId = window.setTimeout(() => {
         if (cancelled) return;
-        const vo = questionVoSrc(q.id);
-        const done = narrateUrl(`q-${q.id}-vo`, vo);
+        // Live sets resolve their own per-set VO files; questions without a
+        // recorded VO (null) skip narration so the timer starts right away.
+        const vo = questionVoForIndex
+          ? questionVoForIndex(gameState.currentQuestion)
+          : questionVoSrc(q.id);
+        if (!vo) {
+          setNarratingQuestion(false);
+          return;
+        }
+        const done = narrateUrl(`q-${gameState.currentQuestion}-vo`, vo);
         void done.then(() => {
           if (!cancelled) setNarratingQuestion(false);
         });

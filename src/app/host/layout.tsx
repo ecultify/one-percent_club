@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { authClient } from "@/lib/auth-client";
+import { isAdminEmail } from "@/lib/adminConfig";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -39,32 +40,44 @@ export default function HostLayout({ children }: { children: React.ReactNode }) 
   );
 }
 
+/** Sign-in only. Public account creation was removed — host logins are
+ *  provisioned by an admin from the dashboard's "Host accounts" panel
+ *  (and the sign-up endpoint is blocked server-side for non-admins). */
 function HostAuthGate() {
-  const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-in");
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  const [offerAdminBootstrap, setOfferAdminBootstrap] = useState(false);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (busy) return;
     setBusy(true);
     setErr(null);
-    const res =
-      mode === "sign-in"
-        ? await authClient.signIn.email({ email: email.trim(), password })
-        : await authClient.signUp.email({
-            email: email.trim(),
-            password,
-            name: name.trim() || email.trim().split("@")[0],
-          });
+    const res = await authClient.signIn.email({ email: email.trim(), password });
     setBusy(false);
     if (res.error) {
       setErr(res.error.message || "Something went wrong. Check your details and try again.");
+      // First-run / post-wipe escape hatch: the allow-listed admin may
+      // create their own account (the server only permits admin emails).
+      if (isAdminEmail(email)) setOfferAdminBootstrap(true);
     }
     // On success the session store updates and the layout re-renders to children.
+  };
+
+  const bootstrapAdmin = async () => {
+    if (busy) return;
+    setBusy(true);
+    setErr(null);
+    const res = await authClient.signUp.email({
+      email: email.trim(),
+      password,
+      name: email.trim().split("@")[0],
+    });
+    setBusy(false);
+    if (res.error) setErr(res.error.message || "Could not create the admin account.");
   };
 
   return (
@@ -72,16 +85,11 @@ function HostAuthGate() {
       <Card className="w-full max-w-sm">
         <CardHeader>
           <p className="text-xs font-medium text-muted-foreground">The 1% Club · Host</p>
-          <CardTitle className="text-2xl">{mode === "sign-in" ? "Host sign in" : "Create host account"}</CardTitle>
-          <CardDescription>
-            {mode === "sign-in" ? "Sign in to manage your lobbies." : "Make an account to host and manage lobbies."}
-          </CardDescription>
+          <CardTitle className="text-2xl">Host sign in</CardTitle>
+          <CardDescription>Sign in to manage your lobbies.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={submit} className="space-y-3">
-            {mode === "sign-up" && (
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" autoComplete="name" />
-            )}
             <Input
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -97,26 +105,32 @@ function HostAuthGate() {
               required
               minLength={8}
               placeholder="Password (min 8 chars)"
-              autoComplete={mode === "sign-in" ? "current-password" : "new-password"}
+              autoComplete="current-password"
             />
 
             {err && <p className="text-sm text-red-300">{err}</p>}
 
             <Button type="submit" variant="gold" size="full" disabled={busy} className="mt-2">
-              {busy ? "Please wait…" : mode === "sign-in" ? "Sign in" : "Create account"}
+              {busy ? "Please wait…" : "Sign in"}
             </Button>
           </form>
 
-          <button
-            type="button"
-            onClick={() => {
-              setMode((m) => (m === "sign-in" ? "sign-up" : "sign-in"));
-              setErr(null);
-            }}
-            className="mt-4 w-full text-center text-xs text-white/50 hover:text-white"
-          >
-            {mode === "sign-in" ? "Need an account? Create one" : "Already have an account? Sign in"}
-          </button>
+          {offerAdminBootstrap && (
+            <Button
+              type="button"
+              variant="outline"
+              size="full"
+              disabled={busy}
+              className="mt-3"
+              onClick={() => void bootstrapAdmin()}
+            >
+              First time? Create the admin account
+            </Button>
+          )}
+
+          <p className="mt-4 text-center text-xs text-white/45">
+            Accounts are created by the event admin — ask them for your login.
+          </p>
         </CardContent>
       </Card>
     </main>

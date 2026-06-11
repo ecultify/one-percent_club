@@ -20,6 +20,8 @@ import { warmClubLogoGlbAsset } from "@/lib/warmClubLogoAsset";
 import { useVideoAutoplay } from "@/lib/useVideoAutoplay";
 import { useScrollScrolly } from "@/contexts/ScrollScrollyContext";
 import { PERF_FLAGS } from "@/lib/perfFlags";
+import { getQuestionSet, setQuestionVoSrc } from "./live/questionSets";
+import { QUESTION_SET_IDS, type QuestionSetId } from "@/lib/questionSetMeta";
 
 const Logo3D = dynamic(() => import("./Logo3D"), { ssr: false });
 
@@ -151,6 +153,10 @@ export default function GameFlow() {
   const prevScrollyFrameRef = useRef(0);
   const [phase, setPhase] = useState<Phase>("idle");
   const [player, setPlayer] = useState<PlayerData | null>(null);
+  /** Which live question set (A/B/C) this solo run plays — picked at RANDOM
+   *  when the player submits their details. The old per-question video
+   *  journey is retired (see handleDetailsSubmit). */
+  const [soloSet, setSoloSet] = useState<QuestionSetId>("A");
   /** `next dev` only: set by Ctrl+Shift+Y to mount QuizGame on the perfect-score end screen. */
   const [devChampionPreview, setDevChampionPreview] = useState(false);
   /** Remounts `QuizGame` after exiting to the instructions screen. */
@@ -399,15 +405,26 @@ export default function GameFlow() {
   const handleDetailsSubmit = useCallback(
     (data: PlayerData) => {
       setPlayer(data);
-      if (data.quizSet === "B") {
-        setPhase("coming-soon");
-        return;
-      }
+      // OLD JOURNEY (set picker → Set B "coming soon" gate) — retired now
+      // that single player runs a randomly-assigned live set:
+      // if (data.quizSet === "B") {
+      //   setPhase("coming-soon");
+      //   return;
+      // }
+      // Single player plays one of the three live sets, picked at random.
+      setSoloSet(QUESTION_SET_IDS[Math.floor(Math.random() * QUESTION_SET_IDS.length)]);
       // Warm-cache instructions VO before Instructions mounts.
       void prefetchAudioUrl("/sound/howitworks1percentclub.mp3");
       void unlockAudio().then(() => setPhase("instructions"));
     },
     [unlockAudio, prefetchAudioUrl],
+  );
+
+  /** Voice-over resolver for the solo run's set questions (replaces the old
+   *  per-question /sound files that belonged to the video journey). */
+  const soloVoForIndex = useCallback(
+    (idx: number) => setQuestionVoSrc(soloSet, idx),
+    [soloSet],
   );
 
   const handleBackFromComingSoon = useCallback(() => {
@@ -994,6 +1011,11 @@ export default function GameFlow() {
                 <QuizGame
                   key={quizSessionKey}
                   playerName={player?.name || "Player"}
+                  // Randomly-picked live set (A/B/C) for this solo run. The
+                  // legacy video-journey questions stay in QuizGame for
+                  // reference but are no longer played.
+                  questions={getQuestionSet(soloSet)}
+                  questionVoForIndex={soloVoForIndex}
                   devChampionPreview={devChampionPreview}
                   /* ─── DEV-ONLY: ?devq= quick-jump (REMOVE BEFORE PROD) ─── */
                   devStartFromQuestion={devStartQ}

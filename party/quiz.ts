@@ -338,22 +338,23 @@ export default class QuizServer implements Party.Server {
 
   private resetRoom() {
     this.clearRoundTimer();
+    // Snapshot the game being thrown away into the registry FIRST, so its
+    // results survive the reset. recordRoomEvent COALESCEs final_standings,
+    // so the follow-up "lobby" event below doesn't blank them out.
+    if (this.phase !== "lobby") void this.reportRoomEvent("ended");
     this.phase = "lobby";
     this.startedAt = null;
     this.currentQuestionIdx = 0;
     this.roundPhase = "asking";
     this.questionStartedAt = null;
     this.answeredThisRound.clear();
-    for (const p of this.participants.values()) {
-      p.score = 0;
-      p.answers = [];
-      p.correctness = [];
-      p.times = [];
-      p.eliminated = false;
-      p.eliminatedAtQuestion = null;
-      p.lateJoin = false;
-      p.scoring = true;
-    }
+    // Drop EVERY participant row instead of recycling them. Mid-game
+    // refreshes leave ghost rows behind (the refreshed phone reconnects with
+    // a new connection id while the old row is kept for standings) — if reset
+    // recycled rows, the same human would appear twice in the next lobby.
+    // Connected clients detect their id missing from the lobby snapshot and
+    // simply re-join with their CURRENT connection id (see /play, /watch).
+    this.participants.clear();
     this.broadcastState();
     void this.reportRoomEvent("lobby");
   }

@@ -39,6 +39,18 @@ export default function WatchRoomPage() {
     setJoined(true);
   }, [connected, joined, name, send]);
 
+  // After a host reset the server clears all participant/viewer rows. If we
+  // vanished from the room, fall back to a plain viewer (same connection id,
+  // so nothing duplicates) and clear any play-along promotion.
+  useEffect(() => {
+    if (!connected || !joined || !state || state.phase !== "lobby" || !myId) return;
+    const present =
+      state.viewers.some((v) => v.id === myId) || state.participants.some((p) => p.id === myId);
+    if (present) return;
+    setPlayAlong(false);
+    send({ type: "join-viewer", name });
+  }, [connected, joined, state, myId, name, send]);
+
   const startPlayAlong = () => {
     // Promote this viewer to an unscored participant. connection.id is
     // unchanged, so myId stays valid and LiveQuizPlayer finds "me".

@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import HostRoomCard from "@/components/live/HostRoomCard";
+import AdminUsersPanel from "@/components/live/AdminUsersPanel";
+import { authClient } from "@/lib/auth-client";
+import { isAdminEmail } from "@/lib/adminConfig";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -34,6 +37,8 @@ function generateRoomCode(): string {
  * localStorage, so the list follows them across devices.
  */
 export default function HostDashboardPage() {
+  const { data: session } = authClient.useSession();
+  const isAdmin = isAdminEmail(session?.user?.email);
   const [rooms, setRooms] = useState<DashRoom[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -198,6 +203,8 @@ export default function HostDashboardPage() {
             )}
           </>
         )}
+
+        {isAdmin && <AdminUsersPanel />}
       </div>
     </main>
   );
