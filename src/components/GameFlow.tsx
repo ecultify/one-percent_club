@@ -820,16 +820,11 @@ export default function GameFlow() {
                 ref={welcomeVideoRef}
                 poster={WELCOME_VIDEO_POSTER}
                 className={rotateWelcomeVideo ? undefined : "w-full h-full object-cover"}
-                // Portrait-phone teaser: render the rotated frame at its
-                // original aspect (contain, not cover) so the full widescreen
-                // video is visible — nothing cropped off the left/right when
-                // the phone is tilted to watch. Letterbox bars fall on the
-                // black container, so they read as intentional.
-                style={
-                  rotateWelcomeVideo
-                    ? { ...ROTATED_VIDEO_STYLE, objectFit: "contain" }
-                    : undefined
-                }
+                // Portrait-phone teaser: fill the rotated frame edge-to-edge
+                // (cover) so the video spans the full width sideways with no
+                // black margins/padding. ROTATED_VIDEO_STYLE already uses
+                // cover, so pass it straight through.
+                style={rotateWelcomeVideo ? ROTATED_VIDEO_STYLE : undefined}
                 autoPlay
                 playsInline
                 preload="auto"

@@ -40,7 +40,7 @@ function StatTile({ src, caption, delay = 0, imgScale = 1.22 }: StatTileProps) {
       className="flex w-full min-w-0 flex-col items-stretch sm:flex-1"
     >
       <div
-        className="relative mx-auto aspect-square w-full max-w-[210px] sm:max-w-[228px] md:max-w-[272px] lg:max-w-[308px] xl:max-w-[332px] rounded-xl p-[2.5px] shadow-[0_0_22px_-6px_rgba(228,207,106,0.4),0_12px_28px_-14px_rgba(0,0,0,0.72)]"
+        className="relative mx-auto aspect-square w-full max-w-[188px] sm:max-w-[228px] md:max-w-[272px] lg:max-w-[308px] xl:max-w-[332px] rounded-xl p-[2.5px] shadow-[0_0_22px_-6px_rgba(228,207,106,0.4),0_12px_28px_-14px_rgba(0,0,0,0.72)]"
         style={{ background: METALLIC_RIM_GRADIENT }}
       >
         <div
@@ -160,7 +160,9 @@ export default function ReadyToPlayGate({ onStart }: ReadyToPlayGateProps) {
         aria-hidden
       />
 
-      <div className="relative z-10 shrink-0 pt-14 md:pt-16" aria-hidden />
+      {/* Top spacer — larger on phones so the "Tonight's Stage" title clears
+          the centered navbar logo (they were touching). Desktop unchanged. */}
+      <div className="relative z-10 shrink-0 pt-24 md:pt-16" aria-hidden />
 
       <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-3 py-4 md:px-8 lg:px-12">
         <motion.div
