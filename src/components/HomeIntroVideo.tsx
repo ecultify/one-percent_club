@@ -8,6 +8,11 @@ const HOME_VIDEO_POSTER = "/questionscreenimages/FullVIDF2.mp4.poster.jpg";
 const LOOP_VIDEO_SRC = "/questionscreenimages/LastVid2.mp4";
 const LOOP_VIDEO_POSTER = "/questionscreenimages/LastVid2.mp4.poster.jpg";
 const DHAK_SRC = "/sound/dhak.wav";
+/** Mobile (portrait-phone) replacement for the intro video: a static
+ *  9:16 hero still. On phones we skip the FullVIDF2 video entirely — no
+ *  dhak stingers, no timed cues — and just show this image the instant the
+ *  audio gate is dismissed. */
+const HOME_IMAGE_MOBILE_SRC = "/questionscreenimages/home-intro-mobile.png";
 
 /** Dhak hits at these video timestamps (seconds). Tightened sequence per
  *  Abhinav's call: dhak #1 fires at the video start (T=0), dhak #2 fires
@@ -49,6 +54,19 @@ export const HOME_VIDEO_ENTER_EVENT = "homevideo:enter-cue";
  *      `EnterButtonHint` (rendered by GameFlow) starts a repeating
  *      golden-cursor sweep from the bottom-left as a click hint.
  */
+/** True on a phone-sized viewport (<768px). Drives the static-image swap. */
+function useIsMobileViewport(): boolean {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  return isMobile;
+}
+
 export default function HomeIntroVideo() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const loopVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -60,6 +78,8 @@ export default function HomeIntroVideo() {
   });
   const { audioUnlocked } = useNarration();
   const [loopActive, setLoopActive] = useState(false);
+  const isMobile = useIsMobileViewport();
+  const mobileCuesFiredRef = useRef(false);
 
   const playDhakHit = () => {
     try {
@@ -130,6 +150,7 @@ export default function HomeIntroVideo() {
   };
 
   useEffect(() => {
+    if (isMobile) return; // mobile shows a static image — no video to play
     if (!audioUnlocked) return;
     const v = videoRef.current;
     if (!v) return;
@@ -143,26 +164,57 @@ export default function HomeIntroVideo() {
     void v.play().catch(() => {
       playedRef.current = false;
     });
-  }, [audioUnlocked]);
+  }, [audioUnlocked, isMobile]);
+
+  // Mobile: the static image replaces the timed intro video, so there's no
+  // timeupdate to drive the cues. Once audio unlocks, fire the theme + Enter
+  // cues together after a short beat (so the music drop and the button reveal
+  // land on the same moment) — and deliberately NO dhak stingers.
+  useEffect(() => {
+    if (!isMobile) return;
+    if (!audioUnlocked) return;
+    if (mobileCuesFiredRef.current) return;
+    mobileCuesFiredRef.current = true;
+    const t = setTimeout(() => {
+      try {
+        window.dispatchEvent(new CustomEvent(HOME_VIDEO_THEME_EVENT));
+        window.dispatchEvent(new CustomEvent(HOME_VIDEO_ENTER_EVENT));
+      } catch {
+        // ignore
+      }
+    }, 500);
+    return () => clearTimeout(t);
+  }, [isMobile, audioUnlocked]);
 
   return (
     <div className="fixed inset-0 z-0 h-screen w-full overflow-hidden bg-black">
-      <video
-        ref={videoRef}
-        src={HOME_VIDEO_SRC}
-        poster={HOME_VIDEO_POSTER}
-        loop={false}
-        playsInline
-        preload="auto"
-        onTimeUpdate={handleTimeUpdate}
-        onEnded={handleEnded}
-        className="absolute inset-0 h-full w-full object-cover"
-        style={{
-          opacity: loopActive ? 0 : 1,
-          transition: `opacity ${CROSSFADE_S}s ease-in-out`,
-        }}
-        aria-hidden
-      />
+      {isMobile ? (
+        // Mobile: static 9:16 hero still in place of the intro video.
+        <img
+          src={HOME_IMAGE_MOBILE_SRC}
+          alt=""
+          aria-hidden
+          draggable={false}
+          className="absolute inset-0 h-full w-full select-none object-cover object-center"
+        />
+      ) : (
+        <video
+          ref={videoRef}
+          src={HOME_VIDEO_SRC}
+          poster={HOME_VIDEO_POSTER}
+          loop={false}
+          playsInline
+          preload="auto"
+          onTimeUpdate={handleTimeUpdate}
+          onEnded={handleEnded}
+          className="absolute inset-0 h-full w-full object-cover"
+          style={{
+            opacity: loopActive ? 0 : 1,
+            transition: `opacity ${CROSSFADE_S}s ease-in-out`,
+          }}
+          aria-hidden
+        />
+      )}
       {/* ─── Looping background video DISABLED (perf) ──────────────────
           The LastVid2.mp4 loop was a continuously-active second decoder
           competing with the quiz-side videos for hardware decode slots,
