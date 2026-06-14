@@ -138,10 +138,10 @@ function useLogoPositions() {
               // Mobile: centered brand mark in the top navbar strip. The
               // container scales from origin-top-left, so its visual centre
               // sits at (x + half*scale) — subtract half*scale to TRULY
-              // centre it horizontally. The y is chosen so the glyph drops
-              // fully into view (the old -95 pushed it off the top edge).
+              // centre it horizontally. y:0 keeps the canvas top flush with
+              // the viewport top so the glyph never clips above the edge.
               x: w / 2 - half * 0.4,
-              y: -40,
+              y: 0,
               scale: 0.4,
             }
           : {
@@ -820,7 +820,16 @@ export default function GameFlow() {
                 ref={welcomeVideoRef}
                 poster={WELCOME_VIDEO_POSTER}
                 className={rotateWelcomeVideo ? undefined : "w-full h-full object-cover"}
-                style={rotateWelcomeVideo ? ROTATED_VIDEO_STYLE : undefined}
+                // Portrait-phone teaser: render the rotated frame at its
+                // original aspect (contain, not cover) so the full widescreen
+                // video is visible — nothing cropped off the left/right when
+                // the phone is tilted to watch. Letterbox bars fall on the
+                // black container, so they read as intentional.
+                style={
+                  rotateWelcomeVideo
+                    ? { ...ROTATED_VIDEO_STYLE, objectFit: "contain" }
+                    : undefined
+                }
                 autoPlay
                 playsInline
                 preload="auto"
