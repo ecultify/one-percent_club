@@ -527,8 +527,12 @@ export default function GameFlow() {
     const t = setTimeout(() => setTiltNoticeDone(true), 2600);
     return () => clearTimeout(t);
   }, [showWelcomeVideo, portraitMobile, tiltNoticeDone]);
-  const rotateWelcomeVideo = portraitMobile;
-  const welcomeVideoHeldForTilt = showWelcomeVideo && portraitMobile && !tiltNoticeDone;
+  // Teaser now plays upright in its natural orientation — no 90° rotation and
+  // no "tilt your phone" notice. On a portrait phone it's letterboxed
+  // (object-contain, see below) so the FULL frame is visible with black
+  // margins top/bottom; it's never zoomed or cropped.
+  const rotateWelcomeVideo = false;
+  const welcomeVideoHeldForTilt = false;
 
   /** Keep welcome teaser playing — autoplay can stall after heavy 3D work,
    *  tab switches, or a hard reload landing on bfcache. Shared hook so the
@@ -819,11 +823,14 @@ export default function GameFlow() {
               <video
                 ref={welcomeVideoRef}
                 poster={WELCOME_VIDEO_POSTER}
-                className={rotateWelcomeVideo ? undefined : "w-full h-full object-cover"}
-                // Portrait-phone teaser: fill the rotated frame edge-to-edge
-                // (cover) so the video spans the full width sideways with no
-                // black margins/padding. ROTATED_VIDEO_STYLE already uses
-                // cover, so pass it straight through.
+                // Portrait phone: object-contain letterboxes the upright video
+                // so the WHOLE frame is visible (black bars top/bottom), never
+                // zoomed or cropped. Desktop keeps cover (landscape fills fine).
+                className={
+                  portraitMobile
+                    ? "w-full h-full object-contain"
+                    : "w-full h-full object-cover"
+                }
                 style={rotateWelcomeVideo ? ROTATED_VIDEO_STYLE : undefined}
                 autoPlay
                 playsInline
