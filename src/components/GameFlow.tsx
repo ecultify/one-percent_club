@@ -135,9 +135,14 @@ function useLogoPositions() {
       corner:
         w < 768
           ? {
-              x: w / 2 - half,
-              y: -95,
-              scale: 0.38,
+              // Mobile: centered brand mark in the top navbar strip. The
+              // container scales from origin-top-left, so its visual centre
+              // sits at (x + half*scale) — subtract half*scale to TRULY
+              // centre it horizontally. The y is chosen so the glyph drops
+              // fully into view (the old -95 pushed it off the top edge).
+              x: w / 2 - half * 0.4,
+              y: -40,
+              scale: 0.4,
             }
           : {
               x: 8,

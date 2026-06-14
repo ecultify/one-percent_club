@@ -847,7 +847,7 @@ export default function Instructions({ playerName, onStart }: InstructionsProps)
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.55, delay: 0.5, ease: EASE }}
-            className="pointer-events-auto absolute inset-x-0 bottom-[12vh] z-[22] flex flex-col items-center gap-4 px-6"
+            className="pointer-events-auto absolute inset-x-0 bottom-[27vh] md:bottom-[12vh] z-[22] flex flex-col items-center gap-4 px-6"
           >
             <motion.button
               onClick={onStart}
