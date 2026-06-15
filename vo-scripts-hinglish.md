@@ -164,7 +164,12 @@ Target: `/questionscreenimages/setquestions/vo/c2VO.mp3`
 Assi percent ka sawaal — duniya ke jhande. <break time="0.5s" /> Saamne paanch flags hain, paanch deshon ke naam ke saath. <break time="0.6s" /> Lekin inmein se ek flag… apne desh se match nahi karta. <break time="0.7s" /> Spot what is wrong — kaunsa flag galat hai? <break time="0.5s" /> Flag select kijiye.
 ```
 
-### C3 — 70% · *(reuse `a3VO.mp3` — same Nehru question)*
+### C3 — 70% · Mandela photo that cannot be real  *(replaced the Nehru placeholder, June 11 — needs its own VO; a3VO names Nehru and no longer fits)*
+Target: `/questionscreenimages/setquestions/vo/c3VO.mp3`
+
+```
+Ab thoda dhyaan se. <break time="0.4s" /> Saamne hain Nelson Mandela ki teen tasveerein. <break time="0.5s" /> Which of these photographs cannot be real? <break time="0.7s" /> Har photo ko gaur se parkhiye… inmein se ek aisi hai jo asli ho hi nahi sakti. <break time="0.5s" /> Photo select kijiye.
+```
 
 ### C4 — 60% · Starts with T, ends with T, has T in it
 Target: `/questionscreenimages/setquestions/vo/c4VO.mp3`

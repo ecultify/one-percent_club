@@ -17,18 +17,17 @@
  *    wrong or assets forced a change). Flagged to the client:
  *   1. Set A 60%: sequence ▲A ●C ■E ▲G ●I forces K■. Doc's options had no
  *      K■ and marked "B■" correct. Options fixed to include K■ (correct).
- *   2. Set C 70%: client provided no images/answer — PLACEHOLDER duplicate
- *      of the Nehru question (also used in Set A 70%). Swap when content
- *      arrives.
- *   3. Set C 80%: the wrong flag is the "Australia" tile (it shows New
+ *   2. Set C 80%: the wrong flag is the "Australia" tile (it shows New
  *      Zealand's flag). Doc marked "Option A" (Ireland), which is a
  *      correct flag. Correct answer wired = Australia (option D).
- *   4. Set C 30%: counting backwards from Dec 31 = Day 1, Day 215 lands in
+ *   3. Set C 30%: counting backwards from Dec 31 = Day 1, Day 215 lands in
  *      MAY (doc said August — copy-paste from Set 2's forward count).
- *   5. Set C 1%: the blanks _NPR___C__B__ force UNPREDICTABLE, but that
- *      word has two E's, so the doc's "no repeated letters" premise is
- *      impossible (and its answer was misspelled). Question reworded to
- *      drop the premise; answer = UNPREDICTABLE.
+ *   4. Set C 1%: blanks force UNPREDICTABLY — CONFIRMED by the client.
+ *      The doc's "no repeated letters" premise stays dropped from the
+ *      wording since UNPREDICTABLY repeats letters.
+ *
+ * Resolved June 11: Set C 70% now uses the client's Mandela image (split
+ * into 3 tiles); answer = Photo A per the client. Nehru placeholder gone.
  */
 import { QUESTIONS, type Question } from "@/components/QuizGame";
 import {
@@ -43,8 +42,7 @@ export type { QuestionSetId };
 
 const IMG = "/questionscreenimages/setquestions";
 
-/** Shared Nehru cannot-be-real question — Set A 70% and (as a placeholder,
- *  pending client content) Set C 70%. Photo C wears a smartwatch. */
+/** Nehru cannot-be-real question — Set A 70%. Photo C wears a smartwatch. */
 function nehruQuestion(id: number): Question {
   return {
     id,
@@ -352,8 +350,19 @@ const SET_C: Question[] = [
     correctIndex: 3,
     timeLimit: 30,
   },
-  // DEVIATION #3: PLACEHOLDER — client provided no content for Set 3's 70%.
-  nehruQuestion(3),
+  {
+    // Client content delivered June 11 (combined image split into 3 tiles).
+    // Photo A (the colour portrait) is the doctored one per the client's
+    // answer key; B (1950s badge photo) and C (with Tutu) are real.
+    id: 3,
+    percentage: 70,
+    question: "Which of these photographs of Nelson Mandela cannot be real?",
+    images: [`${IMG}/mandela-optA.png`, `${IMG}/mandela-optB.png`, `${IMG}/mandela-optC.png`],
+    imagesAreOptions: true,
+    options: ["Photo 1", "Photo 2", "Photo 3"],
+    correctIndex: 0,
+    timeLimit: 30,
+  },
   {
     id: 4,
     percentage: 60,
@@ -439,16 +448,17 @@ const SET_C: Question[] = [
   },
   {
     // DEVIATION #6: reworded — the doc's "no repeated letters" premise is
-    // impossible for the word its blanks force (UNPREDICTABLE has two E's).
+    // impossible for the word its blanks force (UNPREDICTABLY has two letters
+    // repeated). Answer confirmed as UNPREDICTABLY (the adverb form).
     id: 10,
     percentage: 1,
     question: "Fill in the blanks to complete the 13-letter English word. What is the word?",
     image: `${IMG}/c10-letter-blanks.png`,
     textInput: true,
     correctAnswerText:
-      "UNPREDICTABLE — _NPR___C__B__ filled in is U-N-P-R-E-D-I-C-T-A-B-L-E. Accept 'unpredictable' with minor typos. REJECT other words.",
-    displayAnswer: "UNPREDICTABLE",
-    passRegex: "un\\s*predict\\s*able",
+      "UNPREDICTABLY — _NPR___C__B__ filled in is U-N-P-R-E-D-I-C-T-A-B-L-Y. Accept 'unpredictably' with minor typos. REJECT other words.",
+    displayAnswer: "UNPREDICTABLY",
+    passRegex: "un\\s*predict\\s*ably",
     options: [],
     correctIndex: 0,
     timeLimit: 30,
@@ -505,7 +515,11 @@ const SET_VO_FILES: Record<QuestionSetId, (string | null)[]> = {
   C: [
     `${VO}/c1VO.mp3`,
     `${VO}/c2VO.mp3`,
-    `${VO}/a3VO.mp3`,
+    // C3 became the Mandela question (June 11) — a3VO says "Pandit Nehru",
+    // so it no longer fits. null = no narration until c3VO.mp3 is generated
+    // (script in vo-scripts-hinglish.md); then also set its duration in
+    // SET_VO_DURATION_MS.
+    null,
     `${VO}/c4VO.mp3`,
     `${VO}/c5VO.mp3`,
     `${VO}/c6VO.mp3`,

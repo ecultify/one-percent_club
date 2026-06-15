@@ -64,7 +64,7 @@ interface QuestionScreenProps {
   skipped?: boolean;
 }
 
-const OPTION_LABELS = ["A", "B", "C", "D"];
+const OPTION_LABELS = ["A", "B", "C", "D", "E", "F"];
 
 /**
  * Drifting brass sparkle field across the stage. Adds ambient motion so the
@@ -851,13 +851,15 @@ export default function QuestionScreen({
    *  control). Anywhere `paused` was checked before, `inputsLocked` now goes. */
   const inputsLocked = paused || timerPaused;
 
-  // Start the heads-up chip's 5s life once the question is actually answerable
-  // (timer live, not narrating). Also clears the moment an answer is locked.
+  // The heads-up chip lives for exactly 3s from when the question loads, then
+  // dismisses itself — so it's gone by the time the timer goes live and the
+  // player is actually answering. Same behaviour on every question. Also
+  // clears the moment an answer is locked.
   useEffect(() => {
-    if (!answerHintChip || inputsLocked || answered) return;
-    const t = setTimeout(() => setHintChipDismissed(true), 5000);
+    if (!answerHintChip || answered) return;
+    const t = setTimeout(() => setHintChipDismissed(true), 3000);
     return () => clearTimeout(t);
-  }, [answerHintChip, inputsLocked, answered]);
+  }, [answerHintChip, answered]);
 
   const togglePause = useCallback(() => {
     // No-op while the host is still narrating, after the answer is locked in,
@@ -1540,6 +1542,31 @@ export default function QuestionScreen({
                         </div>
                       </div>
                     </div>
+
+                    {/* ───────── HEADS-UP CHIP ─────────
+                        Transient alert that floats just BELOW the question
+                        panel (outside the box) when the question loads. Lives
+                        for 3s, then fades out as the timer goes live. Same
+                        placement + timing on every question. */}
+                    <AnimatePresence>
+                      {showHintChip && (
+                        <motion.div
+                          key="hint-chip"
+                          initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 6, scale: 0.97 }}
+                          transition={{ duration: 0.3, ease: EASE_OUT }}
+                          className="pointer-events-none absolute left-1/2 top-full z-30 mt-2.5 w-[min(94%,30rem)] -translate-x-1/2"
+                        >
+                          <div className="flex items-center justify-center gap-2.5 rounded-full border border-brass/50 bg-black/85 px-4 py-2 text-center shadow-[0_0_26px_rgba(228,207,106,0.3)] backdrop-blur-md">
+                            <span className="text-base leading-none" aria-hidden>{isTypedQuestion ? "⌨️" : "☝️"}</span>
+                            <p className="text-brass-bright text-[12px] md:text-[13px] font-medium leading-snug tracking-wide">
+                              {hintChipText}
+                            </p>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </motion.div>
 
                   {/* ───────── LIFELINE — one skip-a-question per game,
@@ -2258,29 +2285,6 @@ export default function QuestionScreen({
 
             </div>
             </div>
-
-            {/* ───────── HEADS-UP CHIP ─────────
-                Transient alert floated over the top of the question block when
-                the question becomes answerable; auto-dismisses after 5s. */}
-            <AnimatePresence>
-              {showHintChip && (
-                <motion.div
-                  key="hint-chip"
-                  initial={{ opacity: 0, y: -10, scale: 0.96 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -8, scale: 0.97 }}
-                  transition={{ duration: 0.3, ease: EASE_OUT }}
-                  className="pointer-events-none absolute left-1/2 top-3 z-30 w-[min(92%,30rem)] -translate-x-1/2"
-                >
-                  <div className="flex items-center justify-center gap-2.5 rounded-full border border-brass/50 bg-black/85 px-4 py-2 text-center shadow-[0_0_26px_rgba(228,207,106,0.3)] backdrop-blur-md">
-                    <span className="text-base leading-none" aria-hidden>{isTypedQuestion ? "⌨️" : "☝️"}</span>
-                    <p className="text-brass-bright text-[12px] md:text-[13px] font-medium leading-snug tracking-wide">
-                      {hintChipText}
-                    </p>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
 
             {/* ───────── LOCK OVERLAY ─────────
                 Live quiz: once the answer is locked and we're waiting on the

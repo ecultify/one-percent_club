@@ -65,5 +65,8 @@ export const SET_QUESTION_COUNT: Record<QuestionSetId, number> = {
 export const SET_VO_DURATION_MS: Record<QuestionSetId, (number | null)[]> = {
   A: [14_472, 6_766, 11_416, 20_010, 14_054, 15_073, 15_282, 15_491, 16_249, 15_543],
   B: [17_137, 9_875, 16_980, 14_107, 13_871, 16_014, 14_864, 20_794, 16_118, 14_525],
-  C: [16_144, 14_629, 11_416, 11_729, 16_536, 16_484, 13_819, 18_756, 14_525, 12_983],
+  // C3 (Mandela, June 11) has no VO yet — null skips narration for that
+  // round. Fill once c3VO.mp3 is generated (a3VO no longer fits: it names
+  // Nehru, the question is now Mandela).
+  C: [16_144, 14_629, null, 11_729, 16_536, 16_484, 13_819, 18_756, 14_525, 12_983],
 };
