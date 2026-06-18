@@ -92,7 +92,7 @@ const SET_A: Question[] = [
     percentage: 60,
     question: "Which figure and letter combination correctly completes the sequence?",
     wordSequence: ["▲ A", "● C", "■ E", "▲ G", "● I", "?"],
-    options: ["B ■", "K ■", "L ■", "Z ■"],
+    options: ["B ●", "K ■", "L ▲", "Z ■"],
     correctIndex: 1,
     timeLimit: 30,
   },

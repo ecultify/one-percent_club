@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { usePartyRoom } from "@/lib/usePartyRoom";
 import { rankParticipants, scoredParticipants, unscoredParticipants, totalResponseMs } from "@/lib/quizProtocol";
-import { ArrowLeft, Play, Square, RotateCcw, UserPlus, Mic, MicOff, TimerReset } from "lucide-react";
+import { ArrowLeft, Play, Square, RotateCcw, UserPlus, Mic, MicOff, Volume2, VolumeX, Eye, EyeOff, Hand, FastForward } from "lucide-react";
 import { getQuestionSet } from "@/components/live/questionSets";
 import AnalyticsPanel from "@/components/live/AnalyticsPanel";
 import { CopyButton } from "@/components/live/CopyButton";
@@ -95,7 +95,14 @@ export default function HostRoomPage() {
   const scored = scoredParticipants(state.participants);
   const ranked = rankParticipants(scored);
   const survivors = scored.filter((p) => !p.eliminated).length;
-  const playingAlong = unscoredParticipants(state.participants).length;
+  const playAlongs = unscoredParticipants(state.participants);
+  const playingAlong = playAlongs.length;
+  // Scored players (ranked) first, then unscored play-along viewers — so a
+  // play-along is listed BY NAME in the table, not just an aggregate count.
+  const tableRows: { p: (typeof ranked)[number]; playAlong: boolean }[] = [
+    ...ranked.map((p) => ({ p, playAlong: false })),
+    ...playAlongs.map((p) => ({ p, playAlong: true })),
+  ];
   const phaseLabel: Record<typeof state.phase, string> = {
     lobby: "Lobby",
     running: "Live",
@@ -162,26 +169,107 @@ export default function HostRoomPage() {
                 </Button>
               )}
               {state.phase === "running" && (
-                <Button
-                  variant="destructive"
-                  onClick={() =>
-                    confirm({
-                      title: "End the quiz now?",
-                      message: "The current standings are frozen.",
-                      confirmLabel: "End quiz",
-                      danger: true,
-                      action: () => send({ type: "end" }),
-                    })
-                  }
-                >
-                  <Square className="size-4" /> End quiz
-                </Button>
+                <>
+                  {/* Manual question flow (or host read-out): Start opens the
+                      clock; End reveals before it expires. */}
+                  {(state.manualControl || state.hostNarration) && state.roundPhase === "narrating" && (
+                    <Button variant="gold" onClick={() => send({ type: "open-clock" })}>
+                      <Play className="size-4" /> Start Q{state.currentQuestionIdx + 1}
+                    </Button>
+                  )}
+                  {state.manualControl && state.roundPhase === "asking" && (
+                    <Button variant="outline" onClick={() => send({ type: "end-question" })}>
+                      <FastForward className="size-4" /> End question
+                    </Button>
+                  )}
+                  <Button
+                    variant="destructive"
+                    onClick={() =>
+                      confirm({
+                        title: "End the quiz now?",
+                        message: "The current standings are frozen.",
+                        confirmLabel: "End quiz",
+                        danger: true,
+                        action: () => send({ type: "end" }),
+                      })
+                    }
+                  >
+                    <Square className="size-4" /> End quiz
+                  </Button>
+                </>
               )}
               {state.phase === "ended" && (
                 <Button variant="gold" onClick={() => send({ type: "reset" })}>
                   <RotateCcw className="size-4" /> Reset to lobby
                 </Button>
               )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Host controls — available ANYTIME (not lobby-locked). Manual
+            question flow, master mute, and the instructions-screen toggle. */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2">
+              <Hand className="size-4" /> Host controls
+            </CardTitle>
+            <CardDescription>Live controls you can change at any point during the game.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {/* Manual question control */}
+              <div className={`rounded-lg border p-4 ${state.manualControl ? "border-amber-400/40 bg-amber-950/15" : "border-white/10"}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-white">Manual questions</p>
+                  <Button
+                    size="sm"
+                    variant={state.manualControl ? "gold" : "outline"}
+                    onClick={() => send({ type: "set-room-control", manualControl: !state.manualControl })}
+                  >
+                    {state.manualControl ? "ON" : "OFF"}
+                  </Button>
+                </div>
+                <p className="mt-2 text-xs leading-relaxed text-white/55">
+                  You press <span className="font-mono text-white/70">Start</span> to open each question&apos;s timer and{" "}
+                  <span className="font-mono text-white/70">End question</span> to reveal early. Off = the server runs rounds automatically.
+                </p>
+              </div>
+
+              {/* Master mute */}
+              <div className={`rounded-lg border p-4 ${state.mutedAll ? "border-amber-400/40 bg-amber-950/15" : "border-white/10"}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-white">Mute everyone</p>
+                  <Button
+                    size="sm"
+                    variant={state.mutedAll ? "gold" : "outline"}
+                    onClick={() => send({ type: "set-room-control", mutedAll: !state.mutedAll })}
+                  >
+                    {state.mutedAll ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+                  </Button>
+                </div>
+                <p className="mt-2 text-xs leading-relaxed text-white/55">
+                  Silences the host voice-over AND the game-show audio for all players & viewers. Unmute individuals
+                  below in the participants table.
+                </p>
+              </div>
+
+              {/* Show instructions */}
+              <div className={`rounded-lg border p-4 ${state.showInstructions ? "border-amber-400/40 bg-amber-950/15" : "border-white/10"}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-white">Instructions screen</p>
+                  <Button
+                    size="sm"
+                    variant={state.showInstructions ? "gold" : "outline"}
+                    onClick={() => send({ type: "set-room-control", showInstructions: !state.showInstructions })}
+                  >
+                    {state.showInstructions ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
+                  </Button>
+                </div>
+                <p className="mt-2 text-xs leading-relaxed text-white/55">
+                  Whether joining players see the 3-page rules screen before the lobby. Affects players who join from now on.
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -253,10 +341,12 @@ export default function HostRoomPage() {
               </div>
             </div>
 
+            {/* Start / End question controls live in the status card at the top
+                (they cover both Read-out and Manual-questions modes). */}
             {state.phase === "running" && state.roundPhase === "narrating" && state.hostNarration && (
-              <Button variant="gold" size="lg" onClick={() => send({ type: "open-clock" })}>
-                <TimerReset className="size-4" /> Start question timer
-              </Button>
+              <p className="text-xs font-mono uppercase tracking-wider text-amber-300/80">
+                Read the question aloud, then press <span className="text-white/80">Start Q{state.currentQuestionIdx + 1}</span> above.
+              </p>
             )}
             {state.phase === "running" && state.roundPhase === "asking" && (
               <p className="text-xs font-mono uppercase tracking-wider text-emerald-300/80">Clock running…</p>
@@ -342,7 +432,7 @@ export default function HostRoomPage() {
             <CardTitle>Participants</CardTitle>
           </CardHeader>
           <CardContent>
-            {ranked.length === 0 ? (
+            {tableRows.length === 0 ? (
               <p className="text-sm text-white/55">No one yet. Share the /play link.</p>
             ) : (
               <Table>
@@ -356,11 +446,15 @@ export default function HostRoomPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {ranked.map((p) => (
+                  {tableRows.map(({ p, playAlong }) => {
+                    const userUnmuted = state.unmutedIds.includes(p.id);
+                    return (
                     <TableRow key={p.id}>
                       <TableCell className="font-medium text-white">{p.name}</TableCell>
                       <TableCell>
-                        {p.lateJoin ? (
+                        {playAlong ? (
+                          <span className="text-amber-300/90">Playing along</span>
+                        ) : p.lateJoin ? (
                           <span className="text-white/45">Spectator</span>
                         ) : p.eliminated ? (
                           <span className="text-red-300/90">Out · Q{(p.eliminatedAtQuestion ?? 0) + 1}</span>
@@ -372,25 +466,37 @@ export default function HostRoomPage() {
                           <span className="text-white/55">Ready</span>
                         )}
                       </TableCell>
-                      <TableCell className="font-mono text-white">{p.score}</TableCell>
+                      <TableCell className="font-mono text-white">{playAlong ? "—" : p.score}</TableCell>
                       <TableCell className="font-mono text-white/55">{(totalResponseMs(p) / 1000).toFixed(1)}s</TableCell>
                       <TableCell className="text-right">
-                        <button
-                          onClick={() =>
-                            confirm({
-                              title: `Remove ${p.name}?`,
-                              confirmLabel: "Remove",
-                              danger: true,
-                              action: () => send({ type: "kick", participantId: p.id }),
-                            })
-                          }
-                          className="text-xs text-muted-foreground hover:text-red-300"
-                        >
-                          Kick
-                        </button>
+                        <div className="flex items-center justify-end gap-3">
+                          {state.mutedAll && (
+                            <button
+                              onClick={() => send({ type: "set-user-muted", participantId: p.id, muted: userUnmuted })}
+                              className={`text-xs ${userUnmuted ? "text-amber-300 hover:text-amber-200" : "text-muted-foreground hover:text-emerald-300"}`}
+                              title={userUnmuted ? "Mute this user again" : "Unmute this user"}
+                            >
+                              {userUnmuted ? "Mute" : "Unmute"}
+                            </button>
+                          )}
+                          <button
+                            onClick={() =>
+                              confirm({
+                                title: `Remove ${p.name}?`,
+                                confirmLabel: "Remove",
+                                danger: true,
+                                action: () => send({ type: "kick", participantId: p.id }),
+                              })
+                            }
+                            className="text-xs text-muted-foreground hover:text-red-300"
+                          >
+                            Kick
+                          </button>
+                        </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}

@@ -40,7 +40,11 @@ function StatTile({ src, caption, delay = 0, imgScale = 1.22 }: StatTileProps) {
       className="flex w-full min-w-0 flex-col items-stretch sm:flex-1"
     >
       <div
-        className="relative mx-auto aspect-square w-full max-w-[188px] sm:max-w-[228px] md:max-w-[272px] lg:max-w-[308px] xl:max-w-[332px] rounded-xl p-[2.5px] shadow-[0_0_22px_-6px_rgba(228,207,106,0.4),0_12px_28px_-14px_rgba(0,0,0,0.72)]"
+        // Mobile (stacked column): cap the tile by viewport HEIGHT so all
+        // three tiles + the navbar spacer, title and button fit on short
+        // phones (e.g. 360×740) without the middle area needing to scroll.
+        // sm+ switches to a row, where the width caps below govern instead.
+        className="relative mx-auto aspect-square w-full max-w-[min(188px,calc((100dvh_-_280px)/3))] sm:max-w-[228px] md:max-w-[272px] lg:max-w-[308px] xl:max-w-[332px] rounded-xl p-[2.5px] shadow-[0_0_22px_-6px_rgba(228,207,106,0.4),0_12px_28px_-14px_rgba(0,0,0,0.72)]"
         style={{ background: METALLIC_RIM_GRADIENT }}
       >
         <div

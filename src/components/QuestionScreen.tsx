@@ -62,6 +62,10 @@ interface QuestionScreenProps {
   /** True when THIS question was passed via the lifeline — the lock overlay
    *  and reveal banners read "skipped" instead of right/wrong/time's-up. */
   skipped?: boolean;
+  /** Live-quiz only: this player is playing along UNSCORED (eliminated but
+   *  continuing for fun). Renders a small "playing along · unscored" note
+   *  right above the question block. */
+  unscored?: boolean;
 }
 
 const OPTION_LABELS = ["A", "B", "C", "D", "E", "F"];
@@ -796,6 +800,7 @@ export default function QuestionScreen({
   lifelineAvailable = false,
   onUseLifeline,
   skipped = false,
+  unscored = false,
 }: QuestionScreenProps) {
   // In the solo flow `revealed` is omitted, so correctness shows the moment
   // the answer is locked (revealed tracks answered). In the live flow the
@@ -821,13 +826,21 @@ export default function QuestionScreen({
   const [hintChipDismissed, setHintChipDismissed] = useState(false);
   const isTypedQuestion = question.textInput === true || question.numberInput === true;
   const showHintChip = answerHintChip && !hintChipDismissed && !answered && !revealed;
-  const hintChipText = isTypedQuestion
-    ? "Type your answer in the answer box, then hit Submit."
-    : "Choose carefully — once you select and submit, there's no changing your answer.";
   const isThreeImageOptions =
     question.imagesAreOptions === true &&
     question.images?.length === 3 &&
     !question.compactImageRow;
+  const hintChipText = isThreeImageOptions
+    ? "Swipe, or use the ‹ › arrows, to compare each photo — then tap a photo to lock it in."
+    : isTypedQuestion
+      ? "Type your answer in the answer box, then hit Submit."
+      : "Choose carefully — once you select and submit, there's no changing your answer.";
+  /** Carousel index for the one-photo-at-a-time image-comparison questions
+   *  (Nehru / Gandhi / Mandela). Keyed per question by the parent, so it
+   *  resets to the first photo each round. */
+  const [carouselIdx, setCarouselIdx] = useState(0);
+  /** Touch start X for swipe navigation of the image carousel. */
+  const touchStartXRef = useRef<number | null>(null);
 
   const [timeLeft, setTimeLeft] = useState(question.timeLimit);
   const [selected, setSelected] = useState<number | null>(null);
@@ -851,15 +864,22 @@ export default function QuestionScreen({
    *  control). Anywhere `paused` was checked before, `inputsLocked` now goes. */
   const inputsLocked = paused || timerPaused;
 
-  // The heads-up chip lives for exactly 3s from when the question loads, then
-  // dismisses itself — so it's gone by the time the timer goes live and the
-  // player is actually answering. Same behaviour on every question. Also
-  // clears the moment an answer is locked.
+  // The heads-up chip stays visible while the host narrates, then lives for
+  // exactly 4s AFTER the answer timer goes live (inputs unlock) before it
+  // dismisses itself — so players see it once they can actually answer. It
+  // also clears the moment an answer is locked.
   useEffect(() => {
-    if (!answerHintChip || answered) return;
-    const t = setTimeout(() => setHintChipDismissed(true), 3000);
+    if (!answerHintChip || answered || inputsLocked) return;
+    const t = setTimeout(() => setHintChipDismissed(true), 4000);
     return () => clearTimeout(t);
-  }, [answerHintChip, answered]);
+  }, [answerHintChip, answered, inputsLocked]);
+
+  // The carousel always opens on the FIRST photo (option A). It's keyed per
+  // question by the parent, so a fresh mount resets carouselIdx to 0. We do
+  // NOT sync it to `selectedAnswer` — that prop can briefly hold the PREVIOUS
+  // question's pick during the remount, which used to make the carousel open
+  // on the wrong photo (e.g. B). Tapping a photo selects the one in view, so
+  // no snap-to-selection is needed.
 
   const togglePause = useCallback(() => {
     // No-op while the host is still narrating, after the answer is locked in,
@@ -1511,6 +1531,23 @@ export default function QuestionScreen({
                     </div>
                   </motion.div>
 
+                  {/* ───────── PLAYING-ALONG · UNSCORED note — sits directly
+                        above the question block for eliminated players who
+                        chose to keep playing for fun (was a floating chip
+                        pinned to the top of the screen). */}
+                  {unscored && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.18, duration: 0.35, ease: EASE_OUT }}
+                      className="flex justify-center"
+                    >
+                      <div className="rounded-full border border-brass/40 bg-black/70 px-4 py-1.5 text-[10px] font-mono uppercase tracking-[0.3em] text-brass-bright backdrop-blur">
+                        Playing along · unscored
+                      </div>
+                    </motion.div>
+                  )}
+
                   {/* ───────── QUESTION PANEL — renders FIRST inside the
                         frame (above any media / word blocks / options). Gold
                         rim + dark bronze fill matches the registration modal. */}
@@ -1542,32 +1579,33 @@ export default function QuestionScreen({
                         </div>
                       </div>
                     </div>
-
-                    {/* ───────── HEADS-UP CHIP ─────────
-                        Transient alert that floats just BELOW the question
-                        panel (outside the box) when the question loads. Lives
-                        for 3s, then fades out as the timer goes live. Same
-                        placement + timing on every question. */}
-                    <AnimatePresence>
-                      {showHintChip && (
-                        <motion.div
-                          key="hint-chip"
-                          initial={{ opacity: 0, y: 8, scale: 0.96 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: 6, scale: 0.97 }}
-                          transition={{ duration: 0.3, ease: EASE_OUT }}
-                          className="pointer-events-none absolute left-1/2 top-full z-30 mt-2.5 w-[min(94%,30rem)] -translate-x-1/2"
-                        >
-                          <div className="flex items-center justify-center gap-2.5 rounded-full border border-brass/50 bg-black/85 px-4 py-2 text-center shadow-[0_0_26px_rgba(228,207,106,0.3)] backdrop-blur-md">
-                            <span className="text-base leading-none" aria-hidden>{isTypedQuestion ? "⌨️" : "☝️"}</span>
-                            <p className="text-brass-bright text-[12px] md:text-[13px] font-medium leading-snug tracking-wide">
-                              {hintChipText}
-                            </p>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
                   </motion.div>
+
+                  {/* ───────── HEADS-UP / ALERT CHIP ─────────
+                        Sits in normal flow BETWEEN the question block and the
+                        options (not an absolute overlay — which used to land in
+                        odd spots over the options on wide screens). Stays while
+                        the host narrates, then for 4s after the timer goes live
+                        (see the dismissal effect), then fades out. */}
+                  <AnimatePresence>
+                    {showHintChip && (
+                      <motion.div
+                        key="hint-chip"
+                        initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 6, scale: 0.97 }}
+                        transition={{ duration: 0.3, ease: EASE_OUT }}
+                        className="pointer-events-none flex w-full justify-center"
+                      >
+                        <div className="flex max-w-[min(94%,32rem)] items-center justify-center gap-2.5 rounded-full border border-brass/50 bg-black/85 px-4 py-2 text-center shadow-[0_0_26px_rgba(228,207,106,0.3)] backdrop-blur-md">
+                          <span className="shrink-0 text-base leading-none" aria-hidden>{isThreeImageOptions ? "👆" : isTypedQuestion ? "⌨️" : "☝️"}</span>
+                          <p className="text-brass-bright text-[12px] md:text-[13px] font-medium leading-snug tracking-wide">
+                            {hintChipText}
+                          </p>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
 
                   {/* ───────── LIFELINE — one skip-a-question per game,
                         unlocked from the 50% question onward. Two-tap confirm
@@ -1640,21 +1678,182 @@ export default function QuestionScreen({
                         </div>
                       )}
 
+                      {/* 1a-carousel. Image-COMPARISON questions (Nehru /
+                              Gandhi / Mandela): one big photo at a time so it's
+                              never shrunk to a thumbnail. Swipe, the ‹ › arrows,
+                              or the dots navigate; tapping a photo locks it in.
+                              The chrome (rim/glow/result) tracks the photo in
+                              view via answerChromeStyles(carouselIdx). */}
+                      {question.images && isThreeImageOptions && (() => {
+                        const total = question.images.length;
+                        const go = (dir: number) =>
+                          setCarouselIdx((c) => (c + dir + total) % total);
+                        const { rimBg, glow, innerBg, showResult, isCorrectOption, isSelected } =
+                          answerChromeStyles(carouselIdx, question, selected, selectedAnswer, revealed);
+                        const src = question.images[carouselIdx];
+                        const caption = question.imageCaptions?.[carouselIdx];
+                        const selectable = !answered && selected === null && !inputsLocked;
+                        return (
+                          <div className="w-full max-w-[460px] mx-auto" data-tour-id="options-area">
+                            <div className="relative flex items-center justify-center gap-2 sm:gap-3">
+                              {/* Prev arrow */}
+                              <button
+                                type="button"
+                                aria-label="Previous photo"
+                                onClick={() => go(-1)}
+                                className="z-20 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-brass/55 bg-black/70 text-lg text-brass-bright backdrop-blur transition-colors hover:border-brass/90 md:h-11 md:w-11 md:text-xl"
+                              >
+                                ‹
+                              </button>
+
+                              {/* Current photo */}
+                              <motion.button
+                                key={`carousel-${carouselIdx}`}
+                                type="button"
+                                initial={{ opacity: 0, scale: 0.97 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{ duration: 0.28, ease: EASE_OUT }}
+                                onClick={() => handleSelect(carouselIdx)}
+                                disabled={!selectable}
+                                onTouchStart={(e) => {
+                                  touchStartXRef.current = e.touches[0]?.clientX ?? null;
+                                }}
+                                onTouchEnd={(e) => {
+                                  const start = touchStartXRef.current;
+                                  touchStartXRef.current = null;
+                                  if (start === null) return;
+                                  const dx = (e.changedTouches[0]?.clientX ?? start) - start;
+                                  if (Math.abs(dx) > 40) go(dx < 0 ? 1 : -1);
+                                }}
+                                className={`relative block min-w-0 flex-1 appearance-none border-0 bg-transparent p-0 text-left ${
+                                  selectable ? "cursor-pointer" : "cursor-not-allowed"
+                                } ${inputsLocked && !answered ? "opacity-60 saturate-50" : ""}`}
+                                style={{
+                                  animation:
+                                    showResult && isSelected && !isCorrectOption
+                                      ? "wrong-shake 0.4s ease-in-out"
+                                      : undefined,
+                                }}
+                              >
+                                <div
+                                  className="relative rounded-xl p-[2.5px] overflow-hidden"
+                                  style={{ background: rimBg, boxShadow: glow }}
+                                >
+                                  <div
+                                    className="relative flex flex-col items-center gap-2 rounded-[10px] p-2 md:p-2.5"
+                                    style={{
+                                      backgroundColor: innerBg,
+                                      boxShadow:
+                                        "inset 0 1px 0 rgba(255,245,210,0.06), inset 0 -1px 0 rgba(0,0,0,0.55), inset 0 0 24px rgba(0,0,0,0.45)",
+                                    }}
+                                  >
+                                    <img
+                                      src={src}
+                                      alt={caption ?? `Photo ${carouselIdx + 1}`}
+                                      className="h-[260px] w-full rounded object-contain sm:h-[340px] md:h-[400px]"
+                                      draggable={false}
+                                    />
+                                    {caption && !isRedundantLetterCaption(caption, carouselIdx) && (
+                                      <span
+                                        className="rounded px-1.5 py-0.5 font-mono text-[10px] md:text-[11px] font-bold normal-case tracking-wide"
+                                        style={{
+                                          color: "#e7cf6a",
+                                          background: "rgba(0,0,0,0.55)",
+                                          textShadow: "0 1px 0 rgba(20,10,0,0.7)",
+                                        }}
+                                      >
+                                        {caption}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                {/* A/B/C badge for the photo in view */}
+                                <div
+                                  className="pointer-events-none absolute -top-2 -left-2 h-8 w-8 overflow-hidden rounded-md p-[1.5px] md:-top-2.5 md:-left-2.5 md:h-9 md:w-9"
+                                  style={{
+                                    background: METALLIC_RIM_STRONG,
+                                    boxShadow:
+                                      "0 2px 6px rgba(0,0,0,0.55), 0 0 12px rgba(228,207,106,0.4), 0 0 0 1px rgba(0,0,0,0.6)",
+                                  }}
+                                >
+                                  <div
+                                    className="relative flex h-full w-full items-center justify-center rounded-[5px] font-display text-xs font-bold md:text-sm"
+                                    style={{
+                                      background:
+                                        "linear-gradient(180deg, #7a5816 0%, #a6801f 10%, #d9b446 28%, #f4dc7c 46%, #f9e89a 52%, #e4c55a 62%, #b28622 82%, #6d4e13 100%)",
+                                      color: "#1a1105",
+                                      textShadow:
+                                        "0 1px 0 rgba(255,246,200,0.75), 0 -1px 0 rgba(36,22,0,0.45)",
+                                    }}
+                                  >
+                                    <span className="relative z-[3]">{OPTION_LABELS[carouselIdx]}</span>
+                                  </div>
+                                </div>
+                              </motion.button>
+
+                              {/* Next arrow */}
+                              <button
+                                type="button"
+                                aria-label="Next photo"
+                                onClick={() => go(1)}
+                                className="z-20 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-brass/55 bg-black/70 text-lg text-brass-bright backdrop-blur transition-colors hover:border-brass/90 md:h-11 md:w-11 md:text-xl"
+                              >
+                                ›
+                              </button>
+                            </div>
+
+                            {/* Dots + tap hint */}
+                            <div className="mt-3 flex flex-col items-center gap-1.5">
+                              <div className="flex items-center gap-2">
+                                {question.images.map((_, di) => (
+                                  <button
+                                    key={di}
+                                    type="button"
+                                    aria-label={`Show photo ${di + 1}`}
+                                    onClick={() => setCarouselIdx(di)}
+                                    className="h-2 rounded-full transition-all duration-200"
+                                    style={{
+                                      width: di === carouselIdx ? 20 : 8,
+                                      background:
+                                        di === carouselIdx ? "#f4dc7c" : "rgba(228,207,106,0.3)",
+                                    }}
+                                  />
+                                ))}
+                              </div>
+                              {selectable && (
+                                <span className="font-mono text-[9px] uppercase tracking-[0.22em] text-brass/70">
+                                  Tap the photo to lock it in
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
                       {/* 1b. Row of images with optional captions — Q3 (3 Gandhi
                               photos), Q6 (4 transport images). Caption sits
                               under each tile in a small mono label. */}
-                      {question.images && (
+                      {question.images && !isThreeImageOptions && (
                         <div
-                          className={isThreeImageOptions ? "w-full" : "w-full overflow-x-auto"}
+                          className={
+                            question.compactImageRow && !question.imagesAreOptions
+                              ? "w-full overflow-x-auto"
+                              : "w-full"
+                          }
                           data-tour-id={question.imagesAreOptions ? "options-area" : undefined}
                         >
                           <div
                             className={
-                              question.compactImageRow
-                                ? "flex flex-nowrap items-stretch justify-center gap-2 sm:gap-2.5 w-full min-w-0" +
-                                    (question.imagesAreOptions
-                                      ? " pt-3.5 pl-2.5 pr-1 sm:pt-4 sm:pl-3 md:pt-4 md:pl-3.5"
-                                      : "")
+                              // Image OPTIONS in a compact set (flags x5, clocks
+                              // x4): stack 2-by-2-by-1 instead of one cramped
+                              // horizontal row, so each photo reads clearly. The
+                              // lone odd tile spans the row and centers. The page
+                              // scrolls if the grid runs tall.
+                              question.compactImageRow && question.imagesAreOptions
+                                ? "grid grid-cols-2 gap-3 sm:gap-4 w-full max-w-xl mx-auto items-stretch justify-items-center pt-3.5 px-1 sm:pt-4 sm:px-2" +
+                                    (question.images.length % 2 === 1 ? " [&>*:last-child]:col-span-2" : "")
+                                : question.compactImageRow
+                                ? "flex flex-nowrap items-stretch justify-center gap-2 sm:gap-2.5 w-full min-w-0"
                                 : isThreeImageOptions
                                   // Phones: 2-up with the third tile spanning
                                   // (and centering in) the full row below, so
@@ -1671,7 +1870,10 @@ export default function QuestionScreen({
                                 const { rimBg, glow, innerBg, showResult, isCorrectOption, isSelected } =
                                   answerChromeStyles(i, question, selected, selectedAnswer, revealed);
                                 const imgH = question.compactImageRow
-                                  ? "h-[92px] sm:h-[108px] md:h-[120px] w-auto max-w-[min(22vw,120px)] md:max-w-[min(20vw,140px)]"
+                                  // Bigger now that compact image-OPTIONS sit in
+                                  // a 2-col grid (each cell ~half width) rather
+                                  // than five-across, so flags/clocks read clearly.
+                                  ? "h-[130px] sm:h-[170px] md:h-[190px] w-full max-w-[min(42vw,240px)] object-contain rounded"
                                   : isThreeImageOptions
                                     // Q2 (Gandhi photos): tall portraits → use
                                     // big boxes so the photos render at usable
@@ -1695,8 +1897,8 @@ export default function QuestionScreen({
                                     onClick={() => handleSelect(i)}
                                     disabled={answered || selected !== null || inputsLocked}
                                     className={`relative group border-0 bg-transparent p-0 appearance-none text-left ${
-                                      isThreeImageOptions
-                                        ? "w-full max-w-[240px] justify-self-center"
+                                      question.compactImageRow
+                                        ? "w-full max-w-[260px] justify-self-center"
                                         : "flex-shrink-0"
                                     } ${
                                       !answered && selected === null && !inputsLocked
@@ -2086,14 +2288,17 @@ export default function QuestionScreen({
                     // questions (Q3 cards/glasses, Q8 gymnast) fill the row
                     // instead of leaving an empty right half. 3-option
                     // questions get a tight 3-col grid; 4-option questions
-                    // (Q10) get the standard 4-col grid.
+                    // (Q10) get the standard 4-col grid. 5-option questions
+                    // (e.g. the names question) stack 2-by-2-by-1 so each
+                    // option reads clearly instead of cramming into one row —
+                    // the lone 5th tile spans the row and centers.
                     className={
                       question.options.length === 2
                         ? "grid grid-cols-2 gap-3 md:gap-4"
                         : question.options.length === 3
                           ? "grid grid-cols-3 gap-3 md:gap-4"
                           : question.options.length === 5
-                            ? "grid grid-cols-5 gap-1.5 md:gap-3"
+                            ? "grid grid-cols-2 gap-3 md:gap-4 [&>*:last-child]:col-span-2 [&>*:last-child]:mx-auto [&>*:last-child]:w-[calc(50%-0.5rem)]"
                             : "grid grid-cols-4 gap-3 md:gap-4"
                     }
                     data-tour-id="options-area"

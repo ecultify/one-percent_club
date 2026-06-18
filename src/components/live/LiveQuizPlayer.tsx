@@ -12,7 +12,7 @@ import { useNarration } from "@/components/NarrationProvider";
 import SpectatorView from "@/components/live/SpectatorView";
 import FinalStandings from "@/components/live/FinalStandings";
 import { getQuestionSet, setQuestionVoSrc } from "@/components/live/questionSets";
-import type { ClientMessage, RoomState } from "@/lib/quizProtocol";
+import { isMutedFor, type ClientMessage, type RoomState } from "@/lib/quizProtocol";
 
 /**
  * Live-quiz player. The SERVER drives one shared question for everyone
@@ -56,6 +56,9 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
    *  viewer who opted to play). Such players answer along but never score,
    *  eliminate or gate the round. */
   const scoring = me?.scoring ?? true;
+  /** Host master mute applies to me (silences VO + game-show audio), unless
+   *  I'm on the host's unmuted-exemption list. */
+  const roomMuted = isMutedFor(state, myId);
 
   // Local per-question UI state, reset whenever the shared question changes.
   const [answered, setAnswered] = useState(false);
@@ -136,7 +139,8 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
     // In "Read out" mode the HOST reads the question aloud during this
     // hold; with "Mute VO" the server never enters narrating. Either way,
     // no recorded VO plays. (Both are lobby-locked room settings.)
-    if (state.hostNarration || state.muteVo) return;
+    // The host master mute also silences VO for this player.
+    if (state.hostNarration || state.muteVo || roomMuted) return;
     const voSrc = setQuestionVoSrc(state.questionSet, globalIdx);
     if (!voSrc) return; // no VO recorded — the server skips narrating anyway
     const done = narrateUrl(`live-${state.questionSet}-q${globalIdx}-vo`, voSrc);
@@ -144,7 +148,7 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
     return () => {
       stopNarration();
     };
-  }, [state.phase, state.questionSet, state.hostNarration, state.muteVo, spectating, roundPhase, globalIdx, narrateUrl, stopNarration]);
+  }, [state.phase, state.questionSet, state.hostNarration, state.muteVo, roomMuted, spectating, roundPhase, globalIdx, narrateUrl, stopNarration]);
 
   const handleAnswer = useCallback(
     async (selectedIndex: number, typedAnswer?: string) => {
@@ -253,7 +257,7 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
   if (spectating && viewerChoice === null) {
     return (
       <main className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-black px-6 text-center">
-        <GameShowAudio playBgm suppressForVideo={false} slowMode={false} />
+        <GameShowAudio playBgm suppressForVideo={false} slowMode={false} forceMuted={roomMuted} />
         <div className="relative z-[1] max-w-md">
           <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-red-300/80">Eliminated</p>
           <h1 className="mt-2 text-3xl font-semibold text-[#fff4dc]">You&apos;re out of the running</h1>
@@ -289,6 +293,7 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
         name={name || me.name}
         banner="You're out — spectating"
         onPlayAlong={() => setViewerChoice("play")}
+        forceMuted={roomMuted}
       />
     );
   }
@@ -306,18 +311,12 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
 
   return (
     <main className="relative w-full h-screen overflow-hidden bg-black">
-      <GameShowAudio playBgm={state.phase === "running"} suppressForVideo={false} slowMode={false} />
+      <GameShowAudio playBgm={state.phase === "running"} suppressForVideo={false} slowMode={false} forceMuted={roomMuted} />
       <MuteButton />
-      {!scoring && (
-        <div className="pointer-events-none absolute left-1/2 top-4 z-40 -translate-x-1/2 rounded-full border border-brass/40 bg-black/70 px-4 py-1.5 text-[10px] font-mono uppercase tracking-[0.3em] text-brass-bright backdrop-blur">
-          Playing along · unscored
-        </div>
-      )}
-      {state.hostNarration && roundPhase === "narrating" && (
-        <div className="pointer-events-none absolute left-1/2 top-12 z-40 -translate-x-1/2 animate-pulse rounded-full border border-brass/50 bg-black/80 px-5 py-2 text-[11px] font-mono uppercase tracking-[0.25em] text-brass-bright backdrop-blur">
-          Host is reading the question — timer starts soon
-        </div>
-      )}
+      {/* The "host is reading the question" top chip was removed — the
+          question block already shows a "Host is speaking" chip while the VO
+          plays. The "playing along · unscored" note is now rendered by
+          QuestionScreen directly above the question block (see `unscored`). */}
       <QuestionScreen
         key={`q-${state.questionSet}-${globalIdx}`}
         question={currentQ}
@@ -343,6 +342,9 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
         paused={roundPhase === "narrating" || validating}
         // Live-only: transient heads-up chip + the locked-answer overlay.
         answerHintChip
+        // Unscored play-along note ("eliminated, still playing for fun"),
+        // rendered right above the question block instead of a floating chip.
+        unscored={!scoring}
         // Skip-a-question lifeline: one per game, scored live players only,
         // unlocked from the 50% question onward.
         lifelineAvailable={

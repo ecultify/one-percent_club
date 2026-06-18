@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import LiveAudioGate from "@/components/live/LiveAudioGate";
-import TiltScreenNotice, { ROTATED_VIDEO_STYLE, useIsPortraitMobile } from "@/components/RotateForVideo";
+import { useIsPortraitMobile } from "@/components/RotateForVideo";
 
 /**
  * Pre-game intro shown the moment a player opens the shared /play link,
@@ -22,6 +22,9 @@ import TiltScreenNotice, { ROTATED_VIDEO_STYLE, useIsPortraitMobile } from "@/co
 interface LivePlayerIntroProps {
   onReady: (name: string) => void;
   initialName?: string;
+  /** Host control: when false, the multi-page rules screen is skipped (teaser
+   *  goes straight to the name/audio gate). Defaults to true. */
+  showInstructions?: boolean;
 }
 
 const TEASER_SRC = "/teaser-video.mp4";
@@ -72,22 +75,20 @@ function IntroBackdrop() {
   );
 }
 
-export default function LivePlayerIntro({ onReady, initialName = "" }: LivePlayerIntroProps) {
+export default function LivePlayerIntro({ onReady, initialName = "", showInstructions = true }: LivePlayerIntroProps) {
   const [stage, setStage] = useState<"teaser" | "instructions" | "gate">("teaser");
   const [muted, setMuted] = useState(true);
   const [step, setStep] = useState(0);
+  /** Where the teaser hands off — to the rules screen, or straight to the gate
+   *  when the host has hidden the instructions. */
+  const afterTeaser: "instructions" | "gate" = showInstructions ? "instructions" : "gate";
 
-  // Portrait phones: hold the teaser behind a short "tilt your phone"
-  // notice, then play it rotated 90° so the landscape master fills the
-  // screen widescreen (rotation-lock friendly).
+  // Teaser plays upright in its natural orientation — identical to the
+  // homepage journey (GameFlow). No 90° rotation and no "tilt your phone"
+  // notice. On a portrait phone it's letterboxed (object-contain, see below)
+  // so the FULL frame is visible with black margins; it's never zoomed or
+  // cropped.
   const portraitMobile = useIsPortraitMobile();
-  const [tiltNoticeDone, setTiltNoticeDone] = useState(false);
-  useEffect(() => {
-    if (stage !== "teaser" || !portraitMobile || tiltNoticeDone) return;
-    const t = setTimeout(() => setTiltNoticeDone(true), 2600);
-    return () => clearTimeout(t);
-  }, [stage, portraitMobile, tiltNoticeDone]);
-  const teaserHeldForTilt = portraitMobile && !tiltNoticeDone;
 
   if (stage === "gate") {
     return <LiveAudioGate collectName requireName initialName={initialName} onReady={onReady} />;
@@ -96,21 +97,22 @@ export default function LivePlayerIntro({ onReady, initialName = "" }: LivePlaye
   if (stage === "teaser") {
     return (
       <main className="relative min-h-screen w-full overflow-hidden bg-black">
-        {teaserHeldForTilt ? (
-          <TiltScreenNotice />
-        ) : (
-          <video
-            src={TEASER_SRC}
-            poster={TEASER_POSTER}
-            autoPlay
-            muted={muted}
-            playsInline
-            preload="auto"
-            onEnded={() => setStage("instructions")}
-            className={portraitMobile ? undefined : "absolute inset-0 h-full w-full object-cover"}
-            style={portraitMobile ? ROTATED_VIDEO_STYLE : undefined}
-          />
-        )}
+        <video
+          src={TEASER_SRC}
+          poster={TEASER_POSTER}
+          autoPlay
+          muted={muted}
+          playsInline
+          preload="auto"
+          onEnded={() => setStage(afterTeaser)}
+          // Portrait phone: object-contain letterboxes the upright video so
+          // the full frame shows; desktop/landscape fills with object-cover.
+          className={
+            portraitMobile
+              ? "absolute inset-0 h-full w-full object-contain"
+              : "absolute inset-0 h-full w-full object-cover"
+          }
+        />
         <div className="pointer-events-none absolute inset-0" style={{ background: "rgba(3,2,8,0.25)" }} aria-hidden />
 
         {/* Unmute prompt — the teaser autoplays muted (no gesture yet); one tap
@@ -132,7 +134,7 @@ export default function LivePlayerIntro({ onReady, initialName = "" }: LivePlaye
 
         <button
           type="button"
-          onClick={() => setStage("instructions")}
+          onClick={() => setStage(afterTeaser)}
           className="absolute bottom-7 right-6 z-10 cursor-pointer rounded-full border border-white/25 bg-black/55 px-6 py-2.5 text-[12px] font-semibold uppercase tracking-[0.2em] text-white/85 backdrop-blur transition-colors hover:border-white/45 hover:text-white"
         >
           Skip intro →

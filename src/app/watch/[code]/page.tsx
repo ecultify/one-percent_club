@@ -9,6 +9,7 @@ import LiveQuizPlayer from "@/components/live/LiveQuizPlayer";
 import LiveAudioGate from "@/components/live/LiveAudioGate";
 import GameShowAudio from "@/components/GameShowAudio";
 import { useNarration } from "@/components/NarrationProvider";
+import { isMutedFor } from "@/lib/quizProtocol";
 
 /**
  * Viewer (spectator) view for a single room.
@@ -78,8 +79,10 @@ export default function WatchRoomPage() {
     return <LiveQuizPlayer roomCode={roomCode} state={state} send={send} name={name ?? "Viewer"} myId={myId} />;
   }
 
+  const roomMuted = isMutedFor(state, myId);
+
   if (state.phase === "running") {
-    return <SpectatorView state={state} name={name} onPlayAlong={startPlayAlong} />;
+    return <SpectatorView state={state} name={name} onPlayAlong={startPlayAlong} forceMuted={roomMuted} />;
   }
 
   if (state.phase === "ended") {
@@ -91,7 +94,7 @@ export default function WatchRoomPage() {
     <main className="min-h-screen bg-black text-foreground">
       {/* Theme starts right after the audio gate, same as the player flow;
           SpectatorView takes over the audio singleton once the quiz runs. */}
-      <GameShowAudio playBgm suppressForVideo={false} slowMode={false} />
+      <GameShowAudio playBgm suppressForVideo={false} slowMode={false} forceMuted={roomMuted} />
       <div className="mx-auto max-w-3xl px-6 py-8">
         <header className="border-b border-brass/15 pb-4">
           <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-brass/70">Spectating</p>

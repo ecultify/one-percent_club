@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Play, Square, RotateCcw, ArrowRight, Trash2 } from "lucide-react";
+import { Play, Square, RotateCcw, ArrowRight, Trash2, FastForward, Volume2, VolumeX } from "lucide-react";
 import { usePartyRoom } from "@/lib/usePartyRoom";
 import { scoredParticipants, unscoredParticipants } from "@/lib/quizProtocol";
 import type { RoomPhase } from "@/lib/quizProtocol";
@@ -105,11 +105,24 @@ export default function HostRoomCard({ code, hostKey, questionSet, onRemove, can
           )}
           {state?.phase === "running" && (
             <div className="space-y-2">
-              {state.hostNarration && state.roundPhase === "narrating" && (
+              {(state.hostNarration || state.manualControl) && state.roundPhase === "narrating" && (
                 <Button variant="gold" size="full" onClick={() => send({ type: "open-clock" })}>
-                  <Play className="size-4" /> Start Q{state.currentQuestionIdx + 1} timer
+                  <Play className="size-4" /> Start Q{state.currentQuestionIdx + 1}
                 </Button>
               )}
+              {state.manualControl && state.roundPhase === "asking" && (
+                <Button variant="outline" size="full" onClick={() => send({ type: "end-question" })}>
+                  <FastForward className="size-4" /> End question
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="full"
+                onClick={() => send({ type: "set-room-control", mutedAll: !state.mutedAll })}
+              >
+                {state.mutedAll ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+                {state.mutedAll ? "Unmute everyone" : "Mute everyone"}
+              </Button>
               <Button
                 variant="destructive"
                 size="full"

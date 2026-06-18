@@ -32,9 +32,11 @@ interface SpectatorViewProps {
   /** When provided, shows a "Play as viewer" CTA — an eliminated player can
    *  opt to keep playing the rest of the quiz unscored. */
   onPlayAlong?: () => void;
+  /** Host master mute applies to this spectator — silences VO + game audio. */
+  forceMuted?: boolean;
 }
 
-export default function SpectatorView({ state, name, banner, onPlayAlong }: SpectatorViewProps) {
+export default function SpectatorView({ state, name, banner, onPlayAlong, forceMuted = false }: SpectatorViewProps) {
   // Open by default on desktop; closed on phones, where the 18rem panel
   // would otherwise crush the question screen to a sliver.
   const [sidebarOpen, setSidebarOpen] = useState(
@@ -54,7 +56,7 @@ export default function SpectatorView({ state, name, banner, onPlayAlong }: Spec
     if (state.phase !== "running" || !narrating || !currentQ) return;
     // "Read out" mode: the host reads aloud instead. "Mute VO": the server
     // never narrates. No recorded VO in either case.
-    if (state.hostNarration || state.muteVo) return;
+    if (state.hostNarration || state.muteVo || forceMuted) return;
     const voSrc = setQuestionVoSrc(state.questionSet, idx);
     if (!voSrc) return; // no VO recorded for this question yet
     const done = narrateUrl(`live-${state.questionSet}-q${idx}-vo`, voSrc);
@@ -62,11 +64,11 @@ export default function SpectatorView({ state, name, banner, onPlayAlong }: Spec
     return () => {
       stopNarration();
     };
-  }, [state.phase, state.questionSet, state.hostNarration, state.muteVo, narrating, currentQ, idx, narrateUrl, stopNarration]);
+  }, [state.phase, state.questionSet, state.hostNarration, state.muteVo, forceMuted, narrating, currentQ, idx, narrateUrl, stopNarration]);
 
   return (
     <main className="relative flex h-screen w-full overflow-hidden bg-black">
-      <GameShowAudio playBgm={state.phase === "running"} suppressForVideo={false} slowMode={false} />
+      <GameShowAudio playBgm={state.phase === "running"} suppressForVideo={false} slowMode={false} forceMuted={forceMuted} />
       <MuteButton />
 
       {banner && (

@@ -109,6 +109,22 @@ export interface RoomState {
    *  lobby via "set-narration-options"; LOCKED once the quiz starts.
    *  Ignored while hostNarration is on (no VO plays in that mode anyway). */
   muteVo: boolean;
+  /** Host-driven question flow: when true, every round holds (clock frozen)
+   *  until the host presses "Start question" (open-clock), and the host can
+   *  press "End question" (end-question) to reveal before the clock expires.
+   *  When false the server runs rounds automatically. Toggleable anytime via
+   *  "set-room-control". */
+  manualControl: boolean;
+  /** Master mute set by the host: silences BOTH recorded VO and the game-show
+   *  audio for EVERYONE, except ids listed in `unmutedIds`. Toggleable anytime
+   *  via "set-room-control". Distinct from `muteVo` (lobby-only, VO-only). */
+  mutedAll: boolean;
+  /** Connection ids exempted from `mutedAll` — the host can re-enable sound for
+   *  specific people (e.g. a co-host or the room's speakers). */
+  unmutedIds: string[];
+  /** Whether joining players see the multi-page instructions screen in the
+   *  pre-game intro. Host-toggleable via "set-room-control"; defaults true. */
+  showInstructions: boolean;
   /** Question count for this room's set. */
   totalQuestions: number;
   /** Global 0-based question everyone is on. Server-driven while
@@ -208,10 +224,37 @@ export interface SetNarrationOptionsMessage {
   muteVo?: boolean;
 }
 
-/** Host-only: while a round is holding in "narrating" (host-narration
- *  mode), start the shared answer clock for everyone. */
+/** Host-only: while a round is holding in "narrating" (host-narration or
+ *  manual-control mode), start the shared answer clock for everyone. */
 export interface OpenClockMessage {
   type: "open-clock";
+}
+
+/** Host-only: force the current question to reveal NOW (before the clock
+ *  expires). Only valid in manual-control mode while roundPhase is "asking". */
+export interface EndQuestionMessage {
+  type: "end-question";
+}
+
+/** Host-only, anytime: live room controls that are NOT lobby-locked.
+ *  Omitted fields keep their current value. */
+export interface SetRoomControlMessage {
+  type: "set-room-control";
+  /** Manual question start/end flow. */
+  manualControl?: boolean;
+  /** Master mute (VO + game-show audio) for everyone. */
+  mutedAll?: boolean;
+  /** Show the instructions screen to joining players. */
+  showInstructions?: boolean;
+}
+
+/** Host-only: exempt (or re-include) one connection from the master mute.
+ *  muted=false → unmute this user (add to unmutedIds); muted=true → fold them
+ *  back under the master mute (remove from unmutedIds). */
+export interface SetUserMutedMessage {
+  type: "set-user-muted";
+  participantId: string;
+  muted: boolean;
 }
 
 export type ClientMessage =
@@ -226,7 +269,10 @@ export type ClientMessage =
   | JoinViewerMessage
   | ContinueAsViewerMessage
   | SetNarrationOptionsMessage
-  | OpenClockMessage;
+  | OpenClockMessage
+  | EndQuestionMessage
+  | SetRoomControlMessage
+  | SetUserMutedMessage;
 
 // ─── Server → Client messages ────────────────────────────────────────────
 
@@ -258,6 +304,13 @@ export type ServerMessage =
   | IdentityMessage
   | ErrorMessage
   | KickedMessage;
+
+/** Whether the host's master mute applies to THIS connection — true when
+ *  mutedAll is on and this id isn't on the unmuted exemption list. Clients use
+ *  it to silence both recorded VO and the game-show bed. */
+export function isMutedFor(state: Pick<RoomState, "mutedAll" | "unmutedIds">, myId: string | null): boolean {
+  return state.mutedAll && !(myId != null && state.unmutedIds.includes(myId));
+}
 
 // ─── Shared ranking helpers (client-side display) ─────────────────────────
 

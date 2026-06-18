@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import dynamic from "next/dynamic";
 // ─── DEV-ONLY: ?devq= quick-jump (REMOVE BEFORE PROD) ───
 import { useSearchParams } from "next/navigation";
 // ─── END DEV-ONLY ───
@@ -16,14 +15,13 @@ import GameShowAudio from "./GameShowAudio";
 import EnterButtonHint from "./EnterButtonHint";
 import TiltScreenNotice, { ROTATED_VIDEO_STYLE, useIsPortraitMobile } from "./RotateForVideo";
 import { useNarration } from "./NarrationProvider";
-import { warmClubLogoGlbAsset } from "@/lib/warmClubLogoAsset";
 import { useVideoAutoplay } from "@/lib/useVideoAutoplay";
 import { useScrollScrolly } from "@/contexts/ScrollScrollyContext";
 import { PERF_FLAGS } from "@/lib/perfFlags";
 import { getQuestionSet, setQuestionVoSrc } from "./live/questionSets";
 import { QUESTION_SET_IDS, type QuestionSetId } from "@/lib/questionSetMeta";
 
-const Logo3D = dynamic(() => import("./Logo3D"), { ssr: false });
+import LogoMark from "./LogoMark";
 
 /** Studio backdrop for registration (details) + instructions — rendered blurred beneath the content. */
 const DETAILS_INSTRUCTIONS_BG = `/questionscreenimages/${encodeURIComponent("Gemini_Generated_Image_i8attui8attui8at-ezremove.png")}`;
@@ -233,26 +231,6 @@ export default function GameFlow() {
 
   useEffect(() => { modelReadyRef.current = logoModelReady; }, [logoModelReady]);
 
-  // Perf-test: when Three.js is disabled, mark the logo as ready immediately
-  // so the phase machine (which waits for `logoModelReady` before flying to
-  // the corner) doesn't stall on a logo we never mount.
-  useEffect(() => {
-    if (!PERF_FLAGS.threeJs && !logoModelReady) {
-      setLogoModelReady(true);
-    }
-  }, [logoModelReady]);
-
-  // Warm Logo3D chunk + start full GLB decode (Draco) as soon as the page loads.
-  // By the time the user scrolls to "Enter" / clicks, the mesh is often already in memory.
-  useEffect(() => {
-    if (!PERF_FLAGS.threeJs) return;
-    void import("./Logo3D");
-    warmClubLogoGlbAsset();
-    void import("@/lib/logoModelPreload")
-      .then((m) => m.preloadClubLogoModel())
-      .catch((err) => console.warn("[GameFlow] club logo GLB preload failed:", err));
-  }, []);
-
   // Reset scroll to top on every page load / reload — never land on the CTA frame
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -284,17 +262,6 @@ export default function GameFlow() {
   // home intro video's tail (the "homevideo:enter-cue" event fires ~2s
   // before the video ends), so the CTA is fully visible right around the
   // time the video lands on its final frame.
-  //
-  // We still pre-warm the 3D club-logo model the moment audio unlocks (so
-  // it's ready in memory by the time the user actually clicks Enter), but
-  // we no longer reveal the button on audio-unlock.
-  useEffect(() => {
-    if (phase !== "idle") return;
-    if (!audioUnlocked) return;
-    void import("@/lib/logoModelPreload")
-      .then((m) => m.preloadClubLogoModel())
-      .catch(() => {});
-  }, [phase, audioUnlocked]);
 
   // Surface the Enter CTA when HomeIntroVideo signals it's near the end of
   // the home video. Window-level event keeps the contract loose so we don't
@@ -752,7 +719,7 @@ export default function GameFlow() {
       {/* ━━ Loading text ━━ */}
       {phase === "logo-center" && !logoModelReady && <DelayedLoadingText />}
 
-      {/* ━━ 3D Logo ━━
+      {/* ━━ Logo ━━
           Wrapped in a plain <div> that flips to display:none during any
           full-screen video overlay. This is a hard removal from the layout —
           guaranteed to never peek through a fading video (stronger than
@@ -794,13 +761,7 @@ export default function GameFlow() {
                   <div className="absolute -inset-2 rounded-2xl bg-brass/12 blur-lg" />
                 )}
 
-              {PERF_FLAGS.threeJs && (
-                <Logo3D
-                  settled={phase !== "logo-enter" && phase !== "logo-center"}
-                  onReady={handleLogoReady}
-                  className="w-full h-full"
-                />
-              )}
+              <LogoMark onReady={handleLogoReady} className="w-full h-full" />
             </motion.div>
           )}
         </AnimatePresence>

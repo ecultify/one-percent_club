@@ -86,6 +86,10 @@ interface PersistedRoom {
   questionSet?: QuestionSetId;
   hostNarration?: boolean;
   muteVo?: boolean;
+  manualControl?: boolean;
+  mutedAll?: boolean;
+  unmutedIds?: string[];
+  showInstructions?: boolean;
   currentQuestionIdx: number;
   roundPhase: RoundPhase;
   questionStartedAt: number | null;
@@ -134,6 +138,17 @@ export default class QuizServer implements Party.Server {
   /** Mute recorded VOs for the whole game (server timing unchanged).
    *  Lobby-locked. */
   private muteVo = false;
+  /** Manual question flow: rounds wait for the host's "Start question"
+   *  (open-clock) and can be ended early via "end-question". Toggleable
+   *  anytime by the host. */
+  private manualControl = false;
+  /** Master mute (VO + game-show audio) for everyone except `unmutedIds`.
+   *  Host-toggleable anytime. */
+  private mutedAll = false;
+  /** Connection ids exempted from the master mute. */
+  private unmutedIds = new Set<string>();
+  /** Whether joining players see the instructions screen. Default true. */
+  private showInstructions = true;
 
   // ── Synchronized round state ──────────────────────────────────────────
   private currentQuestionIdx = 0;
@@ -170,6 +185,10 @@ export default class QuizServer implements Party.Server {
     this.questionSet = isQuestionSetId(snap.questionSet) ? snap.questionSet : DEFAULT_QUESTION_SET;
     this.hostNarration = snap.hostNarration === true;
     this.muteVo = snap.muteVo === true;
+    this.manualControl = snap.manualControl === true;
+    this.mutedAll = snap.mutedAll === true;
+    this.unmutedIds = new Set(snap.unmutedIds ?? []);
+    this.showInstructions = snap.showInstructions !== false;
     this.currentQuestionIdx = snap.currentQuestionIdx;
     this.roundPhase = snap.roundPhase;
     this.questionStartedAt = snap.questionStartedAt;
@@ -186,9 +205,11 @@ export default class QuizServer implements Party.Server {
     // Rebuild the answered-this-round set from per-question logs so the round
     // still gates correctly (scored players who already answered this Q).
     const idx = snap.currentQuestionIdx;
+    // Include unscored play-along answerers too — the early-reveal gate now
+    // waits on them (see maybeRevealEarly).
     this.answeredThisRound = new Set(
       snap.participants
-        .filter((p) => p.scoring && p.correctness.length > idx && p.correctness[idx] != null)
+        .filter((p) => p.correctness.length > idx && p.correctness[idx] != null)
         .map((p) => p.id),
     );
     this.recoverTimer();
@@ -246,6 +267,17 @@ export default class QuizServer implements Party.Server {
         return;
       case "open-clock":
         this.requireHost(sender, () => this.hostOpenClock());
+        return;
+      case "end-question":
+        this.requireHost(sender, () => this.hostEndQuestion());
+        return;
+      case "set-room-control":
+        this.requireHost(sender, () =>
+          this.setRoomControl(msg.manualControl, msg.mutedAll, msg.showInstructions),
+        );
+        return;
+      case "set-user-muted":
+        this.requireHost(sender, () => this.setUserMuted(msg.participantId, msg.muted));
         return;
       default: {
         const _exhaustive: never = msg;
@@ -381,10 +413,48 @@ export default class QuizServer implements Party.Server {
     this.broadcastState();
   }
 
-  /** Host finished reading — start the shared answer clock. */
+  /** Host finished reading / pressed "Start question" — start the shared
+   *  answer clock. */
   private hostOpenClock() {
     if (this.phase !== "running" || this.roundPhase !== "narrating") return;
     this.openAnswerClock();
+  }
+
+  /** Host pressed "End question" — reveal now, before the clock expires.
+   *  Only meaningful while a question is actively being asked. */
+  private hostEndQuestion() {
+    if (this.phase !== "running" || this.roundPhase !== "asking") return;
+    this.beginReveal();
+  }
+
+  /** Live room controls (NOT lobby-locked): manual question flow, master mute,
+   *  and the instructions-screen toggle. Omitted fields are left unchanged. */
+  private setRoomControl(
+    manualControl?: boolean,
+    mutedAll?: boolean,
+    showInstructions?: boolean,
+  ) {
+    if (typeof manualControl === "boolean") {
+      const wasOn = this.manualControl;
+      this.manualControl = manualControl;
+      // Turning manual control OFF while a round is parked in the manual
+      // "narrating" hold (i.e. not a host-narration read-out) would otherwise
+      // strand the room — open the clock so automatic flow resumes.
+      if (wasOn && !manualControl && this.phase === "running" && this.roundPhase === "narrating" && !this.hostNarration) {
+        this.openAnswerClock();
+      }
+    }
+    if (typeof mutedAll === "boolean") this.mutedAll = mutedAll;
+    if (typeof showInstructions === "boolean") this.showInstructions = showInstructions;
+    this.broadcastState();
+  }
+
+  /** Exempt (muted=false) or re-include (muted=true) one connection from the
+   *  master mute. */
+  private setUserMuted(participantId: string, muted: boolean) {
+    if (muted) this.unmutedIds.delete(participantId);
+    else this.unmutedIds.add(participantId);
+    this.broadcastState();
   }
 
   private kickParticipant(participantId: string) {
@@ -417,9 +487,10 @@ export default class QuizServer implements Party.Server {
     this.revealStartedAt = null;
     this.answeredThisRound.clear();
     this.clearRoundTimer();
-    if (this.hostNarration) {
-      // Indefinite hold — the host starts the clock when they're done
-      // reading. Survives restarts (recoverTimer leaves it waiting).
+    if (this.hostNarration || this.manualControl) {
+      // Indefinite hold — the host starts the clock manually (reading the
+      // question aloud, or driving each question by hand). Survives restarts
+      // (recoverTimer leaves it waiting).
       this.roundPhase = "narrating";
       this.narratingStartedAt = Date.now();
       this.broadcastState();
@@ -492,9 +563,9 @@ export default class QuizServer implements Party.Server {
       if (remaining <= 0) this.beginReveal();
       else this.roundTimer = setTimeout(() => this.beginReveal(), remaining);
     } else if (this.roundPhase === "narrating") {
-      if (this.hostNarration) {
-        // Host-narration hold — no timer to rebuild; the round resumes when
-        // the (re-connected) host sends "open-clock".
+      if (this.hostNarration || this.manualControl) {
+        // Host-driven hold — no timer to rebuild; the round resumes when the
+        // (re-connected) host sends "open-clock".
         return;
       }
       const voMs = this.muteVo ? null : voHoldMs(this.questionSet, this.currentQuestionIdx);
@@ -528,24 +599,26 @@ export default class QuizServer implements Party.Server {
     this.beginRound();
   }
 
-  /** If every scored survivor has already answered, reveal immediately
-   *  instead of waiting out the clock. Unscored play-along viewers never
-   *  gate the round (a room of only unscored players just runs the clock,
-   *  and advanceRound ends the game). */
+  /** Reveal immediately once everyone who CAN answer has answered, instead of
+   *  waiting out the clock. "Everyone" = connected scored survivors AND
+   *  connected unscored play-along viewers — so the round stays interactive
+   *  for viewers too and doesn't cut them off (the 30s clock still caps it).
+   *  Pure /watch viewers can't answer, so they never gate. */
   private maybeRevealEarly() {
     if (this.phase !== "running" || this.roundPhase !== "asking") return;
-    let scoredActive = 0;
+    let active = 0;
     for (const p of this.participants.values()) {
-      if (!p.scoring || p.eliminated) continue;
-      // Only wait on players who are still connected — a disconnected
-      // survivor keeps their row for standings but the clock (not them)
-      // decides their fate.
+      // Only wait on people still connected — a disconnected row is retained
+      // for standings but the clock (not them) decides the round.
       if (!this.connectedIds.has(p.id)) continue;
-      scoredActive += 1;
-      // A connected scored survivor who hasn't answered yet — keep waiting.
+      const scoredSurvivor = p.scoring && !p.eliminated;
+      const playAlong = !p.scoring; // unscored viewer-player / continued-after-elimination
+      if (!scoredSurvivor && !playAlong) continue; // scored & eliminated, not continuing
+      active += 1;
+      // Someone who can still answer hasn't yet — keep the clock running.
       if (!this.answeredThisRound.has(p.id)) return;
     }
-    if (scoredActive === 0) return; // nobody connected to gate on — let the clock run
+    if (active === 0) return; // nobody connected to gate on — let the clock run
     this.beginReveal();
   }
 
@@ -637,8 +710,6 @@ export default class QuizServer implements Party.Server {
     p.times[idx] = Number.isFinite(elapsedMs) ? Math.max(0, Math.round(elapsedMs)) : null;
 
     if (scoredPath) {
-      // Only scored players gate the round and affect score/elimination.
-      this.answeredThisRound.add(connection.id);
       if (correct) {
         p.score += 1;
       } else {
@@ -646,10 +717,14 @@ export default class QuizServer implements Party.Server {
         p.eliminatedAtQuestion = idx;
       }
     }
-    // Unscored: answer recorded above; no score, no elimination, no gating.
+    // Track who has answered for the early-reveal gate — INCLUDING unscored
+    // play-along viewers, so the round stays open until they've answered too
+    // (the 30s clock still force-ends it). Only scored players affect
+    // score/elimination above; unscored answers are recorded only.
+    this.answeredThisRound.add(connection.id);
 
     this.broadcastState();
-    if (scoredPath) this.maybeRevealEarly();
+    this.maybeRevealEarly();
   }
 
   /** A live scored player spends their one skip-a-question lifeline. The
@@ -720,6 +795,10 @@ export default class QuizServer implements Party.Server {
       questionSet: this.questionSet,
       hostNarration: this.hostNarration,
       muteVo: this.muteVo,
+      manualControl: this.manualControl,
+      mutedAll: this.mutedAll,
+      unmutedIds: Array.from(this.unmutedIds),
+      showInstructions: this.showInstructions,
       totalQuestions: SET_QUESTION_COUNT[this.questionSet],
       currentQuestionIdx: this.currentQuestionIdx,
       roundPhase: this.roundPhase,
@@ -745,6 +824,10 @@ export default class QuizServer implements Party.Server {
       questionSet: this.questionSet,
       hostNarration: this.hostNarration,
       muteVo: this.muteVo,
+      manualControl: this.manualControl,
+      mutedAll: this.mutedAll,
+      unmutedIds: Array.from(this.unmutedIds),
+      showInstructions: this.showInstructions,
       currentQuestionIdx: this.currentQuestionIdx,
       roundPhase: this.roundPhase,
       questionStartedAt: this.questionStartedAt,

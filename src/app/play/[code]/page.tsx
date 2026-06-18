@@ -8,6 +8,7 @@ import LiveQuizPlayer from "@/components/live/LiveQuizPlayer";
 import LivePlayerIntro from "@/components/live/LivePlayerIntro";
 import GameShowAudio from "@/components/GameShowAudio";
 import { useNarration } from "@/components/NarrationProvider";
+import { isMutedFor } from "@/lib/quizProtocol";
 
 /** Shared muted home-video backdrop for the pre-game (gate + waiting lobby). */
 function LobbyBackdrop() {
@@ -85,11 +86,14 @@ export default function PlayRoomPage() {
   // primed AND we have a name. Skipped for the in-app flow (audio already
   // unlocked + name carried in the query). The gate at the end of the intro is
   // what finally fires onReady — same join contract as before.
+  const roomMuted = state ? isMutedFor(state, myId) : false;
+
   const needGate = !soundReady && (!audioUnlocked || !name.trim());
   if (needGate) {
     return (
       <LivePlayerIntro
         initialName={queryName}
+        showInstructions={state?.showInstructions ?? true}
         onReady={(enteredName) => {
           setName(enteredName || queryName || "Player");
           setSoundReady(true);
@@ -113,7 +117,7 @@ export default function PlayRoomPage() {
       <main className="relative min-h-screen flex items-center justify-center overflow-hidden bg-black text-foreground/80">
         {/* Theme starts the moment the player clears the gate (name + ready
             tap = the audio gesture), not when the host presses start. */}
-        <GameShowAudio playBgm suppressForVideo={false} slowMode={false} />
+        <GameShowAudio playBgm suppressForVideo={false} slowMode={false} forceMuted={roomMuted} />
         <LobbyBackdrop />
         <span className="relative z-[1]">
           Connecting to room <span className="ml-1 font-mono text-brass">{roomCode}</span>…
@@ -127,7 +131,7 @@ export default function PlayRoomPage() {
       <main className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-black px-6 text-center">
         {/* Keep the theme running through the waiting lobby; LiveQuizPlayer
             takes over the same audio singleton once the quiz starts. */}
-        <GameShowAudio playBgm suppressForVideo={false} slowMode={false} />
+        <GameShowAudio playBgm suppressForVideo={false} slowMode={false} forceMuted={roomMuted} />
         <LobbyBackdrop />
         <div className="relative z-[1]">
           <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-brass/80">Waiting for host</p>
@@ -156,7 +160,7 @@ export default function PlayRoomPage() {
     const ended = state.phase === "ended";
     return (
       <main className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-black px-6 text-center">
-        <GameShowAudio playBgm suppressForVideo={false} slowMode={false} />
+        <GameShowAudio playBgm suppressForVideo={false} slowMode={false} forceMuted={roomMuted} />
         <LobbyBackdrop />
         <div className="relative z-[1] max-w-md">
           <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-brass/80">

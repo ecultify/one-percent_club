@@ -62,6 +62,10 @@ type GameShowAudioProps = {
    *  Used during the elimination sequence so the music underscores the moment
    *  without overpowering the elimination stinger / coin tinks. */
   slowMode?: boolean;
+  /** Hard mute: when true the game-show bed is silenced entirely (host master
+   *  mute). Independent of playBgm/ducking so the host can kill all audio for
+   *  a room — or for everyone except a few unmuted users — at any time. */
+  forceMuted?: boolean;
   /**
    * Receives `unlockAudible` — used if the browser rejects *audible* autoplay on load.
    * (Some sessions still require any tap / key once — we try without that first.)
@@ -79,9 +83,12 @@ export default function GameShowAudio({
   playBgm,
   suppressForVideo,
   slowMode = false,
+  forceMuted = false,
   onThemeUnlockReady,
 }: GameShowAudioProps) {
   const { isSpeaking, hostVoiceDucksBgm } = useNarration();
+  const forceMutedRef = useRef(forceMuted);
+  forceMutedRef.current = forceMuted;
   const ref = useRef<HTMLAudioElement | null>(null);
   /** True after audible autoplay succeeded OR after a successful gesture unlock. */
   const themeAudibleRef = useRef(false);
@@ -199,6 +206,15 @@ export default function GameShowAudio({
     ref.current = el;
     if (!el) return;
 
+    // Host master mute: silence the bed entirely, overriding everything else.
+    if (forceMutedRef.current) {
+      el.pause();
+      el.muted = true;
+      el.volume = 0;
+      el.playbackRate = 1;
+      return;
+    }
+
     // Master gate: must have playBgm and NOT be in tab-background.
     // We no longer fully suppress on `suppressForVideo` — instead we keep a
     // quiet bed under the video so the room doesn't go dead, and so the
@@ -263,7 +279,7 @@ export default function GameShowAudio({
     if (el.paused) {
       void el.play().catch(() => {});
     }
-  }, [playBgm, suppressForVideo, slowMode, autoplaySettled, unlockAudible]);
+  }, [playBgm, suppressForVideo, slowMode, forceMuted, autoplaySettled, unlockAudible]);
 
   syncBgmRef.current = applyBgmState;
 
