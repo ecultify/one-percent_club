@@ -11,7 +11,7 @@ import { useNarration } from "@/components/NarrationProvider";
 import SpectatorView from "@/components/live/SpectatorView";
 import FinalStandings from "@/components/live/FinalStandings";
 import { getQuestionSet, setQuestionVoSrc } from "@/components/live/questionSets";
-import { isMutedFor, type ClientMessage, type RoomState } from "@/lib/quizProtocol";
+import { isMutedFor, potPrizeFromParticipants, type ClientMessage, type RoomState } from "@/lib/quizProtocol";
 
 /**
  * Live-quiz player. The SERVER drives one shared question for everyone
@@ -320,7 +320,7 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
         question={currentQ}
         questionNumber={globalIdx + 1}
         totalQuestions={state.totalQuestions}
-        potPrize={0}
+        potPrize={potPrizeFromParticipants(state.participants)}
         remainingPlayers={survivors}
         totalPlayers={state.participants.length}
         playerName={name || me.name}

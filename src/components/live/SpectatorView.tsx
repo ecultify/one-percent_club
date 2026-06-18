@@ -5,7 +5,7 @@ import QuestionScreen from "@/components/QuestionScreen";
 import GameShowAudio from "@/components/GameShowAudio";
 import { useNarration } from "@/components/NarrationProvider";
 import { getQuestionSet, setQuestionVoSrc } from "@/components/live/questionSets";
-import { rankParticipants, scoredParticipants, unscoredParticipants } from "@/lib/quizProtocol";
+import { potPrizeFromParticipants, rankParticipants, scoredParticipants, unscoredParticipants } from "@/lib/quizProtocol";
 import type { RoomState } from "@/lib/quizProtocol";
 
 /**
@@ -105,7 +105,7 @@ export default function SpectatorView({ state, name, banner, onPlayAlong, forceM
               question={currentQ}
               questionNumber={idx + 1}
               totalQuestions={state.totalQuestions}
-              potPrize={0}
+              potPrize={potPrizeFromParticipants(state.participants)}
               remainingPlayers={survivors}
               totalPlayers={state.participants.length}
               playerName={name || "Spectator"}

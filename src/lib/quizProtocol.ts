@@ -325,6 +325,22 @@ export function unscoredParticipants(participants: ParticipantState[]): Particip
   return participants.filter((p) => !p.scoring);
 }
 
+/** Every player who joins the lobby stakes this much; the stake stacks onto
+ *  the pot prize when they're eliminated. ₹1 lakh × 100 players = ₹1 crore. */
+export const POT_STAKE_PER_PLAYER = 100_000;
+
+/** Accumulated pot prize: ₹1 lakh for every player eliminated as a scored
+ *  player. `eliminatedAtQuestion >= 0` marks a genuine in-game elimination —
+ *  it stays set even if that player later opts to keep playing unscored, so
+ *  their stake remains in the pot. Survivors (null) and late joiners / pure
+ *  viewer-players (-1) never staked, so they don't count. */
+export function potPrizeFromParticipants(participants: ParticipantState[]): number {
+  const eliminated = participants.filter(
+    (p) => p.eliminatedAtQuestion != null && p.eliminatedAtQuestion >= 0,
+  ).length;
+  return eliminated * POT_STAKE_PER_PLAYER;
+}
+
 /** Total correct-answer response time for a participant, in ms. Used as
  *  the final tiebreak — fewer ms (faster) ranks higher. */
 export function totalResponseMs(p: ParticipantState): number {
