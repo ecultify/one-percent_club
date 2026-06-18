@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QuestionScreen from "@/components/QuestionScreen";
 import GameShowAudio from "@/components/GameShowAudio";
-import MuteButton from "@/components/MuteButton";
 import {
   playQuizSfx,
   checkAnswerWithOpenAI,
@@ -312,7 +311,6 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
   return (
     <main className="relative w-full h-screen overflow-hidden bg-black">
       <GameShowAudio playBgm={state.phase === "running"} suppressForVideo={false} slowMode={false} forceMuted={roomMuted} />
-      <MuteButton />
       {/* The "host is reading the question" top chip was removed — the
           question block already shows a "Host is speaking" chip while the VO
           plays. The "playing along · unscored" note is now rendered by

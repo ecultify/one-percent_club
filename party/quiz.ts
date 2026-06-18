@@ -521,7 +521,11 @@ export default class QuizServer implements Party.Server {
     this.roundPhase = "asking";
     this.questionStartedAt = Date.now();
     this.clearRoundTimer();
-    this.roundTimer = setTimeout(() => this.beginReveal(), QUESTION_TIME_MS + ANSWER_GRACE_MS);
+    // Manual control: no auto-end clock. The round stays "asking" until the
+    // host fires "end-question" (hostEndQuestion → beginReveal).
+    if (!this.manualControl) {
+      this.roundTimer = setTimeout(() => this.beginReveal(), QUESTION_TIME_MS + ANSWER_GRACE_MS);
+    }
     this.broadcastState();
     // Edge case: a round with no live players (everyone already out, or
     // nobody joined) — let the clock run; advance handles end-of-game.
@@ -559,6 +563,9 @@ export default class QuizServer implements Party.Server {
     const now = Date.now();
     this.clearRoundTimer();
     if (this.roundPhase === "asking" && this.questionStartedAt != null) {
+      // Manual control: no auto-end clock to rebuild — the round stays open
+      // until the host sends "end-question".
+      if (this.manualControl) return;
       const remaining = QUESTION_TIME_MS + ANSWER_GRACE_MS - (now - this.questionStartedAt);
       if (remaining <= 0) this.beginReveal();
       else this.roundTimer = setTimeout(() => this.beginReveal(), remaining);
@@ -606,6 +613,10 @@ export default class QuizServer implements Party.Server {
    *  Pure /watch viewers can't answer, so they never gate. */
   private maybeRevealEarly() {
     if (this.phase !== "running" || this.roundPhase !== "asking") return;
+    // Manual control: the host alone ends the round (via "end-question"). Never
+    // auto-reveal just because everyone has answered — this is what made a
+    // single-player room snap shut the instant that one player locked in.
+    if (this.manualControl) return;
     let active = 0;
     for (const p of this.participants.values()) {
       // Only wait on people still connected — a disconnected row is retained

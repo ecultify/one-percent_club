@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import QuestionScreen from "@/components/QuestionScreen";
 import GameShowAudio from "@/components/GameShowAudio";
-import MuteButton from "@/components/MuteButton";
 import { useNarration } from "@/components/NarrationProvider";
 import { getQuestionSet, setQuestionVoSrc } from "@/components/live/questionSets";
 import { rankParticipants, scoredParticipants, unscoredParticipants } from "@/lib/quizProtocol";
@@ -69,7 +68,6 @@ export default function SpectatorView({ state, name, banner, onPlayAlong, forceM
   return (
     <main className="relative flex h-screen w-full overflow-hidden bg-black">
       <GameShowAudio playBgm={state.phase === "running"} suppressForVideo={false} slowMode={false} forceMuted={forceMuted} />
-      <MuteButton />
 
       {banner && (
         <div className="pointer-events-none absolute left-1/2 top-4 z-40 -translate-x-1/2 rounded-full border border-red-500/40 bg-red-950/50 px-4 py-1.5 text-[10px] font-mono uppercase tracking-[0.3em] text-red-200 backdrop-blur">
