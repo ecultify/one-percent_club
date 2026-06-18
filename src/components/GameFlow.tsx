@@ -561,7 +561,14 @@ export default function GameFlow() {
       phase === "logo-fly-corner" ||
       showWelcomeVideo ||
       showPostVideoGate ||
-      showOverlay) &&
+      // Pre-quiz overlays (registration + instructions) keep the floating
+      // brand mark. NOTE: "playing" is deliberately excluded — the question
+      // screen renders its own centred logo (so the live multiplayer flow,
+      // which has no GameFlow logo, also gets one), and a second floating
+      // logo here would double it up.
+      phase === "details" ||
+      phase === "coming-soon" ||
+      phase === "instructions") &&
     // On the final ending video and final-result summary, the centerpiece
     // JSON animation owns the brand mark — hide the persistent top-left logo.
     !finalScreenActive;

@@ -1205,6 +1205,19 @@ export default function QuestionScreen({
         )}
       </AnimatePresence>
 
+      {/* ━━ Brand logo — centred at the very top, in the empty gap between the
+            host (left) and players (right) HUD chips. Lives inside the shared
+            QuestionScreen so BOTH journeys carry it: the normal homepage flow
+            (where GameFlow hides its floating logo during play) and the live
+            multiplayer flow (which has no GameFlow logo at all). ━━ */}
+      <img
+        src="/ikt-logo.png"
+        alt="India Ke Top 1%"
+        aria-hidden
+        draggable={false}
+        className="pointer-events-none select-none absolute left-1/2 top-0 z-[65] -translate-x-1/2 w-[120px] object-contain sm:w-[150px] md:w-[200px]"
+      />
+
       {/* ━━ TOP HUD STRIP — floats above the frame, near the top of the viewport.
             z-index bumped past the elim overlay (z-60) so the navbar pot-prize
             stays visible during the elimination card — required for the
@@ -1360,7 +1373,7 @@ export default function QuestionScreen({
             navbar. The board centers via m-auto inside a scroll container so
             a question taller than a phone screen SCROLLS instead of clipping
             top/bottom (the old items-center clipped overflow). ━━ */}
-      <div className="relative z-10 w-full h-full flex overflow-y-auto md:overflow-visible px-3 sm:px-6 md:px-8 pt-32 md:pt-36 pb-14 md:pb-20">
+      <div className="relative z-10 w-full h-full flex overflow-y-auto px-3 sm:px-6 md:px-8 pt-32 md:pt-36 pb-14 md:pb-20">
         {/* Perspective container — required for the rotateX/rotateY on
             the board below to actually produce a depth illusion. Without
             perspective on a parent, 3D rotations collapse to a flat skew. */}
@@ -1694,7 +1707,10 @@ export default function QuestionScreen({
                         const caption = question.imageCaptions?.[carouselIdx];
                         const selectable = !answered && selected === null && !inputsLocked;
                         return (
-                          <div className="w-full max-w-[460px] mx-auto" data-tour-id="options-area">
+                          // MOBILE ONLY — desktop shows all three photos in a
+                          // row (the block below). The carousel saves vertical
+                          // space on phones where 3 big photos won't fit.
+                          <div className="w-full max-w-[460px] mx-auto md:hidden" data-tour-id="options-area">
                             <div className="relative flex items-center justify-center gap-2 sm:gap-3">
                               {/* Prev arrow */}
                               <button
@@ -1833,12 +1849,16 @@ export default function QuestionScreen({
                       {/* 1b. Row of images with optional captions — Q3 (3 Gandhi
                               photos), Q6 (4 transport images). Caption sits
                               under each tile in a small mono label. */}
-                      {question.images && !isThreeImageOptions && (
+                      {question.images && (
                         <div
                           className={
-                            question.compactImageRow && !question.imagesAreOptions
-                              ? "w-full overflow-x-auto"
-                              : "w-full"
+                            // 3-photo comparison questions: this row is
+                            // DESKTOP ONLY (mobile uses the carousel above).
+                            isThreeImageOptions
+                              ? "hidden w-full md:block"
+                              : question.compactImageRow && !question.imagesAreOptions
+                                ? "w-full overflow-x-auto"
+                                : "w-full"
                           }
                           data-tour-id={question.imagesAreOptions ? "options-area" : undefined}
                         >
@@ -1897,8 +1917,8 @@ export default function QuestionScreen({
                                     onClick={() => handleSelect(i)}
                                     disabled={answered || selected !== null || inputsLocked}
                                     className={`relative group border-0 bg-transparent p-0 appearance-none text-left ${
-                                      question.compactImageRow
-                                        ? "w-full max-w-[260px] justify-self-center"
+                                      question.compactImageRow || isThreeImageOptions
+                                        ? "w-full max-w-[280px] justify-self-center"
                                         : "flex-shrink-0"
                                     } ${
                                       !answered && selected === null && !inputsLocked
