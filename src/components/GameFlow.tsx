@@ -138,14 +138,15 @@ function useLogoPositions() {
               // sits at (x + half*scale) — subtract half*scale to TRULY
               // centre it horizontally. y:0 keeps the canvas top flush with
               // the viewport top so the glyph never clips above the edge.
-              x: w / 2 - half * 0.4,
+              // Keep the x offset's multiplier in sync with `scale` below.
+              x: w / 2 - half * 0.6,
               y: 0,
-              scale: 0.4,
+              scale: 0.6,
             }
           : {
               x: 8,
               y: -8,
-              scale: 152 / LOGO_SIZE,
+              scale: 230 / LOGO_SIZE,
             },
     };
   }
