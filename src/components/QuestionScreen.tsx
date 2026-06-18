@@ -1871,7 +1871,16 @@ export default function QuestionScreen({
                               // scrolls if the grid runs tall.
                               question.compactImageRow && question.imagesAreOptions
                                 ? "grid grid-cols-2 gap-3 sm:gap-4 w-full max-w-xl mx-auto items-stretch justify-items-center pt-3.5 px-1 sm:pt-4 sm:px-2" +
-                                    (question.images.length % 2 === 1 ? " [&>*:last-child]:col-span-2" : "")
+                                    // DESKTOP ONLY: a 5-image option set (the flags)
+                                    // lays out in 2 rows (3 + 2) via a 3-col grid.
+                                    // Mobile keeps its 2-col stack untouched, and
+                                    // other compact sets (e.g. 4 clocks) stay 2-col
+                                    // at every breakpoint.
+                                    (question.images.length === 5 ? " md:grid-cols-3 md:max-w-3xl" : "") +
+                                    (question.images.length % 2 === 1
+                                      ? " [&>*:last-child]:col-span-2" +
+                                        (question.images.length === 5 ? " md:[&>*:last-child]:col-span-1" : "")
+                                      : "")
                                 : question.compactImageRow
                                 ? "flex flex-nowrap items-stretch justify-center gap-2 sm:gap-2.5 w-full min-w-0"
                                 : isThreeImageOptions
