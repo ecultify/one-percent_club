@@ -481,7 +481,7 @@ export default function EliminationReveal({
       initial={{ opacity: 0, y: 12, scale: 0.94 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ delay: 0.15, duration: 0.55, ease: EASE_OUT }}
-      className="relative rounded-2xl overflow-hidden border-2 border-brass/40 bg-black/55 shadow-[0_0_56px_-10px_rgba(228,207,106,0.5)] w-full min-h-[380px] md:min-h-[420px] flex"
+      className="relative rounded-2xl overflow-hidden border-2 border-brass/40 bg-black/55 shadow-[0_0_56px_-10px_rgba(228,207,106,0.5)] w-full min-h-[240px] md:min-h-[420px] flex"
     >
       <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[radial-gradient(ellipse_80%_100%_at_50%_0%,rgba(255,220,140,0.32),transparent_70%)] z-[1]" />
 
@@ -506,7 +506,7 @@ export default function EliminationReveal({
       {/* Replacement text card. Reads the round's contribution in the centre
           and the running pot total as a small chip in the bottom-right corner
           of the same brass-bordered "pot" panel. */}
-      <div className="relative z-[2] flex flex-1 flex-col items-center justify-center px-6 py-8 text-center">
+      <div className="relative z-[2] flex flex-1 flex-col items-center justify-center px-6 py-5 md:py-8 text-center">
         <motion.p
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
