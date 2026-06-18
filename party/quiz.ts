@@ -747,6 +747,10 @@ export default class QuizServer implements Party.Server {
    *  same trust model as answer grading). */
   private useLifeline(connection: Party.Connection, questionIdx: number) {
     if (this.phase !== "running" || this.roundPhase !== "asking") return;
+    // Never on the final (1%) question — it's always the last index. Guarded
+    // server-side too (not just the client) so the lifeline can't be used to
+    // skip the hardest question and survive to the end without answering it.
+    if (this.currentQuestionIdx === SET_QUESTION_COUNT[this.questionSet] - 1) return;
     const p = this.participants.get(connection.id);
     if (!p) return;
     if (!p.scoring || p.eliminated) return; // only a live scored player benefits

@@ -346,7 +346,14 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
         // Skip-a-question lifeline: one per game, scored live players only,
         // unlocked from the 50% question onward.
         lifelineAvailable={
-          scoring && !eliminated && !(me?.lifelineUsed ?? false) && currentQ.percentage <= 50
+          // Unlocked from the 50% question onward, but NEVER on the final 1%
+          // question — otherwise a player could skip the hardest question to
+          // survive to the end without answering it.
+          scoring &&
+          !eliminated &&
+          !(me?.lifelineUsed ?? false) &&
+          currentQ.percentage <= 50 &&
+          currentQ.percentage !== 1
         }
         onUseLifeline={handleUseLifeline}
         skipped={skippedThisRound}

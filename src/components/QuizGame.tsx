@@ -1951,8 +1951,10 @@ export default function QuizGame({
             selectedAnswer={gameState.playerAnswers[gameState.currentQuestion] ?? null}
             isCorrect={gameState.playerCorrect[gameState.currentQuestion] ?? false}
             paused={tourState !== "done" || narratingQuestion}
-            // Skip-a-question lifeline — one per game, from the 50% question on.
-            lifelineAvailable={!lifelineUsed && currentQ.percentage <= 50}
+            // Skip-a-question lifeline — one per game, from the 50% question on,
+            // but never on the final 1% question (no skipping the hardest one to
+            // survive to the end).
+            lifelineAvailable={!lifelineUsed && currentQ.percentage <= 50 && currentQ.percentage !== 1}
             onUseLifeline={handleUseLifeline}
             skipped={skippedQuestion === gameState.currentQuestion}
             afterRoundOverlay={
