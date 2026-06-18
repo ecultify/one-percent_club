@@ -136,11 +136,15 @@ function useLogoPositions() {
               // Mobile: centered brand mark in the top navbar strip. The
               // container scales from origin-top-left, so its visual centre
               // sits at (x + half*scale) — subtract half*scale to TRULY
-              // centre it horizontally. y:0 keeps the canvas top flush with
-              // the viewport top so the glyph never clips above the edge.
-              // Keep the x offset's multiplier in sync with `scale` below.
+              // centre it horizontally. Keep the x offset's multiplier in
+              // sync with `scale` below.
+              // y is a small negative nudge: the 16:9 logo is letterboxed in
+              // the square box, so ~39px of transparent space sits above the
+              // glyph. Pulling up by 22px lifts the glyph toward the top edge
+              // (so it stops overlapping the post-video "Tonight's Stage"
+              // gate) while the glyph still stays comfortably in view.
               x: w / 2 - half * 0.6,
-              y: 0,
+              y: -22,
               scale: 0.6,
             }
           : {
