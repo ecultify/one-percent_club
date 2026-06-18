@@ -19,16 +19,19 @@ const HOME_IMAGE_MOBILE_SRC = "/questionscreenimages/home-intro-mobile.png";
  *  3s later. Both use the same dhak.wav clip — the second one is "the
  *  other one" in the spec. */
 const DHAK_TIMES_S = [0, 3] as const;
-/** Game-show theme arms at this video timestamp (seconds). Tightened from
- *  T=12 to T=6 — the theme now drops 3s after the second dhak hit, giving
- *  the audience a clean dhak → dhak → theme rhythm in the first 6s. */
-const THEME_CUE_S = 6;
+/** Game-show theme arms at this video timestamp (seconds). The theme drops
+ *  ~1.5s after the second dhak hit, giving the audience a clean
+ *  dhak → dhak → theme rhythm. NOTE: this MUST land inside the intro video's
+ *  duration — the cue fires from `timeupdate`, so a value past the end never
+ *  fires during playback (the `handleEnded` fallback below catches that case).
+ *  The current FullVIDF2.mp4 is ~5s, so this sits comfortably before the end. */
+const THEME_CUE_S = 4.5;
 /** Absolute timestamp (seconds) at which the Enter CTA fades in. Concurrent
  *  with THEME_CUE_S so the theme drop and the button reveal land together —
  *  one beat, two events. (Previously the button waited until 2s before the
  *  end of the intro video, which made the user sit through the full clip
  *  before they could proceed.) */
-const ENTER_CUE_AT_S = 6;
+const ENTER_CUE_AT_S = 4.5;
 /** Crossfade duration (seconds) when handing off from the main intro
  *  video to the looping idle video. Short, just enough to mask the cut
  *  without feeling laggy. */
@@ -121,6 +124,18 @@ export default function HomeIntroVideo() {
   };
 
   const handleEnded = () => {
+    // Safety net: if the intro video is shorter than THEME_CUE_S / ENTER_CUE_AT_S
+    // (e.g. after a shorter video is swapped in), those timeupdate cues never
+    // reach their timestamp and the theme would silently never arm. Fire any
+    // unfired cue here so the music + CTA always land by the time the clip ends.
+    if (!cuesFiredRef.current.theme) {
+      cuesFiredRef.current.theme = true;
+      try {
+        window.dispatchEvent(new CustomEvent(HOME_VIDEO_THEME_EVENT));
+      } catch {
+        // ignore
+      }
+    }
     if (!cuesFiredRef.current.enter) {
       cuesFiredRef.current.enter = true;
       try {
