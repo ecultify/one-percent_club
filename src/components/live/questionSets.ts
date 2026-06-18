@@ -22,9 +22,9 @@
  *      correct flag. Correct answer wired = Australia (option D).
  *   3. Set C 30%: counting backwards from Dec 31 = Day 1, Day 215 lands in
  *      MAY (doc said August — copy-paste from Set 2's forward count).
- *   4. Set C 1%: blanks force UNPREDICTABLY — CONFIRMED by the client.
- *      The doc's "no repeated letters" premise stays dropped from the
- *      wording since UNPREDICTABLY repeats letters.
+ *   4. Set C 1%: blanks force UNPREDICTABLY — CONFIRMED by the client. The
+ *      original doc wording (incl. the "no repeated letters" clue) is used:
+ *      UNPREDICTABLY is a 13-letter isogram, so that clue is accurate.
  *
  * Resolved June 11: Set C 70% now uses the client's Mandela image (split
  * into 3 tiles); answer = Photo A per the client. Nehru placeholder gone.
@@ -447,12 +447,14 @@ const SET_C: Question[] = [
     timeLimit: 30,
   },
   {
-    // DEVIATION #6: reworded — the doc's "no repeated letters" premise is
-    // impossible for the word its blanks force (UNPREDICTABLY has two letters
-    // repeated). Answer confirmed as UNPREDICTABLY (the adverb form).
+    // Original client-doc wording (restored). UNPREDICTABLY is a 13-letter
+    // ISOGRAM (no repeated letters), so the doc's "no repeated letters" clue
+    // is accurate and is a fair hint — an earlier rewrite dropped it on the
+    // mistaken belief that the word repeats letters.
     id: 10,
     percentage: 1,
-    question: "Fill in the blanks to complete the 13-letter English word. What is the word?",
+    question:
+      "Surprisingly, there is only one word in the English language that can be made when you fill in these blanks so that the finished word contains no repeated letters. What is that word?",
     image: `${IMG}/c10-letter-blanks.png`,
     textInput: true,
     correctAnswerText:
