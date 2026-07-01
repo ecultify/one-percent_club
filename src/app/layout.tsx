@@ -29,8 +29,8 @@ const instructionsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "The 1% Club",
-  description: "The 1% Club interactive experience.",
+  title: "India Ke Top 1%",
+  description: "India Ke Top 1% — the 1% Club interactive experience.",
 };
 
 /** Game-show UI: lock the scale so iOS doesn't auto-zoom the page when an

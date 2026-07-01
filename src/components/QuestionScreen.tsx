@@ -840,17 +840,10 @@ export default function QuestionScreen({
     question.images?.length === 3 &&
     !question.compactImageRow;
   const hintChipText = isThreeImageOptions
-    ? "Swipe or use the ‹ › arrows to compare each photo, then tap your choice to lock it in."
+    ? "Scroll to compare all three photos, then tap your choice to lock it in."
     : isTypedQuestion
       ? "Type your answer in the answer box, then hit Submit."
       : "Choose carefully — once you select and submit, there's no changing your answer.";
-  /** Carousel index for the one-photo-at-a-time image-comparison questions
-   *  (Nehru / Gandhi / Mandela). Keyed per question by the parent, so it
-   *  resets to the first photo each round. */
-  const [carouselIdx, setCarouselIdx] = useState(0);
-  /** Touch start X for swipe navigation of the image carousel. */
-  const touchStartXRef = useRef<number | null>(null);
-
   const [timeLeft, setTimeLeft] = useState(question.timeLimit);
   const [selected, setSelected] = useState<number | null>(null);
   const [textInputValue, setTextInputValue] = useState("");
@@ -882,13 +875,6 @@ export default function QuestionScreen({
     const t = setTimeout(() => setHintChipDismissed(true), 4000);
     return () => clearTimeout(t);
   }, [answerHintChip, answered, inputsLocked]);
-
-  // The carousel always opens on the FIRST photo (option A). It's keyed per
-  // question by the parent, so a fresh mount resets carouselIdx to 0. We do
-  // NOT sync it to `selectedAnswer` — that prop can briefly hold the PREVIOUS
-  // question's pick during the remount, which used to make the carousel open
-  // on the wrong photo (e.g. B). Tapping a photo selects the one in view, so
-  // no snap-to-selection is needed.
 
   const togglePause = useCallback(() => {
     // No-op while the host is still narrating, after the answer is locked in,
@@ -1724,171 +1710,18 @@ export default function QuestionScreen({
                         </div>
                       )}
 
-                      {/* 1a-carousel. Image-COMPARISON questions (Nehru /
-                              Gandhi / Mandela): one big photo at a time so it's
-                              never shrunk to a thumbnail. Swipe, the ‹ › arrows,
-                              or the dots navigate; tapping a photo locks it in.
-                              The chrome (rim/glow/result) tracks the photo in
-                              view via answerChromeStyles(carouselIdx). */}
-                      {question.images && isThreeImageOptions && (() => {
-                        const total = question.images.length;
-                        const go = (dir: number) =>
-                          setCarouselIdx((c) => (c + dir + total) % total);
-                        const { rimBg, glow, innerBg, showResult, isCorrectOption, isSelected } =
-                          answerChromeStyles(carouselIdx, question, selected, selectedAnswer, revealed);
-                        const src = question.images[carouselIdx];
-                        const caption = question.imageCaptions?.[carouselIdx];
-                        const selectable = !answered && selected === null && !inputsLocked;
-                        return (
-                          // MOBILE ONLY — desktop shows all three photos in a
-                          // row (the block below). The carousel saves vertical
-                          // space on phones where 3 big photos won't fit.
-                          <div className="w-full max-w-[460px] mx-auto md:hidden" data-tour-id="options-area">
-                            <div className="relative flex items-center justify-center gap-2 sm:gap-3">
-                              {/* Prev arrow */}
-                              <button
-                                type="button"
-                                aria-label="Previous photo"
-                                onClick={() => go(-1)}
-                                className="z-20 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-brass/55 bg-black/70 text-lg text-brass-bright backdrop-blur transition-colors hover:border-brass/90 md:h-11 md:w-11 md:text-xl"
-                              >
-                                ‹
-                              </button>
-
-                              {/* Current photo */}
-                              <motion.button
-                                key={`carousel-${carouselIdx}`}
-                                type="button"
-                                initial={{ opacity: 0, scale: 0.97 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                transition={{ duration: 0.28, ease: EASE_OUT }}
-                                onClick={() => handleSelect(carouselIdx)}
-                                disabled={!selectable}
-                                onTouchStart={(e) => {
-                                  touchStartXRef.current = e.touches[0]?.clientX ?? null;
-                                }}
-                                onTouchEnd={(e) => {
-                                  const start = touchStartXRef.current;
-                                  touchStartXRef.current = null;
-                                  if (start === null) return;
-                                  const dx = (e.changedTouches[0]?.clientX ?? start) - start;
-                                  if (Math.abs(dx) > 40) go(dx < 0 ? 1 : -1);
-                                }}
-                                className={`relative block min-w-0 flex-1 appearance-none border-0 bg-transparent p-0 text-left ${
-                                  selectable ? "cursor-pointer" : "cursor-not-allowed"
-                                } ${inputsLocked && !answered ? "opacity-60 saturate-50" : ""}`}
-                                style={{
-                                  animation:
-                                    showResult && isSelected && !isCorrectOption
-                                      ? "wrong-shake 0.4s ease-in-out"
-                                      : undefined,
-                                }}
-                              >
-                                <div
-                                  className="relative rounded-xl p-[2.5px] overflow-hidden"
-                                  style={{ background: rimBg, boxShadow: glow }}
-                                >
-                                  <div
-                                    className="relative flex flex-col items-center gap-2 rounded-[10px] p-2 md:p-2.5"
-                                    style={{
-                                      backgroundColor: innerBg,
-                                      boxShadow:
-                                        "inset 0 1px 0 rgba(255,245,210,0.06), inset 0 -1px 0 rgba(0,0,0,0.55), inset 0 0 24px rgba(0,0,0,0.45)",
-                                    }}
-                                  >
-                                    <img
-                                      src={src}
-                                      alt={caption ?? `Photo ${carouselIdx + 1}`}
-                                      className="h-[260px] w-full rounded object-contain sm:h-[340px] md:h-[400px]"
-                                      draggable={false}
-                                    />
-                                    {caption && !isRedundantLetterCaption(caption, carouselIdx) && (
-                                      <span
-                                        className="rounded px-1.5 py-0.5 font-mono text-[10px] md:text-[11px] font-bold normal-case tracking-wide"
-                                        style={{
-                                          color: "#e7cf6a",
-                                          background: "rgba(0,0,0,0.55)",
-                                          textShadow: "0 1px 0 rgba(20,10,0,0.7)",
-                                        }}
-                                      >
-                                        {caption}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                                {/* A/B/C badge for the photo in view */}
-                                <div
-                                  className="pointer-events-none absolute -top-2 -left-2 h-8 w-8 overflow-hidden rounded-md p-[1.5px] md:-top-2.5 md:-left-2.5 md:h-9 md:w-9"
-                                  style={{
-                                    background: METALLIC_RIM_STRONG,
-                                    boxShadow:
-                                      "0 2px 6px rgba(0,0,0,0.55), 0 0 12px rgba(228,207,106,0.4), 0 0 0 1px rgba(0,0,0,0.6)",
-                                  }}
-                                >
-                                  <div
-                                    className="relative flex h-full w-full items-center justify-center rounded-[5px] font-display text-xs font-bold md:text-sm"
-                                    style={{
-                                      background:
-                                        "linear-gradient(180deg, #7a5816 0%, #a6801f 10%, #d9b446 28%, #f4dc7c 46%, #f9e89a 52%, #e4c55a 62%, #b28622 82%, #6d4e13 100%)",
-                                      color: "#1a1105",
-                                      textShadow:
-                                        "0 1px 0 rgba(255,246,200,0.75), 0 -1px 0 rgba(36,22,0,0.45)",
-                                    }}
-                                  >
-                                    <span className="relative z-[3]">{OPTION_LABELS[carouselIdx]}</span>
-                                  </div>
-                                </div>
-                              </motion.button>
-
-                              {/* Next arrow */}
-                              <button
-                                type="button"
-                                aria-label="Next photo"
-                                onClick={() => go(1)}
-                                className="z-20 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-brass/55 bg-black/70 text-lg text-brass-bright backdrop-blur transition-colors hover:border-brass/90 md:h-11 md:w-11 md:text-xl"
-                              >
-                                ›
-                              </button>
-                            </div>
-
-                            {/* Dots + tap hint */}
-                            <div className="mt-3 flex flex-col items-center gap-1.5">
-                              <div className="flex items-center gap-2">
-                                {question.images.map((_, di) => (
-                                  <button
-                                    key={di}
-                                    type="button"
-                                    aria-label={`Show photo ${di + 1}`}
-                                    onClick={() => setCarouselIdx(di)}
-                                    className="h-2 rounded-full transition-all duration-200"
-                                    style={{
-                                      width: di === carouselIdx ? 20 : 8,
-                                      background:
-                                        di === carouselIdx ? "#f4dc7c" : "rgba(228,207,106,0.3)",
-                                    }}
-                                  />
-                                ))}
-                              </div>
-                              {selectable && (
-                                <span className="font-mono text-[9px] uppercase tracking-[0.22em] text-brass/70">
-                                  Tap the photo to lock it in
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })()}
-
                       {/* 1b. Row of images with optional captions — Q3 (3 Gandhi
                               photos), Q6 (4 transport images). Caption sits
                               under each tile in a small mono label. */}
                       {question.images && (
                         <div
                           className={
-                            // 3-photo comparison questions: this row is
-                            // DESKTOP ONLY (mobile uses the carousel above).
+                            // 3-photo comparison questions (Nehru / Gandhi /
+                            // Mandela): a single responsive layout — stacked
+                            // one-below-another on mobile (scroll to reach all
+                            // three), 3-in-a-row on desktop.
                             isThreeImageOptions
-                              ? "hidden w-full md:block"
+                              ? "w-full"
                               : question.compactImageRow && !question.imagesAreOptions
                                 ? "w-full overflow-x-auto"
                                 : "w-full"
@@ -1920,7 +1753,10 @@ export default function QuestionScreen({
                                   // Phones: 2-up with the third tile spanning
                                   // (and centering in) the full row below, so
                                   // there's no orphaned empty cell.
-                                  ? "grid grid-cols-2 md:grid-cols-3 [&>*:last-child]:col-span-2 md:[&>*:last-child]:col-span-1 w-full max-w-4xl mx-auto gap-2.5 md:gap-3 items-stretch justify-items-center pt-3.5 px-1 sm:pt-4 sm:px-2"
+                                  // Mobile: one column, photos stacked top to
+                                  // bottom (the page scrolls). Desktop: all
+                                  // three across in a single row.
+                                  ? "grid grid-cols-1 md:grid-cols-3 w-full max-w-sm md:max-w-4xl mx-auto gap-3 md:gap-3 items-stretch justify-items-center pt-3.5 px-1 sm:pt-4 sm:px-2"
                                   : "flex flex-nowrap md:flex-wrap items-stretch justify-center gap-2.5 md:gap-3 min-w-max md:min-w-0" +
                                     (question.imagesAreOptions
                                       ? " pt-3.5 pl-2.5 pr-1 sm:pt-4 sm:pl-3 md:pt-4 md:pl-3.5"
@@ -1946,8 +1782,11 @@ export default function QuestionScreen({
                                     // empty letterboxing top/bottom. Smaller
                                     // boxes hug the actual content.
                                     ? question.id === 5
-                                      ? "h-[132px] sm:h-[190px] md:h-[210px] lg:h-[220px] w-full max-w-[min(38vw,260px)] md:max-w-[min(28vw,300px)] object-contain rounded"
-                                      : "h-[180px] sm:h-[320px] md:h-[360px] lg:h-[380px] w-full max-w-[min(40vw,260px)] md:max-w-[min(28vw,300px)] object-contain rounded"
+                                      // Mobile stacks one image per row, so let
+                                      // it fill the column; desktop keeps the
+                                      // narrower 3-across sizing.
+                                      ? "h-[150px] sm:h-[190px] md:h-[210px] lg:h-[220px] w-full max-w-[320px] md:max-w-[min(28vw,300px)] object-contain rounded"
+                                      : "h-[240px] sm:h-[320px] md:h-[360px] lg:h-[380px] w-full max-w-[340px] md:max-w-[min(28vw,300px)] object-contain rounded"
                                     : "h-[170px] sm:h-[252px] md:h-[300px] lg:h-[320px] w-auto max-w-[min(34vw,200px)] md:max-w-[min(30vw,280px)]";
                                 return (
                                   <motion.button
@@ -1959,9 +1798,11 @@ export default function QuestionScreen({
                                     onClick={() => handleSelect(i)}
                                     disabled={answered || selected !== null || inputsLocked}
                                     className={`relative group border-0 bg-transparent p-0 appearance-none text-left ${
-                                      question.compactImageRow || isThreeImageOptions
-                                        ? "w-full max-w-[280px] justify-self-center"
-                                        : "flex-shrink-0"
+                                      isThreeImageOptions
+                                        ? "w-full max-w-[360px] md:max-w-[300px] justify-self-center"
+                                        : question.compactImageRow
+                                          ? "w-full max-w-[280px] justify-self-center"
+                                          : "flex-shrink-0"
                                     } ${
                                       !answered && selected === null && !inputsLocked
                                         ? "cursor-pointer hover:-translate-y-0.5"
