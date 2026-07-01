@@ -1744,17 +1744,16 @@ export default function QuestionScreen({
                               // lone odd tile spans the row and centers. The page
                               // scrolls if the grid runs tall.
                               question.compactImageRow && question.imagesAreOptions
-                                ? "grid grid-cols-2 gap-3 sm:gap-4 w-full max-w-xl mx-auto items-stretch justify-items-center pt-3.5 px-1 sm:pt-4 sm:px-2" +
-                                    // DESKTOP ONLY: a 5-image option set (the flags)
-                                    // lays out in 2 rows (3 + 2) via a 3-col grid.
-                                    // Mobile keeps its 2-col stack untouched, and
-                                    // other compact sets (e.g. 4 clocks) stay 2-col
-                                    // at every breakpoint.
-                                    (question.images.length === 5 ? " md:grid-cols-3 md:max-w-3xl" : "") +
-                                    (question.images.length % 2 === 1
-                                      ? " [&>*:last-child]:col-span-2" +
-                                        (question.images.length === 5 ? " md:[&>*:last-child]:col-span-1" : "")
-                                      : "")
+                                // Image OPTIONS (flags, clocks, show posters):
+                                // stacked ONE-BELOW-ANOTHER on mobile (scroll to
+                                // compare, tap to pick) — same feel as the 3-photo
+                                // comparison questions — and a multi-column grid on
+                                // desktop (3-across for 5-image flag sets, 2-across
+                                // for 4-image sets).
+                                ? "grid grid-cols-1 gap-3 sm:gap-4 w-full max-w-sm mx-auto items-stretch justify-items-center pt-3.5 px-1 sm:pt-4 sm:px-2" +
+                                    (question.images.length === 5
+                                      ? " md:grid-cols-3 md:max-w-3xl"
+                                      : " md:grid-cols-2 md:max-w-2xl")
                                 : question.compactImageRow
                                 ? "flex flex-nowrap items-stretch justify-center gap-2 sm:gap-2.5 w-full min-w-0"
                                 : isThreeImageOptions
@@ -1776,10 +1775,10 @@ export default function QuestionScreen({
                                 const { rimBg, glow, innerBg, showResult, isCorrectOption, isSelected } =
                                   answerChromeStyles(i, question, selected, selectedAnswer, revealed);
                                 const imgH = question.compactImageRow
-                                  // Bigger now that compact image-OPTIONS sit in
-                                  // a 2-col grid (each cell ~half width) rather
-                                  // than five-across, so flags/clocks read clearly.
-                                  ? "h-[130px] sm:h-[170px] md:h-[190px] w-full max-w-[min(42vw,240px)] object-contain rounded"
+                                  // Stacked one-per-row on mobile → let each tile
+                                  // grow (fill most of the column); on desktop it
+                                  // sits in a 2/3-col grid, so cap the width there.
+                                  ? "h-[190px] sm:h-[220px] md:h-[190px] w-full max-w-[min(78vw,320px)] md:max-w-[240px] object-contain rounded"
                                   : isThreeImageOptions
                                     // Q2 (Gandhi photos): tall portraits → use
                                     // big boxes so the photos render at usable
@@ -1809,7 +1808,7 @@ export default function QuestionScreen({
                                       isThreeImageOptions
                                         ? "w-full max-w-[360px] md:max-w-[300px] justify-self-center"
                                         : question.compactImageRow
-                                          ? "w-full max-w-[280px] justify-self-center"
+                                          ? "w-full max-w-[340px] md:max-w-[260px] justify-self-center"
                                           : "flex-shrink-0"
                                     } ${
                                       !answered && selected === null && !inputsLocked
