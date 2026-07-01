@@ -1703,7 +1703,15 @@ export default function QuestionScreen({
                             <img
                               src={question.image}
                               alt="question media"
-                              className="max-h-[180px] md:max-h-[220px] w-auto object-contain rounded-md"
+                              className={
+                                question.largePromptImage
+                                  // Detail-heavy diagram: fill the width on
+                                  // mobile (page scrolls) and go large on
+                                  // desktop so labels + the hint line are
+                                  // clearly readable.
+                                  ? "w-full max-w-[min(92vw,340px)] md:max-w-[460px] max-h-[62vh] md:max-h-[520px] object-contain rounded-md"
+                                  : "max-h-[180px] md:max-h-[220px] w-auto object-contain rounded-md"
+                              }
                               draggable={false}
                             />
                           </div>

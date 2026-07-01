@@ -496,19 +496,40 @@ const SET_D: Question[] = [
     timeLimit: 30,
   },
   {
+    // Combined source (d2-oddoneout.png) split into five individual flag
+    // tiles so each is a real image option.
     id: 2,
     percentage: 80,
     question: "Find the odd one out.",
-    image: `${IMG}/d2-oddoneout.png`,
+    images: [
+      `${IMG}/d2-india.png`,
+      `${IMG}/d2-srilanka.png`,
+      `${IMG}/d2-southkorea.png`,
+      `${IMG}/d2-china.png`,
+      `${IMG}/d2-france.png`,
+    ],
+    imagesAreOptions: true,
+    compactImageRow: true,
+    imageCaptions: ["India", "Sri Lanka", "South Korea", "China", "France"],
     options: ["India", "Sri Lanka", "South Korea", "China", "France"],
     correctIndex: 4,
     timeLimit: 30,
   },
   {
+    // Combined source (d3-realornot.png) split into four individual show
+    // posters so each is a real image option. The show name is printed on
+    // each poster, so no separate caption is needed.
     id: 3,
     percentage: 70,
     question: "Which of these images cannot be real?",
-    image: `${IMG}/d3-realornot.png`,
+    images: [
+      `${IMG}/d3-biggboss.png`,
+      `${IMG}/d3-teawithkaran.png`,
+      `${IMG}/d3-laughterchefs.png`,
+      `${IMG}/d3-splitsvilla.png`,
+    ],
+    imagesAreOptions: true,
+    compactImageRow: true,
     options: ["Bigg Boss", "Tea with Karan", "Laughter Chefs", "Splitsvilla X6"],
     correctIndex: 1,
     timeLimit: 30,
@@ -575,6 +596,9 @@ const SET_D: Question[] = [
     question:
       "Who is sitting two places to the right of the person sitting to the left of the person wearing a brown shirt?",
     image: `${IMG}/d8-seating.png`,
+    // Detail-heavy diagram (8 labelled people + a hint line) — render it large
+    // so it's legible on desktop and mobile.
+    largePromptImage: true,
     textInput: true,
     correctAnswerText:
       "BEN. The person in the brown shirt is Alice; the person to her left, counted two places to the right, lands on Ben. Accept 'ben'. REJECT the other names.",

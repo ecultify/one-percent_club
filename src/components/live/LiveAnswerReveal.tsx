@@ -84,8 +84,8 @@ const REVEAL: Record<QuestionSetId, RevealEntry[]> = {
   ],
   D: [
     { answer: "Her husband", logic: "Amit is married to Chitra, so he is simply her husband. The details about Seema and Mohan are there to distract you." },
-    { answer: "France", image: "prompt", logic: "India, Sri Lanka, South Korea and China are all in Asia. France is in Europe, so it is the odd one out." },
-    { answer: "Tea with Karan", image: "prompt", logic: "The real talk show is 'Koffee with Karan'. 'Tea with Karan' is the made-up title, so it cannot be real." },
+    { answer: "France", image: "option", logic: "India, Sri Lanka, South Korea and China are all in Asia. France is in Europe, so it is the odd one out." },
+    { answer: "Tea with Karan", image: "option", logic: "The real talk show is 'Koffee with Karan'. 'Tea with Karan' is the made-up title, so it cannot be real." },
     { answer: "Bigger", logic: "Each word adds -er for its comparative form: Short becomes Shorter, Tall becomes Taller, so Big becomes Bigger." },
     { answer: "Fourth", logic: "Two places ahead of 6th is 4th, and immediately behind 3rd is also 4th. Both clues point to the same spot." },
     { answer: "J (July)", logic: "The letters are the first letters of the months from January to June. The next month is July, so the next letter is J." },

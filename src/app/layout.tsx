@@ -56,17 +56,13 @@ export default function RootLayout({
       style={{ fontFamily: "Arial, Helvetica, sans-serif" }}
     >
       <head>
-        <link
-          rel="preload"
-          href="/sound/The%201%20Club%20Theme%20Tune%20-%20Twin%20Petes%20(1).mp3"
-          as="audio"
-          type="audio/mpeg"
-        />
+        {/* The theme tune is NOT preloaded here: browsers block audio until a
+            user gesture, so a page-load <link rel="preload" as="audio"> can't
+            be "used" in time and logs a console warning. GameShowAudio fetches
+            it on demand once the user interacts. */}
         {/* Warm the Unicorn Studio SDK CDN connection so the script
             request hits an established socket. */}
         <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="anonymous" />
-{/* R2 preconnect removed — all videos are now served from same-origin
-            /public via Vercel CDN. Nothing fetches from R2 anymore. */}
       </head>
       <body className="antialiased" style={{ fontFamily: "Arial, Helvetica, sans-serif" }}>
         <NarrationProvider>

@@ -333,6 +333,10 @@ export interface Question {
   timeLimit: number;
   /** Single image shown above the question text (centered, golden rim). */
   image?: string;
+  /** Render the single prompt `image` at a larger size — for detail-heavy
+   *  diagrams (e.g. a seating chart with labels + a hint line) that are
+   *  illegible at the default small size. Desktop and mobile both scale up. */
+  largePromptImage?: boolean;
   /** Row of images shown above the question text, each in a golden rim. */
   images?: string[];
   /** When true, images are the only answers (no diamond option row); tap image i → option i. */
