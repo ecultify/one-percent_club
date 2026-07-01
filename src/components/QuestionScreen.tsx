@@ -48,6 +48,14 @@ interface QuestionScreenProps {
   selectedAnswer: number | null;
   isCorrect: boolean;
   paused?: boolean;
+  /** Live-quiz only: epoch ms when the SERVER opened this question's shared
+   *  answer clock (RoomState.questionStartedAt). When provided, the visible
+   *  countdown is derived from this anchor (timeLimit − elapsed) instead of a
+   *  purely local decrement — so every client matches the server's
+   *  authoritative clock and late joiners / reconnects sync to the real
+   *  remaining time. Omitted in the solo flow (no server), which keeps the
+   *  local tick. null while the round is narrating (clock not open yet). */
+  serverClockStartMs?: number | null;
   /** Overlay rendered inside the screen frame (e.g. after-round elimination reveal). */
   afterRoundOverlay?: ReactNode;
   /** Live-quiz only: show a transient heads-up chip over the question block
@@ -795,6 +803,7 @@ export default function QuestionScreen({
   selectedAnswer,
   isCorrect,
   paused = false,
+  serverClockStartMs = null,
   afterRoundOverlay,
   answerHintChip = false,
   lifelineAvailable = false,
@@ -831,7 +840,7 @@ export default function QuestionScreen({
     question.images?.length === 3 &&
     !question.compactImageRow;
   const hintChipText = isThreeImageOptions
-    ? "Swipe, or use the ‹ › arrows, to compare each photo — then tap a photo to lock it in."
+    ? "Swipe or use the ‹ › arrows to compare each photo, then tap your choice to lock it in."
     : isTypedQuestion
       ? "Type your answer in the answer box, then hit Submit."
       : "Choose carefully — once you select and submit, there's no changing your answer.";
@@ -1016,21 +1025,45 @@ export default function QuestionScreen({
       return;
     }
     hasCalledTimeUp.current = false;
+
+    const fireTimeUp = () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (!hasCalledTimeUp.current) {
+        hasCalledTimeUp.current = true;
+        onTimeUp();
+      }
+    };
+
+    if (serverClockStartMs != null) {
+      // Live flow: derive the remaining time from the SERVER's shared clock
+      // start (epoch ms) so every client agrees and a late joiner / reconnect
+      // syncs to the real remaining time. Recomputing from the clock each tick
+      // (rather than decrementing) also self-corrects after a backgrounded tab
+      // throttles the interval. Ticks faster than 1s so the snap to the right
+      // second is immediate.
+      const sync = () => {
+        const remaining = question.timeLimit - (Date.now() - serverClockStartMs) / 1000;
+        const next = Math.min(question.timeLimit, Math.max(0, Math.ceil(remaining)));
+        setTimeLeft(next);
+        if (next <= 0) fireTimeUp();
+      };
+      sync(); // correct immediately on mount / when the clock opens
+      intervalRef.current = setInterval(sync, 250);
+      return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+    }
+
+    // Solo flow (no server): plain local decrement.
     intervalRef.current = setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) {
-          if (intervalRef.current) clearInterval(intervalRef.current);
-          if (!hasCalledTimeUp.current) {
-            hasCalledTimeUp.current = true;
-            onTimeUp();
-          }
+          fireTimeUp();
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [answered, onTimeUp, paused, timerPaused, answerChecking]);
+  }, [answered, onTimeUp, paused, timerPaused, answerChecking, serverClockStartMs, question.timeLimit]);
 
   const handleSelect = useCallback(
     (index: number) => {
@@ -2478,7 +2511,7 @@ export default function QuestionScreen({
                     {skipped ? (
                       <div className="rounded-lg border border-brass/55 bg-black/75 backdrop-blur-sm px-5 py-2 text-center shadow-[0_0_22px_rgba(228,207,106,0.3)]">
                         <p className="text-brass-bright text-xs md:text-sm font-semibold tracking-wide">
-                          🛟 Lifeline used — you&apos;re safe this round. The answer was{" "}
+                          🛟 Lifeline used — you&apos;re safe this round. The correct answer was{" "}
                           <span className="font-semibold">{correctAnswerLabel(question)}</span>
                         </p>
                       </div>

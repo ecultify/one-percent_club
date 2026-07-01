@@ -34,17 +34,17 @@ const INSTRUCTIONS = [
   {
     kicker: "How it works",
     title: "One question at a time",
-    body: "The host runs the room. Each round a single question appears on your screen at the same moment for everyone.",
+    body: "The host creates and manages the lobby. In each round, a single question appears on everyone's screen at the same time.",
   },
   {
     kicker: "Beat the clock",
-    title: "Lock your answer before time runs out",
-    body: "A timer counts down on every question. Type or tap your answer and submit before it hits zero — once you submit, it's locked in.",
+    title: "Lock your answer before the time runs out",
+    body: "A timer counts down on every question. Type or tap your answer and submit before the timer hits zero. Once you submit, it's locked in.",
   },
   {
     kicker: "Survive",
-    title: "A wrong answer puts you out",
-    body: "Get it wrong or run out of time and you're eliminated, then watch the rest play out. Stay sharp and you could be the 1%.",
+    title: "A wrong answer eliminates you from the game",
+    body: "Get it wrong or run out of time and you're eliminated, then watch the rest play out. Stay sharp and you could be amongst the Top 1%.",
   },
 ];
 

@@ -568,7 +568,7 @@ export default function EliminationReveal({
       transition={{ type: "spring", bounce: 0.4, delay: 0.3 }}
       className="flex items-center justify-center gap-0 px-3 py-1.5 rounded-full bg-[var(--success)]/10 border border-[var(--success)]/30"
     >
-      <span className="text-[var(--success)] text-[10px] font-semibold uppercase tracking-wider">Survived</span>
+      <span className="text-[var(--success)] text-[10px] font-semibold uppercase tracking-wider">Success</span>
     </motion.div>
   ) : (
     <motion.div
@@ -757,7 +757,7 @@ export default function EliminationReveal({
                   transition={{ type: "spring", bounce: 0.4, delay: 0.3 }}
                   className="flex items-center justify-center gap-0 px-3 py-1.5 rounded-full bg-[var(--success)]/8 border border-[var(--success)]/20"
                 >
-                  <span className="text-[var(--success)] text-[10px] font-semibold uppercase tracking-wider">Survived</span>
+                  <span className="text-[var(--success)] text-[10px] font-semibold uppercase tracking-wider">Success</span>
                 </motion.div>
               ) : (
                 <motion.div

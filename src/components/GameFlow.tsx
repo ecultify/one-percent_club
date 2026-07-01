@@ -397,8 +397,14 @@ export default function GameFlow() {
       //   setPhase("coming-soon");
       //   return;
       // }
-      // Single player plays one of the three live sets, picked at random.
-      setSoloSet(QUESTION_SET_IDS[Math.floor(Math.random() * QUESTION_SET_IDS.length)]);
+      // Single player plays one of the VO-complete live sets, picked at
+      // random. Set D is excluded here: it has no recorded voice-over yet, and
+      // the solo journey is narration-driven, so a silent set would feel
+      // broken. Set D is still fully available in host-run live rooms (where
+      // the server just skips the narration hold). Add "D" here once its VO
+      // batch exists.
+      const soloEligibleSets = QUESTION_SET_IDS.filter((id) => id !== "D");
+      setSoloSet(soloEligibleSets[Math.floor(Math.random() * soloEligibleSets.length)]);
       // Warm-cache instructions VO before Instructions mounts.
       void prefetchAudioUrl("/sound/howitworks1percentclub.mp3");
       void unlockAudio().then(() => setPhase("instructions"));
@@ -959,7 +965,7 @@ export default function GameFlow() {
                       </h2>
                       <p className="text-sm text-foreground/70 leading-relaxed mb-8 max-w-sm mx-auto">
                         This set isn&apos;t available yet. Try Set A to play the current experience, or
-                        return to registration to choose again.
+                        return to the registration page to choose again.
                       </p>
                       <motion.button
                         type="button"

@@ -271,6 +271,9 @@ export default class QuizServer implements Party.Server {
       case "end-question":
         this.requireHost(sender, () => this.hostEndQuestion());
         return;
+      case "next-question":
+        this.requireHost(sender, () => this.hostNextQuestion());
+        return;
       case "set-room-control":
         this.requireHost(sender, () =>
           this.setRoomControl(msg.manualControl, msg.mutedAll, msg.showInstructions),
@@ -427,6 +430,16 @@ export default class QuizServer implements Party.Server {
     this.beginReveal();
   }
 
+  /** Host pressed "Next question" — leave the parked answer reveal and move
+   *  the whole room to the next question. Only meaningful in manual-control
+   *  mode while the reveal is being held. */
+  private hostNextQuestion() {
+    if (this.phase !== "running" || this.roundPhase !== "revealing") return;
+    if (!this.manualControl) return;
+    this.clearRoundTimer();
+    this.advanceRound();
+  }
+
   /** Live room controls (NOT lobby-locked): manual question flow, master mute,
    *  and the instructions-screen toggle. Omitted fields are left unchanged. */
   private setRoomControl(
@@ -442,6 +455,15 @@ export default class QuizServer implements Party.Server {
       // strand the room — open the clock so automatic flow resumes.
       if (wasOn && !manualControl && this.phase === "running" && this.roundPhase === "narrating" && !this.hostNarration) {
         this.openAnswerClock();
+      }
+      // Likewise, turning manual control OFF while the reveal is parked (it has
+      // no auto-advance timer in manual mode) would strand the room on the
+      // answer reveal — resume automatic flow with the normal short hold.
+      if (wasOn && !manualControl && this.phase === "running" && this.roundPhase === "revealing") {
+        this.clearRoundTimer();
+        const elapsed = this.revealStartedAt != null ? Date.now() - this.revealStartedAt : REVEAL_HOLD_MS;
+        const remaining = Math.max(0, REVEAL_HOLD_MS - elapsed);
+        this.roundTimer = setTimeout(() => this.advanceRound(), remaining);
       }
     }
     if (typeof mutedAll === "boolean") this.mutedAll = mutedAll;
@@ -551,7 +573,13 @@ export default class QuizServer implements Party.Server {
     this.roundPhase = "revealing";
     this.revealStartedAt = Date.now();
     this.clearRoundTimer();
-    this.roundTimer = setTimeout(() => this.advanceRound(), REVEAL_HOLD_MS);
+    // Manual control: park on the answer reveal indefinitely. The whole room
+    // stays on the reveal screen until the host presses "Next question"
+    // (next-question → hostNextQuestion → advanceRound). Automatic flow holds
+    // for a short beat and advances itself.
+    if (!this.manualControl) {
+      this.roundTimer = setTimeout(() => this.advanceRound(), REVEAL_HOLD_MS);
+    }
     this.broadcastState();
   }
 
@@ -586,6 +614,9 @@ export default class QuizServer implements Party.Server {
       if (remaining <= 0) this.beginAsking();
       else this.roundTimer = setTimeout(() => this.beginAsking(), remaining);
     } else if (this.roundPhase === "revealing") {
+      // Manual control parks the reveal with no auto-advance timer — the host
+      // drives the move to the next question via "next-question".
+      if (this.manualControl) return;
       const elapsed = this.revealStartedAt != null ? now - this.revealStartedAt : REVEAL_HOLD_MS;
       const remaining = REVEAL_HOLD_MS - elapsed;
       if (remaining <= 0) this.advanceRound();

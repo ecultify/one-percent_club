@@ -272,7 +272,7 @@ const TOUR_STEPS: TourStep[] = [
     kicker: "The question",
     title: "Read the question carefully",
     description:
-      "Every round shows one question. Read it slowly — the trick is usually hidden in the wording.",
+      "At every round you will be shown a question. Read it slowly. The answer is usually hidden in the wordings.",
     voiceText:
       "Yahan aapko sawaal dikhega. Dhyaan se padhiye, kyunki jawab aksar sawaal ke andar hi chupa hota hai.",
     voiceKey: "tour-step-question",
@@ -282,7 +282,7 @@ const TOUR_STEPS: TourStep[] = [
     targetId: "options-area",
     placement: "top",
     kicker: "Your answer",
-    title: "Pick one of four diamonds",
+    title: "Pick one of the four diamonds",
     description:
       "The four options appear as diamonds. Tap the one you think is correct before time runs out.",
     voiceText:
@@ -296,7 +296,7 @@ const TOUR_STEPS: TourStep[] = [
     kicker: "The clock",
     title: "Watch the timer",
     description:
-      "Every question has a hard time limit. Hesitate too long and the clock will decide for you.",
+      "Every question has a 30 second time limit. Hesitate too long, and the clock will decide for you.",
     voiceText:
       "Yeh rahaa aapka timer. Jaldi sochiye. Waqt khatam, toh aap out.",
     voiceKey: "tour-step-timer",
@@ -306,9 +306,9 @@ const TOUR_STEPS: TourStep[] = [
     targetId: "pot-prize",
     placement: "bottom",
     kicker: "The pot",
-    title: "Every wrong answer feeds the pot",
+    title: "With every round, wrong answers are eliminated, and their value is added to the final prize pot.",
     description:
-      "Stakes from eliminated players stack up here. Survive to the 1% and this prize could be yours.",
+      "Stakes from eliminated players stack up here. Progress to the Top 1% and this prize could be yours.",
     voiceText:
       "Yeh hai pot prize. Har galat jawab ke saath badhta jaata hai. Jo last tak tikega, wohi jeetega.",
     voiceKey: "tour-step-pot",
@@ -1832,7 +1832,7 @@ export default function QuizGame({
                 Pehle, kuch quick instructions
               </h3>
               <p className="text-sm text-foreground/70 leading-relaxed mb-8">
-                Main aapko quickly dikha deta hoon ki yeh game kaise khelna hai. Click below to
+                Main aapko quickly dikha deta hoon ki yeh game kaise khela jata hai. Click below to
                 begin, or skip straight to the first question.
               </p>
               <div className="space-y-3">
@@ -1902,8 +1902,8 @@ export default function QuizGame({
                   Ready to play?
                 </h3>
                 <p className="text-sm text-foreground/70 leading-relaxed mb-8 max-w-sm mx-auto">
-                  The clock starts the moment you click below. First question is 90% &mdash; most
-                  of India gets it right. Don&rsquo;t be the outlier.
+                  The clock starts the moment you click below. The first question is a 90% question.
+                  Most of India gets it right. Don&rsquo;t be an outlier.
                 </p>
 
                 <div className="space-y-3">

@@ -41,7 +41,10 @@ export type RoomPhase = "lobby" | "running" | "ended";
  *                submit answers.
  *  "revealing" — the clock is up; the correct answer is shown and any
  *                player who answered wrong / didn't answer is now out.
- *                Lasts a short hold before the server advances. */
+ *                In automatic flow it lasts a short hold before the server
+ *                advances; in manual-control mode it is parked indefinitely
+ *                (the whole room sits on the answer reveal) until the host
+ *                sends "next-question". */
 export type RoundPhase = "narrating" | "asking" | "revealing";
 
 export interface ParticipantState {
@@ -236,6 +239,14 @@ export interface EndQuestionMessage {
   type: "end-question";
 }
 
+/** Host-only: advance from the held answer reveal to the next question. Only
+ *  meaningful in manual-control mode while roundPhase is "revealing" — in
+ *  manual mode the reveal is parked indefinitely (the whole room sits on the
+ *  answer-reveal screen) until the host sends this. */
+export interface NextQuestionMessage {
+  type: "next-question";
+}
+
 /** Host-only, anytime: live room controls that are NOT lobby-locked.
  *  Omitted fields keep their current value. */
 export interface SetRoomControlMessage {
@@ -271,6 +282,7 @@ export type ClientMessage =
   | SetNarrationOptionsMessage
   | OpenClockMessage
   | EndQuestionMessage
+  | NextQuestionMessage
   | SetRoomControlMessage
   | SetUserMutedMessage;
 

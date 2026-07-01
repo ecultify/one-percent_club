@@ -10,6 +10,7 @@ import {
 import { useNarration } from "@/components/NarrationProvider";
 import SpectatorView from "@/components/live/SpectatorView";
 import FinalStandings from "@/components/live/FinalStandings";
+import LiveAnswerReveal, { type RevealOutcome } from "@/components/live/LiveAnswerReveal";
 import { getQuestionSet, setQuestionVoSrc } from "@/components/live/questionSets";
 import { isMutedFor, potPrizeFromParticipants, type ClientMessage, type RoomState } from "@/lib/quizProtocol";
 
@@ -259,7 +260,7 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
         <GameShowAudio playBgm suppressForVideo={false} slowMode={false} forceMuted={roomMuted} />
         <div className="relative z-[1] max-w-md">
           <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-red-300/80">Eliminated</p>
-          <h1 className="mt-2 text-3xl font-semibold text-[#fff4dc]">You&apos;re out of the running</h1>
+          <h1 className="mt-2 text-3xl font-semibold text-[#fff4dc]">You&apos;re out of the game</h1>
           <p className="mt-3 text-sm leading-relaxed text-foreground/70">
             That answer knocked you out — but the game isn&apos;t over for you. Keep playing along as a
             viewer (your answers won&apos;t count), or sit back and watch the survivors.
@@ -308,6 +309,18 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
 
   const survivors = state.participants.filter((p) => p.scoring && !p.eliminated).length;
 
+  // This player's outcome for the shared reveal header. A lifeline skip or a
+  // correct lock counts as a win; an explicit wrong lock is a loss; running out
+  // the clock (answered with no selection) is a miss.
+  const revealOutcome: RevealOutcome =
+    skippedThisRound || (answered && selectedAnswer !== null && isCorrect)
+      ? "won"
+      : answered && selectedAnswer === null
+        ? "missed"
+        : answered
+          ? "lost"
+          : "neutral";
+
   return (
     <main className="relative w-full h-screen overflow-hidden bg-black">
       <GameShowAudio playBgm={state.phase === "running"} suppressForVideo={false} slowMode={false} forceMuted={roomMuted} />
@@ -338,6 +351,10 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
         // Freeze the clock while the VO narrates; it starts only once the
         // server flips to "asking".
         paused={roundPhase === "narrating" || validating}
+        // Anchor the visible countdown to the SERVER's shared clock so every
+        // client agrees and late joiners / reconnects sync to the real
+        // remaining time (null while narrating — the clock isn't open yet).
+        serverClockStartMs={roundPhase === "asking" ? state.questionStartedAt : null}
         // Live-only: transient heads-up chip + the locked-answer overlay.
         answerHintChip
         // Unscored play-along note ("eliminated, still playing for fun"),
@@ -357,6 +374,16 @@ export default function LiveQuizPlayer({ state, send, name, myId }: LiveQuizPlay
         }
         onUseLifeline={handleUseLifeline}
         skipped={skippedThisRound}
+      />
+      {/* Full-screen blurred answer reveal — shown for the whole room while the
+          server holds roundPhase === "revealing". In manual mode the server
+          parks here until the host presses "Next question". */}
+      <LiveAnswerReveal
+        setId={state.questionSet}
+        questionIndex={globalIdx}
+        question={currentQ}
+        visible={roundPhase === "revealing"}
+        outcome={revealOutcome}
       />
     </main>
   );

@@ -62,7 +62,7 @@ export default function TiltScreenNotice() {
         Tilt your phone sideways
       </p>
       <p className="mt-2 max-w-xs text-sm text-[#f4ecdc]/80">
-        The video plays widescreen — turn your phone to watch it full size.
+        The video plays widescreen — turn your phone to watch it in full size.
       </p>
     </div>
   );

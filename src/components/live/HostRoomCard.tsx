@@ -115,6 +115,12 @@ export default function HostRoomCard({ code, hostKey, questionSet, onRemove, can
                   <FastForward className="size-4" /> End question
                 </Button>
               )}
+              {state.manualControl && state.roundPhase === "revealing" && (
+                <Button variant="gold" size="full" onClick={() => send({ type: "next-question" })}>
+                  <FastForward className="size-4" />{" "}
+                  {state.currentQuestionIdx + 1 >= state.totalQuestions ? "Finish quiz" : `Next question (Q${state.currentQuestionIdx + 2})`}
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="full"

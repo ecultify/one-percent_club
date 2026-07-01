@@ -193,9 +193,9 @@ const SET_B: Question[] = [
     question: "The opposite of long is short. What is the opposite of tall?",
     textInput: true,
     correctAnswerText:
-      "SHORT. The trick is that the opposite of tall is also 'short'. Accept 'short' in any casing. REJECT 'small', 'tiny' or other words.",
-    displayAnswer: "Short",
-    passRegex: "\\bshort\\b",
+      "The opposite of tall. ACCEPT 'short' (the intended answer, mirroring long→short) AND 'small' — both are valid opposites of tall — in any casing, including phrasings like 'it is short'. REJECT 'long', 'tall', 'big' or unrelated words.",
+    displayAnswer: "Short (or Small)",
+    passRegex: "\\b(short|small)\\b",
     options: [],
     correctIndex: 0,
     timeLimit: 30,
@@ -467,12 +467,160 @@ const SET_C: Question[] = [
   },
 ];
 
+// ─── SET D (client doc "Set 4") ─────────────────────────────────────────────
+//
+// Added from "1% Club Questions.docx". No recorded VOs yet (all null in
+// SET_VO_DURATION_MS), so every round opens its answer clock immediately.
+//
+// ⚠️ CONTENT FLAG — 20% question: the supplied seating image
+// (d8-seating.png) has a DIFFERENT question baked into it ("Who is sitting
+// opposite to Alice?") than the doc's actual 20% question ("two places to the
+// right of the person to the left of the person in the brown shirt", answer
+// BEN). The doc's question + answer are used here (authoritative); the image
+// is shown for the seating layout only and should be replaced with a clean
+// version whose printed title matches, or dropped.
+
+const SET_D: Question[] = [
+  {
+    id: 1,
+    percentage: 90,
+    question:
+      "Amit is married to Chitra. Chitra is the mother of Seema, who is the grandchild of Mohan. How is Amit related to Chitra?",
+    textInput: true,
+    correctAnswerText:
+      "HUSBAND. Amit is married to Chitra, so he is her husband — the extra family detail is a distraction. Accept 'husband', 'her husband', 'pati'. REJECT father, son, brother or other relations.",
+    displayAnswer: "Her husband",
+    passRegex: "\\b(husband|pati)\\b",
+    options: [],
+    correctIndex: 0,
+    timeLimit: 30,
+  },
+  {
+    id: 2,
+    percentage: 80,
+    question: "Find the odd one out.",
+    image: `${IMG}/d2-oddoneout.png`,
+    options: ["India", "Sri Lanka", "South Korea", "China", "France"],
+    correctIndex: 4,
+    timeLimit: 30,
+  },
+  {
+    id: 3,
+    percentage: 70,
+    question: "Which of these images cannot be real?",
+    image: `${IMG}/d3-realornot.png`,
+    options: ["Bigg Boss", "Tea with Karan", "Laughter Chefs", "Splitsvilla X6"],
+    correctIndex: 1,
+    timeLimit: 30,
+  },
+  {
+    id: 4,
+    percentage: 60,
+    question: "Complete the sequence.",
+    wordSequence: ["Short → Shorter", "Tall → Taller", "Big → ?"],
+    textInput: true,
+    correctAnswerText:
+      "BIGGER. Each word takes its comparative form by adding -er: Short→Shorter, Tall→Taller, so Big→Bigger. Accept 'bigger'. REJECT 'biggest' or other words.",
+    displayAnswer: "Bigger",
+    passRegex: "\\bbigger\\b",
+    options: [],
+    correctIndex: 0,
+    timeLimit: 30,
+  },
+  {
+    id: 5,
+    percentage: 50,
+    question:
+      "In a race with 10 participants, you finish two places ahead of the person who finishes 6th, and immediately behind the person who finishes 3rd. What position did you finish in?",
+    textInput: true,
+    correctAnswerText:
+      "FOURTH. Two places ahead of 6th is 4th, and immediately behind 3rd is also 4th — both clues agree. Accept 'fourth', '4th', '4'. REJECT any other position.",
+    displayAnswer: "Fourth",
+    passRegex: "\\b(fourth|4th|4)\\b",
+    options: [],
+    correctIndex: 0,
+    timeLimit: 30,
+  },
+  {
+    id: 6,
+    percentage: 40,
+    question: "What comes next in this sequence?",
+    wordPuzzle: "J F M A M J ?",
+    textInput: true,
+    correctAnswerText:
+      "J — the letters are the first letters of the months January to June, so the next month July gives J. Accept 'j' or 'july'. REJECT other letters/months.",
+    displayAnswer: "J (July)",
+    passRegex: "^j$|\\bjuly\\b",
+    options: [],
+    correctIndex: 0,
+    timeLimit: 30,
+  },
+  {
+    id: 7,
+    percentage: 30,
+    question:
+      "The answer to this question is unpredictable. The equation may or may not be related to the question and gives no useful information. Based only on the information given, guess the answer. (330 + A × 450 − C = ?)",
+    textInput: true,
+    correctAnswerText:
+      "UNPREDICTABLE. The question states its own answer is 'unpredictable', and the equation is a deliberate distraction. Accept 'unpredictable' (any spelling close to it). REJECT numeric answers or anything else.",
+    displayAnswer: "Unpredictable",
+    passRegex: "unpredictab",
+    options: [],
+    correctIndex: 0,
+    timeLimit: 30,
+  },
+  {
+    id: 8,
+    percentage: 20,
+    question:
+      "Who is sitting two places to the right of the person sitting to the left of the person wearing a brown shirt?",
+    image: `${IMG}/d8-seating.png`,
+    textInput: true,
+    correctAnswerText:
+      "BEN. The person in the brown shirt is Alice; the person to her left, counted two places to the right, lands on Ben. Accept 'ben'. REJECT the other names.",
+    displayAnswer: "Ben",
+    passRegex: "\\bben\\b",
+    options: [],
+    correctIndex: 0,
+    timeLimit: 30,
+  },
+  {
+    id: 9,
+    percentage: 10,
+    question: "Find the missing five-letter word in this alphabetical sequence from A to Z.",
+    wordPuzzle: "BCFGHJKLNOPQRSTUVWXYZ",
+    textInput: true,
+    correctAnswerText:
+      "MEDIA — the missing letters are A, D, E, I and M, which spell MEDIA. Accept 'media' in any casing. REJECT anything else.",
+    displayAnswer: "MEDIA (missing: A D E I M)",
+    passRegex: "\\bmedia\\b",
+    options: [],
+    correctIndex: 0,
+    timeLimit: 30,
+  },
+  {
+    id: 10,
+    percentage: 1,
+    question: "What common English word can you make using all of these letters exactly once?",
+    image: `${IMG}/d10-letters.png`,
+    textInput: true,
+    correctAnswerText:
+      "THEATRIC — the letters T, H, E, A, T, R, I, C rearrange to spell THEATRIC. Accept 'theatric' with minor typos. REJECT other words.",
+    displayAnswer: "THEATRIC",
+    passRegex: "theatric",
+    options: [],
+    correctIndex: 0,
+    timeLimit: 30,
+  },
+];
+
 // ─── Lookup API ─────────────────────────────────────────────────────────────
 
 export const QUESTION_SETS: Record<QuestionSetId, Question[]> = {
   A: SET_A,
   B: SET_B,
   C: SET_C,
+  D: SET_D,
 };
 
 export function getQuestionSet(setId: QuestionSetId | undefined | null): Question[] {
@@ -530,6 +678,9 @@ const SET_VO_FILES: Record<QuestionSetId, (string | null)[]> = {
     `${VO}/c9VO.mp3`,
     `${VO}/c10VO.mp3`,
   ],
+  // Set D (client doc "Set 4") — no recorded VOs yet. All null → each round
+  // opens its answer clock immediately (no narration hold).
+  D: [null, null, null, null, null, null, null, null, null, null],
 };
 
 export function setQuestionVoSrc(setId: QuestionSetId, questionIdx: number): string | null {

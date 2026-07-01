@@ -182,6 +182,12 @@ export default function HostRoomPage() {
                       <FastForward className="size-4" /> End question
                     </Button>
                   )}
+                  {state.manualControl && state.roundPhase === "revealing" && (
+                    <Button variant="gold" onClick={() => send({ type: "next-question" })}>
+                      <FastForward className="size-4" />{" "}
+                      {state.currentQuestionIdx + 1 >= state.totalQuestions ? "Finish quiz" : `Next question (Q${state.currentQuestionIdx + 2})`}
+                    </Button>
+                  )}
                   <Button
                     variant="destructive"
                     onClick={() =>
@@ -231,8 +237,10 @@ export default function HostRoomPage() {
                   </Button>
                 </div>
                 <p className="mt-2 text-xs leading-relaxed text-white/55">
-                  You press <span className="font-mono text-white/70">Start</span> to open each question&apos;s timer and{" "}
-                  <span className="font-mono text-white/70">End question</span> to reveal early. Off = the server runs rounds automatically.
+                  Full hand control of every round: <span className="font-mono text-white/70">Start</span> opens the
+                  question&apos;s timer, <span className="font-mono text-white/70">End question</span> reveals the answer, and
+                  players hold on the answer-reveal screen until you press{" "}
+                  <span className="font-mono text-white/70">Next question</span>. Off = the server runs rounds automatically.
                 </p>
               </div>
 
@@ -352,7 +360,11 @@ export default function HostRoomPage() {
               <p className="text-xs font-mono uppercase tracking-wider text-emerald-300/80">Clock running…</p>
             )}
             {state.phase === "running" && state.roundPhase === "revealing" && (
-              <p className="text-xs font-mono uppercase tracking-wider text-white/50">Revealing answer…</p>
+              <p className="text-xs font-mono uppercase tracking-wider text-white/50">
+                {state.manualControl
+                  ? <>Answer revealed — players are holding. Press <span className="text-white/80">Next question</span> above to move on.</>
+                  : "Revealing answer…"}
+              </p>
             )}
 
             {state.phase === "running" && (() => {

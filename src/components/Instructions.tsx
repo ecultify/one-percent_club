@@ -139,7 +139,7 @@ const SCENES: Scene[] = [
           transition={{ duration: 0.7, ease: EASE_SLAM }}
           className="text-[11px] md:text-[13px] uppercase tracking-[0.34em] text-[#c9a94a]"
         >
-          Welcome to The 1% Club
+          Welcome to the experience of India Ke Top 1% game show
         </motion.span>
         <motion.h1
           initial={{ opacity: 0, y: 28, scale: 1.08, filter: "blur(12px)" }}
@@ -348,7 +348,7 @@ const SCENES: Scene[] = [
               textShadow: "0 0 22px rgba(255,90,58,0.45)",
             }}
           >
-            But only 1% people play the final question
+            But only the Top 1% play the final question
           </span>
           {/* Subtext "Aakhri sawaal · 1% only" removed per client request. */}
         </motion.div>
@@ -377,7 +377,7 @@ const SCENES: Scene[] = [
             className="font-semibold leading-[1.05] text-[#fff2c2]"
             style={{ fontSize: "clamp(1.6rem, 3.2vw, 2.6rem)" }}
           >
-            Har question pe milenge aapko sirf 30 sec.
+            Har question par milenge aapko sirf 30 seconds.
           </span>
           {/* Subtext "Play smartly and logically" removed per client request. */}
         </motion.div>
@@ -446,7 +446,7 @@ const SCENES: Scene[] = [
           }}
         >
           <span className="block">Are you</span>
-          <span className="block">ready?</span>
+          <span className="block">Ready?</span>
         </motion.h2>
       </div>
     ),
@@ -856,7 +856,7 @@ export default function Instructions({ playerName, onStart }: InstructionsProps)
               transition={{ type: "spring", stiffness: 380, damping: 22 }}
               className="game-show-btn relative z-0 cursor-pointer rounded-xl px-14 py-[18px] text-center text-[13px] font-semibold uppercase tracking-[0.26em] shadow-[0_0_0_1px_rgba(196,160,53,0.35),0_22px_56px_-12px_rgba(0,0,0,0.85),0_0_48px_-8px_rgba(228,207,106,0.25)] md:px-20 md:py-5 md:text-[14px]"
             >
-              <span className="relative z-10">Start the Game</span>
+              <span className="relative z-10">Start The Game</span>
             </motion.button>
           </motion.div>
         )}

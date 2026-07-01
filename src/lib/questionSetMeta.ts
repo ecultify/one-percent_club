@@ -12,20 +12,21 @@
  * The host picks a set when creating a lobby; the room plays that set.
  */
 
-export type QuestionSetId = "A" | "B" | "C";
+export type QuestionSetId = "A" | "B" | "C" | "D";
 
-export const QUESTION_SET_IDS: QuestionSetId[] = ["A", "B", "C"];
+export const QUESTION_SET_IDS: QuestionSetId[] = ["A", "B", "C", "D"];
 
 export const SET_LABELS: Record<QuestionSetId, string> = {
   A: "Set A",
   B: "Set B",
   C: "Set C",
+  D: "Set D",
 };
 
 export const DEFAULT_QUESTION_SET: QuestionSetId = "A";
 
 export function isQuestionSetId(v: unknown): v is QuestionSetId {
-  return v === "A" || v === "B" || v === "C";
+  return v === "A" || v === "B" || v === "C" || v === "D";
 }
 
 /*
@@ -45,6 +46,7 @@ export const SET_QUESTION_COUNT: Record<QuestionSetId, number> = {
   A: 10,
   B: 10,
   C: 10,
+  D: 10,
 };
 
 /**
@@ -69,4 +71,8 @@ export const SET_VO_DURATION_MS: Record<QuestionSetId, (number | null)[]> = {
   // round. Fill once c3VO.mp3 is generated (a3VO no longer fits: it names
   // Nehru, the question is now Mandela).
   C: [16_144, 14_629, null, 11_729, 16_536, 16_484, 13_819, 18_756, 14_525, 12_983],
+  // Set D (client doc "Set 4", added later) has no recorded VOs yet — every
+  // slot is null, so each round skips the "narrating" hold and opens its
+  // answer clock immediately. Fill these in if/when a VO batch is produced.
+  D: [null, null, null, null, null, null, null, null, null, null],
 };

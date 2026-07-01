@@ -95,7 +95,7 @@ export default function UserDetailsModal({ onSubmit }: UserDetailsModalProps) {
           >
             <p className="font-mono text-[10px] uppercase tracking-[0.45em] text-brass-dim/90 mb-4">Registration</p>
             <h2 className="font-display text-3xl md:text-[2rem] font-semibold tracking-[-0.02em] text-foreground leading-tight drop-shadow-[0_1px_12px_rgba(0,0,0,0.75)]">
-              Enter the club
+              Enter the experience
             </h2>
           </motion.div>
 
@@ -208,7 +208,7 @@ export default function UserDetailsModal({ onSubmit }: UserDetailsModalProps) {
                     />
                   </div>
                   <p className="mt-2 text-[11px] text-foreground/55 leading-relaxed">
-                    Ask the host for the room code to join their live lobby.
+                    Enter the code shared by the host to join the lobby.
                   </p>
                 </motion.div>
               )}

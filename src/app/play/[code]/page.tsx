@@ -107,7 +107,7 @@ export default function PlayRoomPage() {
       <main className="min-h-screen flex flex-col items-center justify-center bg-black text-foreground/80 px-6 text-center">
         <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-red-300/70">Removed</p>
         <h1 className="mt-2 text-2xl font-semibold">You were removed from this room</h1>
-        <p className="mt-2 text-sm text-foreground/55">The host removed you from this quiz.</p>
+        <p className="mt-2 text-sm text-foreground/55">The host removed you from this lobby.</p>
       </main>
     );
   }
@@ -164,7 +164,7 @@ export default function PlayRoomPage() {
         <LobbyBackdrop />
         <div className="relative z-[1] max-w-md">
           <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-brass/80">
-            {ended ? "Quiz finished" : "Quiz in progress"}
+            {ended ? "Quiz finished" : "The game experience is in progress"}
           </p>
           <h1
             className="mt-2 text-2xl font-semibold text-[#fff4dc] md:text-3xl"
