@@ -8,7 +8,7 @@ import LiveQuizPlayer from "@/components/live/LiveQuizPlayer";
 import LivePlayerIntro from "@/components/live/LivePlayerIntro";
 import GameShowAudio from "@/components/GameShowAudio";
 import { useNarration } from "@/components/NarrationProvider";
-import { isMutedFor } from "@/lib/quizProtocol";
+import { isMutedFor, ROOM_EXPIRY_MS } from "@/lib/quizProtocol";
 
 /** Shared muted home-video backdrop for the pre-game (gate + waiting lobby). */
 function LobbyBackdrop() {
@@ -81,6 +81,49 @@ export default function PlayRoomPage() {
     if (!n) return;
     send({ type: "join-participant", name: n });
   }, [connected, joined, state, myId, name, send]);
+
+  // Post-game link expiry. After the game ends, players get ROOM_EXPIRY_MS to
+  // view the scores; then the link is inaccessible. This timer flips the local
+  // view to the expired screen at exactly that mark — even for someone already
+  // parked on the standings — since a hibernating server can't be relied on to
+  // push the cutoff. New joins are also rejected server-side ("room-expired").
+  const [expired, setExpired] = useState(false);
+  const endedAt = state?.phase === "ended" ? state.endedAt : null;
+  useEffect(() => {
+    if (endedAt == null) {
+      setExpired(false);
+      return;
+    }
+    const fireAt = endedAt + ROOM_EXPIRY_MS;
+    const tick = () => setExpired(Date.now() >= fireAt);
+    tick();
+    if (Date.now() >= fireAt) return;
+    const t = setTimeout(tick, fireAt - Date.now());
+    return () => clearTimeout(t);
+  }, [endedAt]);
+
+  if (expired || error === "room-expired") {
+    return (
+      <main className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-black px-6 text-center">
+        <LobbyBackdrop />
+        <div className="relative z-[1] max-w-md">
+          <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-brass/70">Link expired</p>
+          <h1
+            className="mt-2 text-2xl font-semibold text-[#fff4dc] md:text-3xl"
+            style={{ textShadow: "0 2px 14px rgba(0,0,0,0.92)" }}
+          >
+            This game has wrapped up
+          </h1>
+          <p
+            className="mt-3 text-sm leading-relaxed text-[#f4ecdc]/85"
+            style={{ textShadow: "0 2px 10px rgba(0,0,0,0.9)" }}
+          >
+            The results stayed open for 30 minutes after the game ended. This link is now closed.
+          </p>
+        </div>
+      </main>
+    );
+  }
 
   // Show the intro (teaser → instructions → name/audio gate) until audio is
   // primed AND we have a name. Skipped for the in-app flow (audio already

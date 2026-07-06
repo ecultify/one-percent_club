@@ -9,7 +9,7 @@ import LiveQuizPlayer from "@/components/live/LiveQuizPlayer";
 import LiveAudioGate from "@/components/live/LiveAudioGate";
 import GameShowAudio from "@/components/GameShowAudio";
 import { useNarration } from "@/components/NarrationProvider";
-import { isMutedFor } from "@/lib/quizProtocol";
+import { isMutedFor, ROOM_EXPIRY_MS } from "@/lib/quizProtocol";
 
 /**
  * Viewer (spectator) view for a single room.
@@ -26,7 +26,7 @@ export default function WatchRoomPage() {
   const roomCode = (params?.code ?? "").toUpperCase();
   const name = search?.get("name") ?? undefined;
 
-  const { state, send, connected, myId } = usePartyRoom(roomCode);
+  const { state, send, error, connected, myId } = usePartyRoom(roomCode);
   const { audioUnlocked } = useNarration();
   const [joined, setJoined] = useState(false);
   const [soundReady, setSoundReady] = useState(false);
@@ -58,6 +58,36 @@ export default function WatchRoomPage() {
     send({ type: "join-participant", name: name ?? "Viewer", scoring: false });
     setPlayAlong(true);
   };
+
+  // Post-game link expiry — the /watch link closes ROOM_EXPIRY_MS after the
+  // game ends, same as /play. The timer flips to the expired screen at that
+  // mark; new joins are also rejected server-side ("room-expired").
+  const [expired, setExpired] = useState(false);
+  const endedAt = state?.phase === "ended" ? state.endedAt : null;
+  useEffect(() => {
+    if (endedAt == null) {
+      setExpired(false);
+      return;
+    }
+    const fireAt = endedAt + ROOM_EXPIRY_MS;
+    const tick = () => setExpired(Date.now() >= fireAt);
+    tick();
+    if (Date.now() >= fireAt) return;
+    const t = setTimeout(tick, fireAt - Date.now());
+    return () => clearTimeout(t);
+  }, [endedAt]);
+
+  if (expired || error === "room-expired") {
+    return (
+      <main className="min-h-screen flex flex-col items-center justify-center bg-black px-6 text-center text-foreground">
+        <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-brass/70">Link expired</p>
+        <h1 className="mt-2 text-2xl font-semibold text-[#fff4dc] md:text-3xl">This game has wrapped up</h1>
+        <p className="mt-3 max-w-md text-sm leading-relaxed text-foreground/60">
+          The results stayed open for 30 minutes after the game ended. This link is now closed.
+        </p>
+      </main>
+    );
+  }
 
   // Prime audio with one tap so the synced question voice-over plays from the
   // first question (browsers block autoplay until a gesture). Skipped if audio

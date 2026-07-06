@@ -8,6 +8,7 @@ import type {
   ServerMessage,
   ViewerState,
 } from "../src/lib/quizProtocol";
+import { ROOM_EXPIRY_MS } from "../src/lib/quizProtocol";
 import {
   type QuestionSetId,
   DEFAULT_QUESTION_SET,
@@ -83,6 +84,7 @@ interface PersistedRoom {
   participants: ParticipantState[];
   viewers: ViewerState[];
   startedAt: number | null;
+  endedAt?: number | null;
   questionSet?: QuestionSetId;
   hostNarration?: boolean;
   muteVo?: boolean;
@@ -129,6 +131,10 @@ export default class QuizServer implements Party.Server {
   private participants = new Map<string, ParticipantState>();
   private viewers = new Map<string, ViewerState>();
   private startedAt: number | null = null;
+  /** Server ms when the game ended. Drives the post-game link expiry
+   *  (ROOM_EXPIRY_MS after this the /play + /watch links go inaccessible).
+   *  null until the game ends; cleared on start / reset. */
+  private endedAt: number | null = null;
   /** Which question set (A/B/C) this room plays. Adopted from the host's
    *  claim while in the lobby; fixed once the quiz starts. */
   private questionSet: QuestionSetId = DEFAULT_QUESTION_SET;
@@ -182,6 +188,7 @@ export default class QuizServer implements Party.Server {
     if (!snap) return;
     this.phase = snap.phase;
     this.startedAt = snap.startedAt;
+    this.endedAt = snap.endedAt ?? null;
     this.questionSet = isQuestionSetId(snap.questionSet) ? snap.questionSet : DEFAULT_QUESTION_SET;
     this.hostNarration = snap.hostNarration === true;
     this.muteVo = snap.muteVo === true;
@@ -348,6 +355,7 @@ export default class QuizServer implements Party.Server {
     if (this.phase !== "lobby") return;
     this.phase = "running";
     this.startedAt = Date.now();
+    this.endedAt = null;
     // Reset everyone to a clean slate at Q1. A new game makes everyone a
     // scored player again (prior play-along viewers are promoted).
     for (const p of this.participants.values()) {
@@ -370,10 +378,17 @@ export default class QuizServer implements Party.Server {
     if (this.phase === "ended") return;
     this.clearRoundTimer();
     this.phase = "ended";
+    this.endedAt = Date.now();
     this.roundPhase = "revealing";
     this.questionStartedAt = null;
     this.broadcastState();
     void this.reportRoomEvent("ended");
+  }
+
+  /** A game that ended more than ROOM_EXPIRY_MS ago. The link is then dead:
+   *  no new joins are accepted, and clients show an "expired" screen. */
+  private isExpired(): boolean {
+    return this.phase === "ended" && this.endedAt != null && Date.now() - this.endedAt >= ROOM_EXPIRY_MS;
   }
 
   private resetRoom() {
@@ -384,6 +399,7 @@ export default class QuizServer implements Party.Server {
     if (this.phase !== "lobby") void this.reportRoomEvent("ended");
     this.phase = "lobby";
     this.startedAt = null;
+    this.endedAt = null;
     this.currentQuestionIdx = 0;
     this.roundPhase = "asking";
     this.questionStartedAt = null;
@@ -667,6 +683,12 @@ export default class QuizServer implements Party.Server {
   // ─── Participant / viewer actions ─────────────────────────────────────
 
   private joinParticipant(connection: Party.Connection, name: string, scoring = true) {
+    // The link is dead 30 min after the game ends — reject new joins so the
+    // scores are no longer reachable through it.
+    if (this.isExpired()) {
+      this.sendTo(connection, { type: "error", reason: "room-expired" });
+      return;
+    }
     const trimmed = (name || "").trim().slice(0, 32) || "Player";
     // Promote a passive viewer who chose to play along.
     this.viewers.delete(connection.id);
@@ -706,6 +728,11 @@ export default class QuizServer implements Party.Server {
   }
 
   private joinViewer(connection: Party.Connection, name?: string) {
+    // Same 30-min post-game cutoff as players — an expired link shows nothing.
+    if (this.isExpired()) {
+      this.sendTo(connection, { type: "error", reason: "room-expired" });
+      return;
+    }
     const trimmed = name?.trim().slice(0, 32);
     this.viewers.set(connection.id, { id: connection.id, name: trimmed });
     connection.setState({ role: "viewer", name: trimmed } satisfies ConnState);
@@ -838,6 +865,7 @@ export default class QuizServer implements Party.Server {
       participants: Array.from(this.participants.values()),
       viewers: Array.from(this.viewers.values()),
       startedAt: this.startedAt,
+      endedAt: this.endedAt,
       questionSet: this.questionSet,
       hostNarration: this.hostNarration,
       muteVo: this.muteVo,
@@ -867,6 +895,7 @@ export default class QuizServer implements Party.Server {
       participants: Array.from(this.participants.values()),
       viewers: Array.from(this.viewers.values()),
       startedAt: this.startedAt,
+      endedAt: this.endedAt,
       questionSet: this.questionSet,
       hostNarration: this.hostNarration,
       muteVo: this.muteVo,

@@ -139,6 +139,10 @@ export interface RoomState {
    *  joiners / reconnecting clients sync the countdown. null when not
    *  actively asking. */
   questionStartedAt: number | null;
+  /** Server ms when the game ended (host "end" or the final reveal). null
+   *  until the game is over. The /play + /watch links stay usable for
+   *  ROOM_EXPIRY_MS after this, then expire. Cleared on start / reset. */
+  endedAt: number | null;
 }
 
 // ─── Client → Server messages ────────────────────────────────────────────
@@ -322,6 +326,21 @@ export type ServerMessage =
  *  it to silence both recorded VO and the game-show bed. */
 export function isMutedFor(state: Pick<RoomState, "mutedAll" | "unmutedIds">, myId: string | null): boolean {
   return state.mutedAll && !(myId != null && state.unmutedIds.includes(myId));
+}
+
+// ─── Post-game link expiry ────────────────────────────────────────────────
+
+/** How long the /play + /watch links stay usable after a game ends. Players
+ *  get exactly this window to view the final scores; after it the link is
+ *  inaccessible (server rejects new joins; clients show an "expired" screen).
+ *  Shared by the PartyKit server (enforcement) and the client (live gate). */
+export const ROOM_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
+
+/** True once a room has been in the "ended" phase for longer than
+ *  ROOM_EXPIRY_MS. `now` is passed in so callers can drive it off a live
+ *  clock / timer without this module reading Date.now() itself. */
+export function isRoomExpired(state: Pick<RoomState, "phase" | "endedAt">, now: number): boolean {
+  return state.phase === "ended" && state.endedAt != null && now - state.endedAt >= ROOM_EXPIRY_MS;
 }
 
 // ─── Shared ranking helpers (client-side display) ─────────────────────────
