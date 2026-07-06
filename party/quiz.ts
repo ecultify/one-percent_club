@@ -683,7 +683,7 @@ export default class QuizServer implements Party.Server {
   // ─── Participant / viewer actions ─────────────────────────────────────
 
   private joinParticipant(connection: Party.Connection, name: string, scoring = true) {
-    // The link is dead 30 min after the game ends — reject new joins so the
+    // The link is dead 5 min after the game ends — reject new joins so the
     // scores are no longer reachable through it.
     if (this.isExpired()) {
       this.sendTo(connection, { type: "error", reason: "room-expired" });

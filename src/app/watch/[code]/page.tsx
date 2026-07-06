@@ -83,7 +83,7 @@ export default function WatchRoomPage() {
         <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-brass/70">Link expired</p>
         <h1 className="mt-2 text-2xl font-semibold text-[#fff4dc] md:text-3xl">This game has wrapped up</h1>
         <p className="mt-3 max-w-md text-sm leading-relaxed text-foreground/60">
-          The results stayed open for 30 minutes after the game ended. This link is now closed.
+          The results stayed open for 5 minutes after the game ended. This link is now closed.
         </p>
       </main>
     );

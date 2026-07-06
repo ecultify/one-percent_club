@@ -118,7 +118,7 @@ export default function PlayRoomPage() {
             className="mt-3 text-sm leading-relaxed text-[#f4ecdc]/85"
             style={{ textShadow: "0 2px 10px rgba(0,0,0,0.9)" }}
           >
-            The results stayed open for 30 minutes after the game ended. This link is now closed.
+            The results stayed open for 5 minutes after the game ended. This link is now closed.
           </p>
         </div>
       </main>

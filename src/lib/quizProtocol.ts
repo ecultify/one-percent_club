@@ -334,7 +334,7 @@ export function isMutedFor(state: Pick<RoomState, "mutedAll" | "unmutedIds">, my
  *  get exactly this window to view the final scores; after it the link is
  *  inaccessible (server rejects new joins; clients show an "expired" screen).
  *  Shared by the PartyKit server (enforcement) and the client (live gate). */
-export const ROOM_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
+export const ROOM_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
 
 /** True once a room has been in the "ended" phase for longer than
  *  ROOM_EXPIRY_MS. `now` is passed in so callers can drive it off a live
