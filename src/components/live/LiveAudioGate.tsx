@@ -26,6 +26,17 @@ interface LiveAudioGateProps {
   requireName?: boolean;
   /** Prefill the name field (e.g. from the ?name= query). */
   initialName?: string;
+  /** Override the heading (e.g. a name-only step where audio is already on). */
+  heading?: string;
+  /** Override the sub-heading paragraph. */
+  subtitle?: string;
+  /** Override the call-to-action label (idle state). */
+  cta?: string;
+  /** Full-bleed hero key-art background (portrait for phones, landscape for
+   *  desktop). When set, the muted home-video backdrop is replaced by these
+   *  static images and the CTA is anchored to the bottom so it clears the
+   *  artwork/branding. */
+  heroSrc?: { mobile: string; desktop: string };
 }
 
 export default function LiveAudioGate({
@@ -33,6 +44,10 @@ export default function LiveAudioGate({
   collectName = false,
   requireName = false,
   initialName = "",
+  heading,
+  subtitle,
+  cta,
+  heroSrc,
 }: LiveAudioGateProps) {
   const { unlock } = useNarration();
   const [busy, setBusy] = useState(false);
@@ -53,45 +68,86 @@ export default function LiveAudioGate({
     }
   };
 
+  const hero = !!heroSrc;
+
   return (
     <main className="relative min-h-screen w-full overflow-hidden bg-black">
-      {/* Same home-video backdrop as the main app start screen. Muted so it
-          autoplays before the user grants the audio gesture. */}
-      <video
-        src="/homepagevideo.mp4"
-        poster="/homepagevideo.mp4.poster.jpg"
-        autoPlay
-        muted
-        loop
-        playsInline
-        preload="metadata"
-        aria-hidden
-        className="pointer-events-none absolute inset-0 h-full w-full object-cover"
-      />
-      <div className="pointer-events-none absolute inset-0" style={{ background: "rgba(3,2,8,0.45)" }} aria-hidden />
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(ellipse 60% 42% at 50% 60%, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.5) 45%, rgba(0,0,0,0.2) 78%, transparent 100%)",
-        }}
-        aria-hidden
-      />
+      {hero ? (
+        <>
+          {/* Full-bleed key-art: portrait on phones, landscape on desktop. */}
+          <img
+            src={heroSrc.mobile}
+            alt=""
+            aria-hidden
+            className="pointer-events-none absolute inset-0 h-full w-full object-cover md:hidden"
+          />
+          <img
+            src={heroSrc.desktop}
+            alt=""
+            aria-hidden
+            className="pointer-events-none absolute inset-0 hidden h-full w-full object-cover md:block"
+          />
+          {/* Bottom scrim so the CTA stays legible over the artwork. */}
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                "linear-gradient(to bottom, transparent 42%, rgba(3,2,8,0.55) 76%, rgba(3,2,8,0.94) 100%)",
+            }}
+            aria-hidden
+          />
+        </>
+      ) : (
+        <>
+          {/* Same home-video backdrop as the main app start screen. Muted so it
+              autoplays before the user grants the audio gesture. */}
+          <video
+            src="/homepagevideo.mp4"
+            poster="/homepagevideo.mp4.poster.jpg"
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            aria-hidden
+            className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+          />
+          <div className="pointer-events-none absolute inset-0" style={{ background: "rgba(3,2,8,0.45)" }} aria-hidden />
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                "radial-gradient(ellipse 60% 42% at 50% 60%, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.5) 45%, rgba(0,0,0,0.2) 78%, transparent 100%)",
+            }}
+            aria-hidden
+          />
+        </>
+      )}
 
-      <div className="relative z-[1] flex min-h-screen flex-col items-center justify-center px-6 text-center">
-        <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-brass/80">The 1% Club</p>
-        <h1
-          className="mt-3 max-w-md text-2xl font-semibold text-[#fff4dc] md:text-3xl"
-          style={{ textShadow: "0 2px 14px rgba(0,0,0,0.92), 0 0 36px rgba(0,0,0,0.7)" }}
-        >
-          {collectName ? "Join with your name and sound" : "Tap to join with sound"}
-        </h1>
+      <div
+        className={`relative z-[1] flex min-h-screen flex-col items-center px-6 text-center ${
+          hero ? "justify-end pb-14 md:pb-16" : "justify-center"
+        }`}
+      >
+        {/* The hero art already carries the "1% Club" branding, so skip the
+            kicker/heading there and let the CTA speak for itself. */}
+        {!hero && (
+          <>
+            <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-brass/80">The 1% Club</p>
+            <h1
+              className="mt-3 max-w-md text-2xl font-semibold text-[#fff4dc] md:text-3xl"
+              style={{ textShadow: "0 2px 14px rgba(0,0,0,0.92), 0 0 36px rgba(0,0,0,0.7)" }}
+            >
+              {heading ?? (collectName ? "Join with your name and sound" : "Tap to join with sound")}
+            </h1>
+          </>
+        )}
         <p
-          className="mt-3 max-w-sm text-sm leading-relaxed text-[#f4ecdc]"
+          className={`max-w-sm text-sm leading-relaxed text-[#f4ecdc] ${hero ? "" : "mt-3"}`}
           style={{ textShadow: "0 2px 10px rgba(0,0,0,0.9)" }}
         >
-          One tap turns on the host voice and music. Your browser needs this each time you open the link
-          before sound can play.
+          {subtitle ??
+            "One tap turns on the host voice and music. Your browser needs this each time you open the link before sound can play."}
         </p>
 
         {collectName && (
@@ -116,7 +172,7 @@ export default function LiveAudioGate({
           whileTap={{ scale: busy || blocked ? 1 : 0.97 }}
           className="game-show-btn relative z-0 mt-6 cursor-pointer rounded-xl px-12 py-4 text-center text-[13px] font-semibold uppercase tracking-[0.22em] disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <span className="relative z-10">{busy ? "Starting…" : "Enter with sound"}</span>
+          <span className="relative z-10">{busy ? "Starting…" : cta ?? "Enter with sound"}</span>
         </motion.button>
       </div>
     </main>

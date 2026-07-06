@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import LiveAudioGate from "@/components/live/LiveAudioGate";
 import { useIsPortraitMobile } from "@/components/RotateForVideo";
@@ -9,15 +9,18 @@ import { useIsPortraitMobile } from "@/components/RotateForVideo";
  * Pre-game intro shown the moment a player opens the shared /play link,
  * BEFORE they ever reach the lobby:
  *
- *   1. "teaser"       — the teaser video plays (muted autoplay so it starts
- *                       without a gesture; an unmute tap is offered).
- *   2. "instructions" — a few rule cards explaining how the quiz works.
- *   3. "gate"         — defers to LiveAudioGate, which collects the player's
- *                       name, primes audio (the required user gesture) and
- *                       then hands the trimmed name back via onReady.
+ *   1. "sound"        — a one-tap "enable sound & enter" gate. This is the
+ *                       required user gesture: it primes audio up front so the
+ *                       teaser (and later the host VO) can play WITH sound.
+ *   2. "teaser"       — the teaser video plays with sound (audio already
+ *                       unlocked). No unmute prompt; a "Skip video" button sits
+ *                       where the sound prompt used to be.
+ *   3. "instructions" — a few rule cards explaining how the quiz works.
+ *   4. "name"         — collects the player's name and hands the trimmed name
+ *                       back via onReady, which drops them into the lobby.
  *
- * onReady fires only at the end of step 3, exactly like the bare gate did
- * before, so the parent page's join logic is unchanged.
+ * onReady fires only at the end of the name step, so the parent page's join
+ * logic (name + audio ready → lobby) is unchanged.
  */
 interface LivePlayerIntroProps {
   onReady: (name: string) => void;
@@ -76,12 +79,12 @@ function IntroBackdrop() {
 }
 
 export default function LivePlayerIntro({ onReady, initialName = "", showInstructions = true }: LivePlayerIntroProps) {
-  const [stage, setStage] = useState<"teaser" | "instructions" | "gate">("teaser");
-  const [muted, setMuted] = useState(true);
+  const [stage, setStage] = useState<"sound" | "teaser" | "instructions" | "name">("sound");
   const [step, setStep] = useState(0);
-  /** Where the teaser hands off — to the rules screen, or straight to the gate
-   *  when the host has hidden the instructions. */
-  const afterTeaser: "instructions" | "gate" = showInstructions ? "instructions" : "gate";
+  const teaserRef = useRef<HTMLVideoElement | null>(null);
+  /** Where the teaser hands off — to the rules screen, or straight to the name
+   *  step when the host has hidden the instructions. */
+  const afterTeaser: "instructions" | "name" = showInstructions ? "instructions" : "name";
 
   // Teaser plays upright in its natural orientation — identical to the
   // homepage journey (GameFlow). No 90° rotation and no "tilt your phone"
@@ -90,18 +93,50 @@ export default function LivePlayerIntro({ onReady, initialName = "", showInstruc
   // cropped.
   const portraitMobile = useIsPortraitMobile();
 
-  if (stage === "gate") {
-    return <LiveAudioGate collectName requireName initialName={initialName} onReady={onReady} />;
+  // Audio was already unlocked in the "sound" gate, so the teaser plays with
+  // sound. Autoplay-with-audio is permitted because that tap was a genuine
+  // user gesture in this document, but nudge play() on mount in case the
+  // browser didn't kick it off on its own.
+  useEffect(() => {
+    if (stage !== "teaser") return;
+    teaserRef.current?.play().catch(() => {});
+  }, [stage]);
+
+  // Step 1 — enable sound & enter. The one tap primes audio for the whole
+  // session (teaser + host VO), then advances to the teaser.
+  if (stage === "sound") {
+    return (
+      <LiveAudioGate
+        heroSrc={{ mobile: "/play-gate-mobile.webp", desktop: "/play-gate-desktop.webp" }}
+        subtitle="Turn on the host voice and music, then the intro plays."
+        cta="Enable sound & enter"
+        onReady={() => setStage("teaser")}
+      />
+    );
+  }
+
+  if (stage === "name") {
+    return (
+      <LiveAudioGate
+        collectName
+        requireName
+        initialName={initialName}
+        heading="Almost in — what's your name?"
+        subtitle="This is how you'll show up on the host's screen and the leaderboard."
+        cta="Enter the lobby"
+        onReady={onReady}
+      />
+    );
   }
 
   if (stage === "teaser") {
     return (
       <main className="relative min-h-screen w-full overflow-hidden bg-black">
         <video
+          ref={teaserRef}
           src={TEASER_SRC}
           poster={TEASER_POSTER}
           autoPlay
-          muted={muted}
           playsInline
           preload="auto"
           onEnded={() => setStage(afterTeaser)}
@@ -115,29 +150,14 @@ export default function LivePlayerIntro({ onReady, initialName = "", showInstruc
         />
         <div className="pointer-events-none absolute inset-0" style={{ background: "rgba(3,2,8,0.25)" }} aria-hidden />
 
-        {/* Unmute prompt — the teaser autoplays muted (no gesture yet); one tap
-            turns the sound on without leaving the screen. */}
-        <AnimatePresence>
-          {muted && (
-            <motion.button
-              type="button"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setMuted(false)}
-              className="absolute left-1/2 top-6 z-10 -translate-x-1/2 cursor-pointer rounded-full border border-brass/40 bg-black/70 px-5 py-2 text-[11px] font-mono uppercase tracking-[0.28em] text-brass-bright backdrop-blur"
-            >
-              🔊 Tap for sound
-            </motion.button>
-          )}
-        </AnimatePresence>
-
+        {/* Sound is already on (primed in the "sound" gate), so there's no
+            unmute prompt. The Skip button takes that same top-centre spot. */}
         <button
           type="button"
           onClick={() => setStage(afterTeaser)}
-          className="absolute bottom-7 right-6 z-10 cursor-pointer rounded-full border border-white/25 bg-black/55 px-6 py-2.5 text-[12px] font-semibold uppercase tracking-[0.2em] text-white/85 backdrop-blur transition-colors hover:border-white/45 hover:text-white"
+          className="absolute left-1/2 top-6 z-10 -translate-x-1/2 cursor-pointer rounded-full border border-white/25 bg-black/60 px-6 py-2.5 text-[12px] font-semibold uppercase tracking-[0.2em] text-white/85 backdrop-blur transition-colors hover:border-white/45 hover:text-white"
         >
-          Skip intro →
+          Skip video →
         </button>
       </main>
     );
@@ -193,7 +213,7 @@ export default function LivePlayerIntro({ onReady, initialName = "", showInstruc
 
         <motion.button
           type="button"
-          onClick={() => (isLast ? setStage("gate") : setStep((s) => s + 1))}
+          onClick={() => (isLast ? setStage("name") : setStep((s) => s + 1))}
           whileHover={{ scale: 1.03 }}
           whileTap={{ scale: 0.97 }}
           className="game-show-btn relative z-0 mt-8 cursor-pointer rounded-xl px-12 py-4 text-center text-[13px] font-semibold uppercase tracking-[0.22em]"
@@ -204,7 +224,7 @@ export default function LivePlayerIntro({ onReady, initialName = "", showInstruc
         {!isLast && (
           <button
             type="button"
-            onClick={() => setStage("gate")}
+            onClick={() => setStage("name")}
             className="mt-4 cursor-pointer text-[11px] font-mono uppercase tracking-[0.25em] text-white/45 transition-colors hover:text-white/70"
           >
             Skip

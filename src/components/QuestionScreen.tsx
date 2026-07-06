@@ -2036,11 +2036,21 @@ export default function QuestionScreen({
                         }}
                       >
                         <div
-                          className="relative rounded-[10px] px-4 py-3 md:px-8 md:py-5 flex items-center justify-center"
+                          className={`relative rounded-[10px] py-3 md:px-8 md:py-5 flex items-center justify-center ${
+                            question.wordPuzzle.length > 16 ? "px-2.5" : "px-4"
+                          }`}
                           style={{ background: "rgba(8,5,2,0.92)" }}
                         >
                           <span
-                            className="font-mono font-bold tabular-nums leading-none whitespace-nowrap tracking-[0.22em] md:tracking-[0.3em] text-lg md:text-3xl lg:text-4xl"
+                            className={`font-mono font-bold tabular-nums leading-none whitespace-nowrap md:tracking-[0.3em] md:text-3xl lg:text-4xl ${
+                              // Long puzzles (the A–Z "missing letter" strings run
+                              // ~21 chars) overflow the mobile viewport at the big
+                              // size — shrink the font + tracking on phones so every
+                              // letter stays visible. Desktop keeps the large size.
+                              question.wordPuzzle.length > 16
+                                ? "text-[13px] tracking-[0.05em]"
+                                : "text-lg tracking-[0.22em]"
+                            }`}
                             style={{
                               color: "#f9e89a",
                               textShadow:
