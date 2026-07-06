@@ -9,6 +9,9 @@ import { useIsPortraitMobile } from "@/components/RotateForVideo";
  * Pre-game intro shown the moment a player opens the shared /play link,
  * BEFORE they ever reach the lobby:
  *
+ *   0. "loading"      — a brief branded loading screen (logo + circular
+ *                       progress) shown the instant the link opens, while the
+ *                       gate art / audio warm up.
  *   1. "sound"        — a one-tap "enable sound & enter" gate. This is the
  *                       required user gesture: it primes audio up front so the
  *                       teaser (and later the host VO) can play WITH sound.
@@ -32,6 +35,11 @@ interface LivePlayerIntroProps {
 
 const TEASER_SRC = "/teaser-video.mp4";
 const TEASER_POSTER = "/teaser-video.mp4.poster.jpg";
+const LOADING_LOGO_SRC = "/play-loading-logo.webp";
+/** Gate art preloaded during the loading screen so the sound step paints
+ *  instantly. Keep in sync with the sound stage's heroSrc below. */
+const GATE_HERO_MOBILE = "/play-gate-mobile.webp";
+const GATE_HERO_DESKTOP = "/play-gate-desktop.webp";
 
 const INSTRUCTIONS = [
   {
@@ -79,7 +87,7 @@ function IntroBackdrop() {
 }
 
 export default function LivePlayerIntro({ onReady, initialName = "", showInstructions = true }: LivePlayerIntroProps) {
-  const [stage, setStage] = useState<"sound" | "teaser" | "instructions" | "name">("sound");
+  const [stage, setStage] = useState<"loading" | "sound" | "teaser" | "instructions" | "name">("loading");
   const [step, setStep] = useState(0);
   const teaserRef = useRef<HTMLVideoElement | null>(null);
   /** Where the teaser hands off — to the rules screen, or straight to the name
@@ -101,6 +109,55 @@ export default function LivePlayerIntro({ onReady, initialName = "", showInstruc
     if (stage !== "teaser") return;
     teaserRef.current?.play().catch(() => {});
   }, [stage]);
+
+  // Warm the gate key-art (and the logo) while the loading screen is up so the
+  // sound step paints without a flash.
+  useEffect(() => {
+    if (stage !== "loading") return;
+    for (const src of [GATE_HERO_MOBILE, GATE_HERO_DESKTOP]) {
+      const img = new Image();
+      img.src = src;
+    }
+  }, [stage]);
+
+  // Step 0 — branded loading screen. A circular progress ring fills over a
+  // short, fixed beat; when it completes we advance to the sound gate. (The
+  // gate art is preloaded above, so this doubles as a real warm-up window.)
+  if (stage === "loading") {
+    return (
+      <main className="relative flex min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-black px-6">
+        <motion.img
+          src={LOADING_LOGO_SRC}
+          alt="India Ke Top 1%"
+          initial={{ opacity: 0, scale: 0.94 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          className="w-[min(64vw,340px)] object-contain"
+          style={{ filter: "drop-shadow(0 0 46px rgba(228,174,68,0.28))" }}
+        />
+        <div className="relative mt-9 h-12 w-12 md:h-14 md:w-14">
+          <svg viewBox="0 0 48 48" className="h-full w-full -rotate-90">
+            <circle cx="24" cy="24" r="20" fill="none" stroke="rgba(249,232,154,0.16)" strokeWidth="3.5" />
+            <motion.circle
+              cx="24"
+              cy="24"
+              r="20"
+              fill="none"
+              stroke="#f9e89a"
+              strokeWidth="3.5"
+              strokeLinecap="round"
+              initial={{ pathLength: 0 }}
+              animate={{ pathLength: 1 }}
+              transition={{ duration: 2.2, ease: "easeInOut" }}
+              onAnimationComplete={() => setStage("sound")}
+              style={{ filter: "drop-shadow(0 0 6px rgba(249,232,154,0.6))" }}
+            />
+          </svg>
+        </div>
+        <p className="mt-5 text-[11px] font-mono uppercase tracking-[0.4em] text-brass/70">Loading…</p>
+      </main>
+    );
+  }
 
   // Step 1 — enable sound & enter. The one tap primes audio for the whole
   // session (teaser + host VO), then advances to the teaser.
