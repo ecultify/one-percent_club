@@ -56,24 +56,19 @@ export default function LiveAudioGate({
   const trimmed = name.trim();
   const blocked = requireName && !trimmed;
 
-  const go = async () => {
+  const go = () => {
     if (busy || blocked) return;
     setBusy(true);
+    // Prime audio in the BACKGROUND — the tap itself is the audio gesture, so
+    // we never need to await it. On some browsers audio.play() returns a
+    // promise that never settles; awaiting it would strand the button on
+    // "Starting…" forever. Fire-and-forget, then advance immediately.
     try {
-      // Prime audio, but NEVER let it block the join. On some browsers
-      // audio.play() can return a promise that never settles, which would
-      // otherwise strand the button on "Starting…" forever. Race the unlock
-      // against a short timeout so the player always advances after the tap
-      // (which already counts as the audio gesture either way).
-      await Promise.race([
-        unlock(),
-        new Promise((resolve) => setTimeout(resolve, 1000)),
-      ]);
+      void Promise.resolve(unlock()).catch(() => {});
     } catch {
-      /* even if unlock rejects, proceed — the tap already counts as a gesture */
-    } finally {
-      onReady(trimmed);
+      /* unlock threw synchronously — ignore, the join proceeds regardless */
     }
+    onReady(trimmed);
   };
 
   const hero = !!heroSrc;
