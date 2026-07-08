@@ -846,6 +846,11 @@ export default function QuestionScreen({
       : "Choose carefully — once you select and submit, there's no changing your answer.";
   const [timeLeft, setTimeLeft] = useState(question.timeLimit);
   const [selected, setSelected] = useState<number | null>(null);
+  /** Image-OPTION questions lock on a DOUBLE tap: the first tap only
+   *  highlights a tile (pendingImageSelect), the second tap on that same tile
+   *  locks it. Guards against a mis-tap committing an irreversible answer on a
+   *  small phone screen. Text/number/plain-text options are unaffected. */
+  const [pendingImageSelect, setPendingImageSelect] = useState<number | null>(null);
   const [textInputValue, setTextInputValue] = useState("");
   const [numberInputValue, setNumberInputValue] = useState("");
   const [answerChecking, setAnswerChecking] = useState(false);
@@ -953,6 +958,7 @@ export default function QuestionScreen({
 
   useEffect(() => {
     timerVoCueFiredRef.current = false;
+    setPendingImageSelect(null);
   }, [questionNumber, question.id]);
 
   useEffect(() => {
@@ -1060,6 +1066,22 @@ export default function QuestionScreen({
       onAnswer(index);
     },
     [answered, selected, onAnswer, inputsLocked, stopTickSound],
+  );
+
+  /** Two-tap lock for image OPTIONS: first tap on a tile arms it, second tap on
+   *  the SAME tile commits via handleSelect. Tapping a different tile re-arms to
+   *  that tile. */
+  const handleImageOptionTap = useCallback(
+    (index: number) => {
+      if (answered || selected !== null || inputsLocked) return;
+      if (pendingImageSelect === index) {
+        setPendingImageSelect(null);
+        handleSelect(index);
+      } else {
+        setPendingImageSelect(index);
+      }
+    },
+    [answered, selected, inputsLocked, pendingImageSelect, handleSelect],
   );
 
   const submitTextOrNumber = useCallback(
@@ -1736,6 +1758,14 @@ export default function QuestionScreen({
                           }
                           data-tour-id={question.imagesAreOptions ? "options-area" : undefined}
                         >
+                          {question.imagesAreOptions && !answered && !revealed && (
+                            <p
+                              className="mx-auto mb-1 w-max max-w-[92%] rounded-full border border-brass/30 bg-black/55 px-3.5 py-1.5 text-center font-mono text-[10px] md:text-[11px] font-semibold uppercase tracking-[0.16em] text-brass-bright/90 backdrop-blur"
+                              style={{ textShadow: "0 1px 6px rgba(0,0,0,0.85)" }}
+                            >
+                              Tap an image to select, then tap it again to lock your answer
+                            </p>
+                          )}
                           <div
                             className={
                               // Image OPTIONS in a compact set (flags x5, clocks
@@ -1772,8 +1802,13 @@ export default function QuestionScreen({
                           >
                             {question.images.map((src, i) => {
                               if (question.imagesAreOptions) {
+                                // Pre-lock, the armed (first-tapped) tile wears
+                                // the same gold "selected" chrome so the player
+                                // can see what they're about to lock.
+                                const chromeSelected = selected ?? pendingImageSelect;
+                                const isArmed = pendingImageSelect === i && selected === null && !answered;
                                 const { rimBg, glow, innerBg, showResult, isCorrectOption, isSelected } =
-                                  answerChromeStyles(i, question, selected, selectedAnswer, revealed);
+                                  answerChromeStyles(i, question, chromeSelected, selectedAnswer, revealed);
                                 const imgH = question.compactImageRow
                                   // Stacked one-per-row on mobile → let each tile
                                   // grow (fill most of the column); on desktop it
@@ -1802,7 +1837,7 @@ export default function QuestionScreen({
                                     initial={{ opacity: 0, y: 8 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: 0.3 + i * 0.06, duration: 0.4, ease: EASE_OUT }}
-                                    onClick={() => handleSelect(i)}
+                                    onClick={() => handleImageOptionTap(i)}
                                     disabled={answered || selected !== null || inputsLocked}
                                     className={`relative group border-0 bg-transparent p-0 appearance-none text-left ${
                                       isThreeImageOptions
@@ -1859,6 +1894,19 @@ export default function QuestionScreen({
                                         )}
                                       </div>
                                     </div>
+                                    {isArmed && (
+                                      <span
+                                        className="absolute inset-x-0 -bottom-2.5 z-10 mx-auto w-max rounded-full px-3 py-1 font-mono text-[9px] md:text-[10px] font-bold uppercase tracking-[0.18em] motion-safe:animate-pulse pointer-events-none"
+                                        style={{
+                                          color: "#1a1204",
+                                          background:
+                                            "linear-gradient(180deg, #fff4c8 0%, #f9e89a 40%, #d9b446 100%)",
+                                          boxShadow: "0 3px 10px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.5)",
+                                        }}
+                                      >
+                                        Tap again to lock
+                                      </span>
+                                    )}
                                     <div
                                       className="absolute -top-2 -left-2 md:-top-2.5 md:-left-2.5 w-8 h-8 md:w-9 md:h-9 rounded-md p-[1.5px] overflow-hidden pointer-events-none"
                                       style={{

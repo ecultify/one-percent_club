@@ -93,7 +93,14 @@ export default function WatchRoomPage() {
   // first question (browsers block autoplay until a gesture). Skipped if audio
   // is already unlocked. The socket connects behind this gate via the effect.
   if (!audioUnlocked && !soundReady) {
-    return <LiveAudioGate onReady={() => setSoundReady(true)} />;
+    return (
+      <LiveAudioGate
+        heroSrc={{ mobile: "/play-gate-mobile.webp", desktop: "/play-gate-desktop.webp" }}
+        subtitle="Turn on the host voice and music to watch the game."
+        cta="Enable sound & watch"
+        onReady={() => setSoundReady(true)}
+      />
+    );
   }
 
   if (!connected || !state) {

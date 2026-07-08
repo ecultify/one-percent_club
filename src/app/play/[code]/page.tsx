@@ -125,10 +125,10 @@ export default function PlayRoomPage() {
     );
   }
 
-  // Show the intro (teaser → instructions → name/audio gate) until audio is
-  // primed AND we have a name. Skipped for the in-app flow (audio already
-  // unlocked + name carried in the query). The gate at the end of the intro is
-  // what finally fires onReady — same join contract as before.
+  // Show the intro (branded loading → static key-art sound gate → name) until
+  // audio is primed AND we have a name. Skipped for the in-app flow (audio
+  // already unlocked + name carried in the query). The gate at the end of the
+  // intro is what finally fires onReady — same join contract as before.
   const roomMuted = state ? isMutedFor(state, myId) : false;
 
   const needGate = !soundReady && (!audioUnlocked || !name.trim());
@@ -136,7 +136,6 @@ export default function PlayRoomPage() {
     return (
       <LivePlayerIntro
         initialName={queryName}
-        showInstructions={state?.showInstructions ?? true}
         onReady={(enteredName) => {
           setName(enteredName || queryName || "Player");
           setSoundReady(true);

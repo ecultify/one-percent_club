@@ -577,27 +577,15 @@ const SET_D: Question[] = [
     timeLimit: 30,
   },
   {
+    // Set 4 update: seating puzzle moved to 30% (was 20%). Same brown-shirt
+    // logic and clean labelled diagram (no printed title) → answer Ben.
     id: 7,
     percentage: 30,
     question:
-      "The answer to this question is unpredictable. The equation may or may not be related to the question and gives no useful information. Based only on the information given, guess the answer. (330 + A × 450 − C = ?)",
-    textInput: true,
-    correctAnswerText:
-      "UNPREDICTABLE. The question states its own answer is 'unpredictable', and the equation is a deliberate distraction. Accept 'unpredictable' (any spelling close to it). REJECT numeric answers or anything else.",
-    displayAnswer: "Unpredictable",
-    passRegex: "unpredictab",
-    options: [],
-    correctIndex: 0,
-    timeLimit: 30,
-  },
-  {
-    id: 8,
-    percentage: 20,
-    question:
       "Who is sitting two places to the right of the person sitting to the left of the person wearing a brown shirt?",
     image: `${IMG}/d8-seating.png`,
-    // Detail-heavy diagram (8 labelled people + a hint line) — render it large
-    // so it's legible on desktop and mobile.
+    // Detail-heavy diagram (labelled people) — render it large so it's legible
+    // on desktop and mobile.
     largePromptImage: true,
     textInput: true,
     correctAnswerText:
@@ -609,31 +597,58 @@ const SET_D: Question[] = [
     timeLimit: 30,
   },
   {
-    id: 9,
-    percentage: 10,
-    question: "Find the missing five-letter word in this alphabetical sequence from A to Z.",
-    wordPuzzle: "BCFGHJKLNOPQRSTUVWXYZ",
+    // Set 4 update: new symbol-arithmetic puzzle at 20% (image from client doc).
+    // Magnifying glass = 3, Feather = 2, Basket = 1 →
+    // Magnifying glass + (2 × Feather) + Basket = 3 + 4 + 1 = 8.
+    id: 8,
+    percentage: 20,
+    question: "Solve the puzzle. What number replaces the question mark?",
+    image: `${IMG}/d-mathsymbols.png`,
+    largePromptImage: true,
     textInput: true,
     correctAnswerText:
-      "MEDIA — the missing letters are A, D, E, I and M, which spell MEDIA. Accept 'media' in any casing. REJECT anything else.",
-    displayAnswer: "MEDIA (missing: A D E I M)",
-    passRegex: "\\bmedia\\b",
+      "8. Magnifying glass = 3, Feather = 2, Basket = 1, so magnifying glass + two feathers + basket = 3 + (2×2) + 1 = 8. Accept '8' or 'eight'. REJECT any other number.",
+    displayAnswer: "8",
+    passRegex: "\\b(8|eight)\\b",
     options: [],
     correctIndex: 0,
     timeLimit: 30,
   },
   {
-    id: 10,
-    percentage: 1,
-    question: "What common English word can you make using all of these letters exactly once?",
-    image: `${IMG}/d10-letters.png`,
+    // Set 4 update: children hand-holding puzzle at 10% (reuses the identical
+    // asset and wording already used in Set C) → answer Dina.
+    id: 9,
+    percentage: 10,
+    question:
+      "Who is holding the left hand of the child who is holding the left hand of the child who is next to a child whose right hand is not held by anyone?",
+    image: `${IMG}/c8-children-hands.png`,
     textInput: true,
-    correctAnswerText:
-      "THEATRIC — the letters T, H, E, A, T, R, I, C rearrange to spell THEATRIC. Accept 'theatric' with minor typos. REJECT other words.",
-    displayAnswer: "THEATRIC",
-    passRegex: "theatric",
+    correctAnswerText: "DINA. Accept 'dina' in any casing/spelling 'deena'. REJECT the other five names.",
+    displayAnswer: "Dina",
+    passRegex: "\\bd(i|ee)na\\b",
     options: [],
     correctIndex: 0,
+    timeLimit: 30,
+  },
+  {
+    // Set 4 update: four-clocks puzzle at 1% (reuses Set A's clock tiles, which
+    // already read 04:48 / 04:33 / 04:28 / 05:01). Correct time is 04:33 —
+    // Option B: 04:48 is +15, 04:28 is −5, 05:01 is the stopped clock.
+    id: 10,
+    percentage: 1,
+    question:
+      "One clock is 15 minutes fast, one is 5 minutes slow, one has stopped, and one shows the correct time. Which clock is correct?",
+    images: [
+      `${IMG}/clock-optA.png`,
+      `${IMG}/clock-optB.png`,
+      `${IMG}/clock-optC.png`,
+      `${IMG}/clock-optD.png`,
+    ],
+    imagesAreOptions: true,
+    compactImageRow: true,
+    imageCaptions: ["A", "B", "C", "D"],
+    options: ["Clock A", "Clock B", "Clock C", "Clock D"],
+    correctIndex: 1, // 04:33 (04:48 is +15, 04:28 is −5, 05:01 stopped)
     timeLimit: 30,
   },
 ];
