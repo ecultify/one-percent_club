@@ -6,6 +6,7 @@ import UiClickSound from "@/components/UiClickSound";
 import UiHoverSound from "@/components/UiHoverSound";
 import GoldDustField from "@/components/GoldDustField";
 import { CursorGoldDust } from "@/components/MetallicText3D";
+import PoweredByFooter from "@/components/PoweredByFooter";
 import { VideoPlaybackProvider } from "@/lib/VideoPlaybackContext";
 import { PERF_FLAGS } from "@/lib/perfFlags";
 import { Fraunces, Outfit, JetBrains_Mono } from "next/font/google";
@@ -77,6 +78,8 @@ export default function RootLayout({
               wherever the user moves the pointer, on every page. */}
           {PERF_FLAGS.cursorParticles && <CursorGoldDust />}
           {children}
+          {/* Subtle, always-present studio credit — bottom of every page. */}
+          <PoweredByFooter />
         </VideoPlaybackProvider>
           </ConfirmProvider>
         </NarrationProvider>
