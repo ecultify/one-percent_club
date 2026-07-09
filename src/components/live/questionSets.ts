@@ -15,8 +15,9 @@
  *
  * ⚠️ ANSWER DEVIATIONS FROM THE CLIENT DOC (deliberate — doc answers were
  *    wrong or assets forced a change). Flagged to the client:
- *   1. Set A 60%: sequence ▲A ●C ■E ▲G ●I forces K■. Doc's options had no
- *      K■ and marked "B■" correct. Options fixed to include K■ (correct).
+ *   1. Set A 60%: sequence ▲A ●C ■E ▲G ●I forces ■K. Doc's options had no
+ *      ■K and marked "B■" correct. Options fixed to include ■K (correct),
+ *      written shape-then-letter to match the prompt sequence.
  *   2. Set C 80%: the wrong flag is the "Australia" tile (it shows New
  *      Zealand's flag). Doc marked "Option A" (Ireland), which is a
  *      correct flag. Correct answer wired = Australia (option D).
@@ -87,12 +88,14 @@ const SET_A: Question[] = [
   },
   nehruQuestion(3),
   {
-    // DEVIATION #2: options corrected to include the true continuation K■.
+    // DEVIATION #2: options corrected to include the true continuation ■ K.
+    // Options read SHAPE-then-LETTER, matching both the prompt sequence
+    // (▲ A, ● C, ■ E …) and the client doc's option list (● B, ■ K, ▲ L, ■ Z).
     id: 4,
     percentage: 60,
     question: "Which figure and letter combination correctly completes the sequence?",
     wordSequence: ["▲ A", "● C", "■ E", "▲ G", "● I", "?"],
-    options: ["B ●", "K ■", "L ▲", "Z ■"],
+    options: ["● B", "■ K", "▲ L", "■ Z"],
     correctIndex: 1,
     timeLimit: 30,
   },
