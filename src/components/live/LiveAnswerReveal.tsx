@@ -42,57 +42,62 @@ interface RevealEntry {
   image?: ImageMode | string;
 }
 
-/** Authored reveal copy keyed by set, then 0-based question position. Images
- *  are NOT hard-coded here — they're pulled from the Question at render time
- *  (see resolveImage) so they always use our own set assets. */
+/** Reveal copy keyed by set, then 0-based question position.
+ *
+ *  ⚠️ The `logic` strings are the CLIENT DOC's wording verbatim ("1% Club
+ *  Questions.docx", Logic: line for each question) — do not paraphrase them.
+ *  Only obvious doc typos are corrected (e.g. "timel." → "time.").
+ *
+ *  Images are NOT hard-coded here — they're pulled from the Question at render
+ *  time (see resolveImage) so they always use our own set assets. */
 const REVEAL: Record<QuestionSetId, RevealEntry[]> = {
   A: [
-    { answer: "SHORT", logic: "Add the two letters E and R to SHORT and it spells SHORTER. The word that turns 'shorter' is SHORT itself." },
-    { answer: "Glasses", image: "prompt", logic: "Count again. The picture has more glasses than cards." },
-    { answer: "Photo 3", image: "option", logic: "Photo 3 cannot be real. Nehru is wearing a smartwatch, something that did not exist in his time." },
-    { answer: "■ K", logic: "The shapes cycle triangle, circle, square, and the letters climb A, C, E, G, I by two. The next in the sequence is ■ K." },
-    { answer: "Father", logic: "A is B's father, and C is B's sister, so C is A's child too. That makes A the father of C." },
-    { answer: "January", logic: "In alphabetical order the first six months run April, February, January, June, March, May. January sits third." },
-    { answer: "June", logic: "The days up to the end of May add up to 151. Four more days reach June 4, so Day 155 falls in June." },
-    { answer: "Clock 2", image: "option", logic: "Clock 2 shows the real time of 4:33. The rest are 15 minutes fast, 5 minutes slow, or stopped." },
-    { answer: "YOUTH", logic: "The letters missing from A to Z are H, O, T, U and Y. Together they spell YOUTH." },
-    { answer: "SCOLD", image: "prompt", logic: "Drop the first letter of each word to reveal its opposite. The opposite of HOT is COLD, so add an S to get SCOLD." },
+    { answer: "SHORT", logic: "The word short becomes ‘Shorter’ when you add the letters ‘ER’ to it." },
+    { answer: "Glasses", image: "prompt", logic: "There are more glasses (Eye glasses, water glasses) compared to cards." },
+    { answer: "Photo 3", image: "option", logic: "The photo showcases Jawaharlal Nehru wearing a smartwatch, which did not exist in that era." },
+    { answer: "■ K", logic: "The pattern alternates between shapes (▲, ●, ■) and increases letters by two (A, C, E, G, I). The next is ■ K." },
+    { answer: "Father", logic: "A is the father of B and C is the sister of B, so A is the father of both." },
+    { answer: "January", logic: "Arranging April, February, January, June, March, May alphabetically puts January in the third position." },
+    { answer: "June", logic: "January (31 days) + February (28 days) + March (31 days) + April (30 days) + May (31 days) = 151 days. Day 155 falls in June." },
+    { answer: "Clock 2", image: "option", logic: "As per the conditions given only clock 2 fits the criteria i.e. at 4:33, 15 minutes ahead is 4:48, five minutes behind is 4:28." },
+    { answer: "YOUTH", logic: "The missing letters (H, O, T, U, Y) spell “YOUTH”." },
+    { answer: "SCOLD", image: "prompt", logic: "Remove the first letter to reveal an opposite (e.g., Yearly becomes Early, Slate becomes Late). The opposite of Hot is Cold; add an ‘S’ to get the 5 letter word Scold." },
   ],
   B: [
-    { answer: "Short (or Small)", logic: "Long becomes short, and the opposite of tall is short as well. Small works too." },
-    { answer: "The word 'the' is doubled", image: "prompt", logic: "Read the line slowly. The word 'the' is written twice in a row." },
-    { answer: "Photo 1", image: "option", logic: "Photo 1 cannot be real. A mobile phone shows up in a time when none existed." },
-    { answer: "The letter M", logic: "M appears once in 'minute', twice in 'moment', and never in 'a thousand years'." },
-    { answer: "Grandchild", logic: "A is B's father and B is the father of C and D, so D is A's grandchild." },
-    { answer: "Japan", logic: "Sorted alphabetically the five countries end on Japan, so it comes last." },
-    { answer: "August", logic: "The days up to the end of July total 212. Three more days reach August 3, so Day 215 falls in August." },
-    { answer: "Navin", logic: "Each name starts with its animal: Cat, Rabbit, Parrot, Snake, Tortoise. None starts with N, so Navin is not a pet." },
-    { answer: "FOUR", logic: "The letters missing from A to Z are F, O, R and U. Together they spell FOUR." },
-    { answer: "UNT", image: "prompt", logic: "Drop UNT into the blanks and both words appear: DISCOUNT in blue and UNTANGLED in pink." },
+    { answer: "Short (or Small)", logic: "“Short” is the direct antonym of “Tall” in this context." },
+    { answer: "The word 'the' is doubled", image: "prompt", logic: "The word “the” appears twice (the article is doubled)." },
+    { answer: "Photo 1", image: "option", logic: "This photo shows a historical inaccuracy of mobile phones being present at a time during which it didn’t, that identifies it as a fake." },
+    { answer: "The letter M", logic: "The letter “M” appears once in “minute”, twice in “moment”, and zero times in “thousand years”." },
+    { answer: "Grandchild", logic: "A is the father of B and grandfather of C and D. Therefore, D is the grandchild of A." },
+    { answer: "Japan", logic: "Alphabetically: Australia, England, India, Ireland, Japan. Japan comes last." },
+    { answer: "August", logic: "January (31 days) + February (28 days) + March (31 days) + April (30 days) + May (31 days) + June (30 days) + July (31 days) = 212 days. Day 215 falls in August." },
+    { answer: "Navin", logic: "The animals are Cat, Rabbit, Parrot, Snake, Tortoise. None start with N." },
+    { answer: "FOUR", logic: "The missing letters (F, O, R, U) spell “FOUR”." },
+    { answer: "UNT", image: "prompt", logic: "“UNT” completes “DISCOUNT” and “UNTANGLED”." },
   ],
   C: [
-    { answer: "Second", logic: "Overtake the runner in second place and you take their spot. You are second, not first." },
-    { answer: "Australia", image: "option", logic: "The tile labelled Australia is showing New Zealand's flag, so that one does not match its country." },
-    { answer: "Photo 1", image: "option", logic: "Photo 1 cannot be real. Mandela is wearing wireless earphones, which did not exist back then." },
-    { answer: "Teapot", logic: "TEAPOT starts with T, ends with T, and has TEA tucked inside." },
-    { answer: "His mother", logic: "The doctor is the boy's mother. The riddle expects a father, and that is the trick." },
-    { answer: "A (August)", logic: "The letters are the first letters of the months from January to July. The next month is August, so A." },
-    { answer: "May", logic: "Counting backwards from December 31, Day 215 lands on May 31." },
+    { answer: "Second", logic: "If you pass the person in second place, you take their position (second)." },
+    { answer: "Australia", image: "option", logic: "The flag tile showcases a New Zealand flag that does not match the country name labeled." },
+    { answer: "Photo 1", image: "option", logic: "This image features Nelson Mandela wearing earpods that were not available at that time." },
+    { answer: "Teapot", logic: "The word “Teapot” starts with T, ends with T, and has “tea” (T) inside it." },
+    { answer: "His mother", logic: "The doctor is the boy's mother." },
+    { answer: "A (August)", logic: "The sequence lists the first letter of each month (Jan, Feb, Mar, Apr, May, Jun, Jul). The next is August (A)." },
+    { answer: "May", logic: "Counting backward from December 31 (Day 1) to January 1 (Day 365), Day 215 falls in May." },
     { answer: "Dina", image: "/questionscreenimages/setquestions/c8-children-hands-answer.png", logic: "Jenny's right hand is not held by anyone. Her left hand is held by Sade, whose left hand is held by Miko, whose left hand is held by Dina." },
-    { answer: "ZEBRA", logic: "The letters missing from A to Z are A, B, E, R and Z. Together they spell ZEBRA." },
-    { answer: "UNPREDICTABLY", image: "prompt", logic: "The blanks fill in to spell UNPREDICTABLY, a 13-letter word with no repeated letter." },
+    { answer: "ZEBRA", logic: "The missing letters (A, B, E, R, Z) spell “ZEBRA”." },
+    { answer: "UNPREDICTABLY", image: "prompt", logic: "“Unpredictably” is the word where every letter is unique." },
   ],
   D: [
-    { answer: "Her husband", logic: "Amit is married to Chitra, so he is simply her husband. The details about Seema and Mohan are there to distract you." },
-    { answer: "France", image: "option", logic: "India, Sri Lanka, South Korea and China are all in Asia. France is in Europe, so it is the odd one out." },
-    { answer: "Tea with Karan", image: "option", logic: "The real talk show is 'Koffee with Karan'. 'Tea with Karan' is the made-up title, so it cannot be real." },
-    { answer: "Bigger", logic: "Each word adds -er for its comparative form: Short becomes Shorter, Tall becomes Taller, so Big becomes Bigger." },
-    { answer: "Fourth", logic: "Two places ahead of 6th is 4th, and immediately behind 3rd is also 4th. Both clues point to the same spot." },
-    { answer: "J (July)", logic: "The letters are the first letters of the months from January to June. The next month is July, so the next letter is J." },
-    { answer: "Ben", image: "prompt", logic: "Alice is in the brown shirt. Start at the person on her left, count two places to the right, and you land on Ben." },
-    { answer: "8", image: "prompt", logic: "The magnifying glass is 3, the feather is 2 and the basket is 1. So one glass, two feathers and a basket make 3 + 4 + 1 = 8." },
+    { answer: "Her husband", logic: "Since Amit is married to Chitra, the relationship is defined by the marriage, making him her husband." },
+    { answer: "France", image: "option", logic: "France is part of Europe whereas other countries are part of the Asian subcontinent." },
+    { answer: "Tea with Karan", image: "option", logic: "The original talk show is titled “Koffee with Karan,” not “Tea with Karan,” making the latter an incorrect title for the show." },
+    { answer: "Bigger", logic: "This follows a linguistic pattern where the comparative form of the adjective is created by adding “-er” (Short/Shorter, Tall/Taller, Big/Bigger)." },
+    { answer: "Fourth", logic: "You finish in 4th place because finishing “two places ahead of 6th” is 4th (6 − 2 = 4), and finishing “immediately behind 3rd” is also 4th." },
+    { answer: "J (July)", logic: "The sequence consists of the first letters of consecutive months (January, February, March, April, May, June). The next month is July, so the next letter is “J”." },
+    { answer: "Ben", image: "prompt", logic: "Ben is the person sitting exactly two places to the right of the person sitting to the left of the person wearing the brown shirt." },
+    { answer: "8", image: "prompt", logic: "Magnifying Glass = 3, Feather = 2, Basket = 1. Final addition: Magnifying Glass + Double Feather + Basket = 3 + (2 × 2) + 1 = 8." },
     { answer: "Dina", image: "/questionscreenimages/setquestions/c8-children-hands-answer.png", logic: "Jenny's right hand is not held by anyone. Her left hand is held by Sade, whose left hand is held by Miko, whose left hand is held by Dina." },
-    { answer: "Clock B", image: "option", logic: "Clock B shows the real time of 4:33. The rest are 15 minutes fast, 5 minutes slow, or stopped." },
+    { answer: "Clock B", image: "option", logic: "As per the conditions given only Clock B fits the criteria i.e. at 4:33, 15 minutes ahead is 4:48, five minutes behind is 4:28." },
   ],
 };
 
