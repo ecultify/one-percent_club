@@ -93,7 +93,14 @@ export default function LivePlayerIntro({ onReady, initialName = "" }: LivePlaye
   // straight to the name step (no teaser, no rules screen).
   if (stage === "sound") {
     return (
+      // Distinct `key` from the name gate below: both stages render a
+      // LiveAudioGate as this component's root, so without unique keys React
+      // reuses the SAME instance across sound → name and leaks its internal
+      // state — the `busy` flag set by tapping "Enable sound & enter" carries
+      // over and strands the name gate's button on "Starting…" (go() bails
+      // while busy). Separate keys force a fresh, unbusy name gate.
       <LiveAudioGate
+        key="sound-gate"
         heroSrc={{ mobile: GATE_HERO_MOBILE, desktop: GATE_HERO_DESKTOP }}
         subtitle="Turn on the host voice and music to join the game."
         cta="Enable sound & enter"
@@ -105,6 +112,7 @@ export default function LivePlayerIntro({ onReady, initialName = "" }: LivePlaye
   // Step 2 — collect the player's name (audio already unlocked).
   return (
     <LiveAudioGate
+      key="name-gate"
       collectName
       requireName
       initialName={initialName}
