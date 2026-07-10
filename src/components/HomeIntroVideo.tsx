@@ -11,8 +11,13 @@ const DHAK_SRC = "/sound/dhak.wav";
 /** Mobile (portrait-phone) replacement for the intro video: a static
  *  9:16 hero still. On phones we skip the FullVIDF2 video entirely — no
  *  dhak stingers, no timed cues — and just show this image the instant the
- *  audio gate is dismissed. */
-const HOME_IMAGE_MOBILE_SRC = "/questionscreenimages/home-intro-mobile.png";
+ *  audio gate is dismissed.
+ *
+ *  Shares the /play sound gate's portrait key-art so the Enter screen and the
+ *  join link open on the same "India Ke Top 1%" art. The retired
+ *  questionscreenimages/home-intro-mobile.png still carried the older
+ *  "The 1% Club" branding. */
+const HOME_IMAGE_MOBILE_SRC = "/play-gate-mobile.webp";
 
 /** Dhak hits at these video timestamps (seconds). Tightened sequence per
  *  Abhinav's call: dhak #1 fires at the video start (T=0), dhak #2 fires
