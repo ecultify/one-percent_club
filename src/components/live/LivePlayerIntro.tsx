@@ -31,11 +31,9 @@ interface LivePlayerIntroProps {
 }
 
 const LOADING_LOGO_SRC = "/play-loading-logo.webp";
-/** Static host key-art shown behind the sound gate (Anil Kapoor + 1% logo) on
- *  DESKTOP only. Preloaded during the loading screen so the sound step paints
- *  instantly. Phones keep the home-video backdrop instead, matching the name
- *  gate and lobby that follow (July 2026) — the portrait key-art is no longer
- *  used, so public/play-gate-mobile.webp is now unreferenced. */
+/** Static host key-art shown behind the sound gate (Anil Kapoor + 1% logo).
+ *  Preloaded during the loading screen so the sound step paints instantly. */
+const GATE_HERO_MOBILE = "/play-gate-mobile.webp";
 const GATE_HERO_DESKTOP = "/play-gate-desktop.webp";
 
 export default function LivePlayerIntro({ onReady, initialName = "" }: LivePlayerIntroProps) {
@@ -45,8 +43,10 @@ export default function LivePlayerIntro({ onReady, initialName = "" }: LivePlaye
   // sound step paints without a flash.
   useEffect(() => {
     if (stage !== "loading") return;
-    const img = new Image();
-    img.src = GATE_HERO_DESKTOP;
+    for (const src of [GATE_HERO_MOBILE, GATE_HERO_DESKTOP]) {
+      const img = new Image();
+      img.src = src;
+    }
   }, [stage]);
 
   // Step 0 — branded loading screen. A circular progress ring fills over a
@@ -101,7 +101,7 @@ export default function LivePlayerIntro({ onReady, initialName = "" }: LivePlaye
       // while busy). Separate keys force a fresh, unbusy name gate.
       <LiveAudioGate
         key="sound-gate"
-        heroSrc={{ desktop: GATE_HERO_DESKTOP }}
+        heroSrc={{ mobile: GATE_HERO_MOBILE, desktop: GATE_HERO_DESKTOP }}
         subtitle="Turn on the host voice and music to join the game."
         cta="Enable sound & enter"
         onReady={() => setStage("name")}
