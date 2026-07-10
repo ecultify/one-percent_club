@@ -27,14 +27,14 @@ import LogoMark from "./LogoMark";
 const DETAILS_INSTRUCTIONS_BG = `/questionscreenimages/${encodeURIComponent("Gemini_Generated_Image_i8attui8attui8at-ezremove.png")}`;
 
 /** Teaser that plays after the scrolly canvas / Start Experience.
- *  Hosted on Cloudflare R2 at the bucket's public dev URL. To swap
- *  the teaser, re-upload to the same R2 key — no code changes
- *  required. The poster stays local because R2 doesn't host an
- *  image file alongside the video. */
-const WELCOME_VIDEO_SRC = "https://pub-8c6819b7ba514c68a355fd5d6d7d43c6.r2.dev/teaser-video.mp4";
-/** Poster extracted from the local public/teaser-video.mp4 (a copy
- *  of the same source asset) so the first frame paints instantly
- *  even though the video stream itself comes from R2. */
+ *  Served from public/ rather than R2: the asset is compressed to
+ *  ~25 MiB (h264, 3.1 Mbps, faststart), small enough that the extra
+ *  R2 round trip bought us nothing. To swap the teaser, replace
+ *  public/teaser-video.mp4 — no code changes required. */
+const WELCOME_VIDEO_SRC = "/teaser-video.mp4";
+/** Poster is a hand-picked frame (NOT frame 0 — the teaser opens on a
+ *  black fade-in) so the first paint shows real content instead of an
+ *  empty rect while the video buffers. */
 const WELCOME_VIDEO_POSTER = "/teaser-video.mp4.poster.jpg";
 
 const DHAK_SRC = "/sound/dhak.wav";
