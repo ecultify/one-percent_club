@@ -656,50 +656,45 @@ export default function GameFlow() {
       {/* ━━ Play Button ━━ */}
       <AnimatePresence>
         {phase === "idle" && showButton && (
-          <motion.button
-            ref={buttonRef}
+          // Same golden pill, in the same place, as the AudioPrimingGate CTA the
+          // user just tapped ("Continue with sound") — the dark circle in the
+          // bottom-right corner used to land on top of the key-art's tagline on
+          // phones. Bottom offsets mirror that gate's pb-[8vh] / md:pb-[10vh].
+          <motion.div
             key="play-btn"
-            onClick={handleStart}
-            initial={{ opacity: 0, scale: 0.6 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
             // Slower fade-in (was 0.4s) so the CTA surfaces in step with
             // the tail of the home intro video instead of snapping in.
             transition={{ duration: 1.4, ease: EASE_OUT }}
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.92 }}
-            aria-label="Enter experience"
-            className="group fixed bottom-16 right-7 z-30 cursor-pointer sm:bottom-18 sm:right-9 md:bottom-20 md:right-11"
+            className="fixed inset-x-0 bottom-[8vh] z-30 flex justify-center px-6 md:bottom-[10vh]"
           >
-            {/* Ambient brass halo — always on so the CTA reads from across the room */}
-            <div
-              className="pointer-events-none absolute -inset-7 rounded-full bg-amber-400/15 blur-2xl motion-safe:animate-[glow-pulse_2.8s_ease-in-out_infinite] md:-inset-9"
-              aria-hidden
-            />
-            {/* Expanding ring — always visible (subtle); stronger on hover */}
-            <div className="absolute -inset-3.5 rounded-full opacity-[0.45] transition-opacity duration-500 group-hover:opacity-90 md:-inset-4">
-              <div
-                className="h-full w-full rounded-full border border-brass/35"
-                style={{ animation: "pulse-ring 2.2s ease-out infinite" }}
+            <div className="relative inline-flex items-center justify-center">
+              {/* Soft brass halo BEHIND the button so the CTA reads as the live
+                  element without changing the button's own paint. */}
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-0 -z-[1] rounded-2xl motion-safe:animate-[glow-pulse_2.8s_ease-in-out_infinite]"
+                style={{
+                  background:
+                    "radial-gradient(ellipse 70% 100% at 50% 50%, rgba(245,210,108,0.55) 0%, rgba(228,196,90,0.28) 35%, transparent 75%)",
+                  filter: "blur(18px)",
+                }}
               />
+              <motion.button
+                ref={buttonRef}
+                type="button"
+                onClick={handleStart}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                aria-label="Enter experience"
+                className="game-show-btn relative z-0 cursor-pointer rounded-xl px-14 py-[16px] text-center text-[13px] font-semibold uppercase tracking-[0.22em] md:px-16 md:py-[18px] md:text-[14px]"
+              >
+                <span className="relative z-10">Enter</span>
+              </motion.button>
             </div>
-            <div className="absolute -inset-4 rounded-full opacity-0 transition-opacity duration-500 group-hover:opacity-100 md:-inset-5">
-              <div
-                className="h-full w-full rounded-full border border-brass/50"
-                style={{ animation: "pulse-ring 2.2s ease-out infinite" }}
-              />
-            </div>
-            <div className="absolute -inset-8 rounded-full bg-brass/14 blur-[40px] transition-all duration-500 group-hover:bg-brass/24 md:-inset-10" />
-            <div
-              className="enter-cta-metallic-ring relative size-[min(168px,42vw)] sm:size-[min(178px,36vw)] md:size-[188px]"
-            >
-              <div className="relative z-0 flex size-full items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-[#1a0f1f] via-[#0d0608] to-[#1a1020] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.35),inset_0_2px_12px_rgba(0,0,0,0.25)] transition-[box-shadow] duration-300 group-hover:shadow-[inset_0_0_0_1px_rgba(0,0,0,0.35),inset_0_2px_12px_rgba(0,0,0,0.25),inset_0_0_0_1px_rgba(251,191,36,0.12)]">
-                <span className="relative z-[3] px-[0.2em] pt-[0.08em] font-mono text-[clamp(1rem,3.4vw,1.45rem)] font-semibold uppercase tracking-[0.32em] text-brass-bright drop-shadow-[0_2px_14px_rgba(0,0,0,0.95)] md:tracking-[0.36em]">
-                  Enter
-                </span>
-              </div>
-            </div>
-          </motion.button>
+          </motion.div>
         )}
       </AnimatePresence>
 
